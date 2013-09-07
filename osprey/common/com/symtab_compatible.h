@@ -63,6 +63,15 @@ inline char *
 ST_name (const ST* s)			{ return &Str_Table[ST_name_idx (s)]; }
 #define Set_ST_name(s,idx)		Set_ST_name_idx(s,idx)
 
+
+inline STR_IDX
+ST_sfname_idx (const ST* s)		{ return s->src_fname_idx; }
+inline void
+Set_ST_sfname_idx (ST* s, STR_IDX idx)	{ s->src_fname_idx = idx; }
+inline char *
+ST_sfname (const ST* s)			{ return &Str_Table[ST_sfname_idx (s)]; }
+
+
 inline TCON_IDX
 ST_tcon (const ST* s)			{ return s->u1.tcon; }
 inline void

@@ -230,6 +230,87 @@ const char * const omp_clause_code_name[] =
   "collapse",
   "untied"
 };
+
+  
+/* OpenACC clause:   
+  scalar-integer-expression, no keywords for clause, just exp
+  for acc wait construction*/
+
+
+/* Number of operands for each OpenAcc clause.  */
+unsigned const char acc_clause_num_ops[] =
+{
+  0, /* ACC_CLAUSE_ERROR  */
+  1, /* ACC_CLAUSE_IF  */
+  1, /* ACC_CLAUSE_ASYNC  */
+  1, /* ACC_CLAUSE_NUM_GANGS  */
+  1, /* ACC_CLAUSE_NUM_WORKERS  */
+  1, /* ACC_CLAUSE_VECTOR_LENGTH  */
+  3, /* ACC_CLAUSE_COPY  */
+  3, /* ACC_CLAUSE_COPYIN  */
+  3, /* ACC_CLAUSE_COPYOUT  */
+  3, /* ACC_CLAUSE_CREATE  */
+  3, /* ACC_CLAUSE_PRESENT  */
+  3, /* ACC_CLAUSE_PRESENT_OR_COPY  */
+  3, /* ACC_CLAUSE_PRESENT_OR_COPYIN  */
+  3, /* ACC_CLAUSE_PRESENT_OR_COPYOUT  */
+  3, /* ACC_CLAUSE_PRESENT_OR_CREATE  */
+  1, /* ACC_CLAUSE_PARM */
+  3, /* ACC_CLAUSE_ACC_RESIDENT */
+  3, /* ACC_CLAUSE_USE_DEVICE */
+  3, /* ACC_CLAUSE_DEVICEPTR  */
+  3, /* ACC_CLAUSE_COLLAPSE   */
+  0, /* ACC_CLAUSE_SEQ   */
+  3, /* ACC_CLAUSE_PRIVATE   */
+  3, /* ACC_CLAUSE_FIRST_PRIVATE */
+  1, /*ACC_CLAUSE_VARLIST*/
+  1, /*ACC_CLAUSE_INTEXP*/
+  4, /* ACC_CLAUSE_REDUCTION   */
+  1, /* ACC_CLAUSE_GANG   */
+  1, /* ACC_CLAUSE_WORKER   */
+  1, /* ACC_CLAUSE_VECTOR   */
+  0, /* ACC_CLAUSE_INDEPENDENT   */
+  3, /* ACC_CLAUSE_HOST   */
+  3,  /* ACC_CLAUSE_DEVICE   */
+  3  /* ACC_CLAUSE_CONST   */
+};
+
+const char * const acc_clause_code_name[] =
+{
+  "error_clause",
+  "if",
+  "async",
+  "num_gangs",
+  "num_workers",
+  "vector_length",
+  "copy",
+  "copyin",
+  "copyout",
+  "create",
+  "present",
+  "present_or_copy",
+  "present_or_copyin",
+  "present_or_copyout",
+  "present_or_create",
+  "acc_resident",
+  "use_device",
+  "deviceprt",
+  "collapse",
+  "seq",
+  "private",
+  "firstprivate",
+  "",
+  "",
+  "reduction",
+  "gang",
+  "worker",
+  "vector",
+  "independent",
+  "host",
+  "device",
+  "const"
+};
+
 
 /* Init tree.c.  */
 
@@ -2189,6 +2270,7 @@ tree_node_structure (tree t)
     case TREE_BINFO:		return TS_BINFO;
     case VALUE_HANDLE:		return TS_VALUE_HANDLE;
     case OMP_CLAUSE:		return TS_OMP_CLAUSE;
+    case ACC_CLAUSE:		return TS_ACC_CLAUSE;
 
     default:
       gcc_unreachable ();
@@ -6309,6 +6391,16 @@ omp_clause_check_failed (const tree node, const char *file, int line,
 }
 
 
+void
+acc_clause_check_failed (const tree node, const char *file, int line,
+                         const char *function, enum acc_clause_code code)
+{
+  internal_error ("tree check: expected acc_clause %s, have %s in %s, at %s:%d",
+		  acc_clause_code_name[code], tree_code_name[TREE_CODE (node)],
+		  function, trim_filename (file), line);
+}
+
+
 /* Similar to tree_range_check_failed but applied to OMP_CLAUSE codes.  */
 
 void
@@ -6339,6 +6431,38 @@ omp_clause_range_check_failed (const tree node, const char *file, int line,
 
   internal_error ("tree check: %s, have %s in %s, at %s:%d",
 		  buffer, omp_clause_code_name[TREE_CODE (node)],
+		  function, trim_filename (file), line);
+}
+
+
+void
+acc_clause_range_check_failed (const tree node, const char *file, int line,
+			       const char *function, enum acc_clause_code c1,
+			       enum acc_clause_code c2)
+{
+  char *buffer;
+  unsigned length = 0;
+  enum acc_clause_code c;
+
+  for (c = c1; c <= c2; ++c)
+    length += 4 + strlen (acc_clause_code_name[c]);
+
+  length += strlen ("expected ");
+  buffer = alloca (length);
+  length = 0;
+
+  for (c = c1; c <= c2; ++c)
+    {
+      const char *prefix = length ? " or " : "expected ";
+
+      strcpy (buffer + length, prefix);
+      length += strlen (prefix);
+      strcpy (buffer + length, acc_clause_code_name[c]);
+      length += strlen (acc_clause_code_name[c]);
+    }
+
+  internal_error ("tree check: %s, have %s in %s, at %s:%d",
+		  buffer, acc_clause_code_name[TREE_CODE (node)],
 		  function, trim_filename (file), line);
 }
 
@@ -6419,6 +6543,19 @@ omp_clause_operand_check_failed (int idx, tree t, const char *file,
      omp_clause_num_ops [OMP_CLAUSE_CODE (t)], function,
      trim_filename (file), line);
 }
+
+
+void
+acc_clause_operand_check_failed (int idx, tree t, const char *file,
+			         int line, const char *function)
+{
+  internal_error
+    ("tree check: accessed operand %d of acc_clause %s with %d operands "
+     "in %s, at %s:%d", idx + 1, acc_clause_code_name[ACC_CLAUSE_CODE (t)],
+     acc_clause_num_ops [ACC_CLAUSE_CODE (t)], function,
+     trim_filename (file), line);
+}
+
 #endif /* ENABLE_TREE_CHECKING */
 
 /* Create a new vector type node holding SUBPARTS units of type INNERTYPE,
@@ -6996,6 +7133,31 @@ tree
 build_empty_stmt (void)
 {
   return build1 (NOP_EXPR, void_type_node, size_zero_node);
+}
+
+
+/* Build an OpenACC clause with code CODE.  */
+
+tree
+build_acc_clause (enum acc_clause_code code)
+{
+  tree t;
+  int size, length;
+
+  length = acc_clause_num_ops[code];
+  size = (sizeof (struct tree_acc_clause) + (length - 1) * sizeof (tree));
+
+  t = ggc_alloc (size);
+  memset (t, 0, size);
+  TREE_SET_CODE (t, ACC_CLAUSE);
+  ACC_CLAUSE_SET_CODE (t, code);
+
+/*#ifdef GATHER_STATISTICS
+  tree_node_counts[(int) omp_clause_kind]++;
+  tree_node_sizes[(int) omp_clause_kind] += size;
+#endif*/
+  
+  return t;
 }
 
 
@@ -8079,6 +8241,16 @@ gcc2gs (int code)
    case WITH_CLEANUP_EXPR: return GS_WITH_CLEANUP_EXPR;
    case WITH_SIZE_EXPR: return GS_WITH_SIZE_EXPR;
    case TEMPLATE_TEMPLATE_PARM: return GS_TEMPLATE_TEMPLATE_PARM;
+   case ACC_PARALLEL: return GS_ACC_PARALLEL;
+   case ACC_KERNEL: return GS_ACC_KERNEL;
+   case ACC_LOOP: return GS_ACC_LOOP;
+   case ACC_HOST_DATA: return GS_ACC_HOST_DATA;
+   case ACC_DATA: return GS_ACC_DATA;
+   case ACC_UPDATE: return GS_ACC_UPDATE;
+   case ACC_CACHE: return GS_ACC_CACHE;
+   case ACC_DECLARE: return GS_ACC_DECLARE;
+   case ACC_WAIT: return GS_ACC_WAIT;
+   case ACC_CLAUSE: return GS_ACC_CLAUSE;
    case FREQ_HINT_STMT: return GS_FREQ_HINT_STMT;
    case ZDL_STMT: return GS_ZDL_STMT;
  }
@@ -9694,6 +9866,51 @@ gcc_omp_clause_code2gs_occ (enum omp_clause_code c)
   gcc_assert (0);
   return (gsbi_ts_t) 0;
 }
+
+
+static inline gs_acc_clause_code_t
+gcc_acc_clause_code2gs_occ (enum acc_clause_code c)
+{
+  switch (c)
+  {
+    case ACC_CLAUSE_ERROR: return GS_ACC_CLAUSE_ERROR;
+    case ACC_CLAUSE_IF: return GS_ACC_CLAUSE_IF;
+    case ACC_CLAUSE_ASYNC: return GS_ACC_CLAUSE_ASYNC;
+    case ACC_CLAUSE_NUM_GANGS: return GS_ACC_CLAUSE_NUM_GANGS;
+    case ACC_CLAUSE_NUM_WORKERS: return GS_ACC_CLAUSE_NUM_WORKERS;
+    case ACC_CLAUSE_VECTOR_LENGTH: return GS_ACC_CLAUSE_VECTOR_LENGTH;
+    case ACC_CLAUSE_COPY: return GS_ACC_CLAUSE_COPY;
+    case ACC_CLAUSE_COPYIN: return GS_ACC_CLAUSE_COPYIN;
+    case ACC_CLAUSE_COPYOUT: return GS_ACC_CLAUSE_COPYOUT;
+    case ACC_CLAUSE_CREATE: return GS_ACC_CLAUSE_CREATE;
+    case ACC_CLAUSE_PRESENT: return GS_ACC_CLAUSE_PRESENT;
+    case ACC_CLAUSE_PRESENT_OR_COPY: return GS_ACC_CLAUSE_PRESENT_OR_COPY;
+    case ACC_CLAUSE_PRESENT_OR_COPYIN: return GS_ACC_CLAUSE_PRESENT_OR_COPYIN;
+    case ACC_CLAUSE_PRESENT_OR_COPYOUT: return GS_ACC_CLAUSE_PRESENT_OR_COPYOUT;
+    case ACC_CLAUSE_PRESENT_OR_CREATE: return GS_ACC_CLAUSE_PRESENT_OR_CREATE;
+    case ACC_CLAUSE_PARM: return GS_ACC_CLAUSE_PARM;
+ 	case ACC_CLAUSE_ACC_RESIDENT:return GS_ACC_CLAUSE_ACC_RESIDENT;
+    case ACC_CLAUSE_USE_DEVICE: return GS_ACC_CLAUSE_USE_DEVICE;
+    case ACC_CLAUSE_DEVICEPTR: return GS_ACC_CLAUSE_DEVICEPTR;
+    case ACC_CLAUSE_COLLAPSE: return GS_ACC_CLAUSE_COLLAPSE;
+    case ACC_CLAUSE_SEQ: return GS_ACC_CLAUSE_SEQ;
+    case ACC_CLAUSE_PRIVATE: return GS_ACC_CLAUSE_PRIVATE;
+    case ACC_CLAUSE_FIRST_PRIVATE: return GS_ACC_CLAUSE_FIRST_PRIVATE;
+    case ACC_CLAUSE_VARLIST: return GS_ACC_CLAUSE_VARLIST;
+    case ACC_CLAUSE_INTEXP: return GS_ACC_CLAUSE_INTEXP;
+    case ACC_CLAUSE_REDUCTION: return GS_ACC_CLAUSE_REDUCTION;
+    case ACC_CLAUSE_GANG: return GS_ACC_CLAUSE_GANG;
+    case ACC_CLAUSE_WORKER: return GS_ACC_CLAUSE_WORKER;
+    case ACC_CLAUSE_VECTOR: return GS_ACC_CLAUSE_VECTOR;
+    case ACC_CLAUSE_INDEPENDENT: return GS_ACC_CLAUSE_INDEPENDENT;
+    case ACC_CLAUSE_HOST: return GS_ACC_CLAUSE_HOST;
+    case ACC_CLAUSE_DEVICE: return GS_ACC_CLAUSE_DEVICE;
+    case ACC_CLAUSE_CONST: return GS_ACC_CLAUSE_CONST;
+  }
+  gcc_assert (0);
+  return (gsbi_ts_t) 0;
+}
+
 
 static inline gs_omp_clause_default_kind_t
 gcc_omp_clause_default_kind2gs_ocdk (enum omp_clause_default_kind k)
@@ -11910,6 +12127,106 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
             }
             break;
 
+			/*OPENACC CLAUSE*/
+		  case ACC_CLAUSE:
+		  	{
+              gs_t clause_code = __gs (IB_INT);
+              _gs_n (clause_code,
+                     gcc_acc_clause_code2gs_occ(ACC_CLAUSE_CODE(t)));
+              gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_CODE,
+                             clause_code);
+			  switch (ACC_CLAUSE_CODE(t))
+			  {
+			  	case ACC_CLAUSE_REDUCTION:
+                {
+                  gs_t reduction_code = __gs (IB_INT);
+                  _gs_n (reduction_code, gcc2gs(ACC_CLAUSE_REDUCTION_CODE(t)));
+                  gs_set_operand((gs_t) GS_NODE(t),
+                                 GS_ACC_CLAUSE_REDUCTION_CODE,
+                                 reduction_code);
+                  /* fall through */
+                }
+				
+                gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_DECL,
+                             gs_x_1(ACC_CLAUSE_DECL(t), seq_num));
+					break;
+				
+                case ACC_CLAUSE_COPY:
+                case ACC_CLAUSE_COPYIN:
+                case ACC_CLAUSE_COPYOUT:
+                case ACC_CLAUSE_CREATE:
+                case ACC_CLAUSE_PRESENT:
+                case ACC_CLAUSE_PRESENT_OR_COPY:
+                case ACC_CLAUSE_PRESENT_OR_COPYIN:
+                case ACC_CLAUSE_PRESENT_OR_COPYOUT:
+                case ACC_CLAUSE_PRESENT_OR_CREATE:
+                case ACC_CLAUSE_PARM:
+                case ACC_CLAUSE_ACC_RESIDENT:
+                case ACC_CLAUSE_PRIVATE:
+                case ACC_CLAUSE_FIRST_PRIVATE:
+                case ACC_CLAUSE_VARLIST:
+				case ACC_CLAUSE_USE_DEVICE:
+				case ACC_CLAUSE_DEVICEPTR:
+				case ACC_CLAUSE_HOST: 
+  				case ACC_CLAUSE_DEVICE:
+  				case ACC_CLAUSE_CONST:
+                  gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_DECL,
+                                 gs_x_1(ACC_CLAUSE_DECL(t), seq_num));
+				  if(ACC_CLAUSE_DATA_START_EXPR(t))
+				  {
+                  	gs_set_operand((gs_t) GS_NODE(t),
+                                 GS_ACC_CLAUSE_DATA_START,
+                           gs_x_1(ACC_CLAUSE_DATA_START_EXPR(t), seq_num));
+                  	gs_set_operand((gs_t) GS_NODE(t),
+                                 GS_ACC_CLAUSE_DATA_END,
+                           gs_x_1(ACC_CLAUSE_DATA_END_EXPR(t), seq_num));
+				  }
+				  else
+				  {
+                  	gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_DATA_START, NULL);
+                  	gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_DATA_END, NULL);
+				  }
+                  break;
+                case ACC_CLAUSE_GANG:
+                case ACC_CLAUSE_WORKER:
+                case ACC_CLAUSE_VECTOR:
+				if(ACC_CLAUSE_INT_EXPR(t, ACC_CLAUSE_CODE(t)))
+                  gs_set_operand((gs_t) GS_NODE(t),
+                            GS_ACC_CLAUSE_NUM_EXPR,
+                            gs_x_1(ACC_CLAUSE_INT_EXPR(t, ACC_CLAUSE_CODE(t)), seq_num));
+				else
+				  gs_set_operand((gs_t) GS_NODE(t),  GS_ACC_CLAUSE_NUM_EXPR, NULL);
+					
+					break;
+				  
+                case ACC_CLAUSE_INTEXP:
+                case ACC_CLAUSE_NUM_GANGS:
+                case ACC_CLAUSE_NUM_WORKERS:
+                case ACC_CLAUSE_VECTOR_LENGTH:
+				case ACC_CLAUSE_ASYNC:
+				case ACC_CLAUSE_COLLAPSE:
+                  gs_set_operand((gs_t) GS_NODE(t),
+                            GS_ACC_CLAUSE_NUM_EXPR,
+                            gs_x_1(ACC_CLAUSE_INT_EXPR(t, ACC_CLAUSE_CODE(t)), seq_num));
+                  break;
+                case ACC_CLAUSE_IF:
+                  gs_set_operand((gs_t) GS_NODE(t), GS_ACC_CLAUSE_IF_EXPR,
+                                 gs_x_1(ACC_CLAUSE_IF_EXPR(t), seq_num));
+                  break;
+				case ACC_CLAUSE_INDEPENDENT:
+                case ACC_CLAUSE_SEQ:
+                  /* Do nothing. */
+                  break;
+                default:
+                  fprintf (stdout, "Unhandled OpenACC clause code\n");
+                  gcc_assert (0);
+			  }
+		  	}
+		  	break;
+
+			
+
+		  /*OPENMP CLAUSE*/	
           case OMP_CLAUSE:
             {
               gs_t clause_code = __gs (IB_INT);

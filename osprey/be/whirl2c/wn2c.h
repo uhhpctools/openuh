@@ -143,4 +143,6 @@ extern void WN2C_stid_lhs(TOKEN_BUFFER tokens,
 			  CONTEXT      context,
 			  UINT         field_id = 0);
 
+extern BOOL isGPUKernelFunc;
+
 #endif /* wn2c_INCLUDED */

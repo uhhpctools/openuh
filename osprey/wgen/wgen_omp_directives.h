@@ -108,5 +108,32 @@ extern void WGEN_expand_start_do_loop (WN *, WN *, WN *, WN *);
 extern void WGEN_expand_end_do_loop (void);
 
 extern BOOL Trace_Omp;
+
+/*OpenACC pragma*/
+extern void WGEN_expand_acc_start_parallel(gs_t stmt);
+extern void WGEN_expand_acc_start_loop(gs_t stmt);
+extern void WGEN_expand_acc_start_kernel(gs_t stmt);
+extern void WGEN_expand_acc_start_hostdata(gs_t stmt);
+extern void WGEN_expand_acc_start_data(gs_t stmt);
+extern void WGEN_expand_acc_start_update(gs_t stmt);
+extern void WGEN_expand_acc_start_cache(gs_t stmt);
+extern void WGEN_expand_acc_start_declare(gs_t stmt);
+extern void WGEN_expand_acc_start_wait(gs_t stmt);
+extern void WGEN_expand_acc_start_forloop (gs_t stmt);
+extern void WGEN_expand_acc_start_do_loop(WN * index, WN * start, WN * end, WN * step);
+
+extern void WGEN_expand_acc_end_parallel (void);
+extern void WGEN_expand_acc_end_loop (void);
+extern void WGEN_expand_acc_end_kernel (void);
+extern void WGEN_expand_acc_end_hostdata (void);
+extern void WGEN_expand_acc_end_data (void);
+extern void WGEN_expand_acc_end_update (void);
+extern void WGEN_expand_acc_end_cache (void);
+extern void WGEN_expand_acc_end_declare (void);
+extern void WGEN_expand_acc_end_wait (void);
+extern void WGEN_expand_acc_end_forloop (void);
+extern void WGEN_expand_acc_end_do_loop (void);
+
+
 #endif
 

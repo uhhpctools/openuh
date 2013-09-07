@@ -100,6 +100,7 @@ typedef	enum {
   RL_RVI2,	/* processed by RVI emitter (phase 2)		*/
   RL_CG,        /* processed to the beginning of CG		*/
   RL_CGSCHED,   /* processed past CG scheduling			*/
+  RL_LIVENESS_ACC,   /* OPT liveness analysis for OpenACC offload region*/
   RL_LAST	/* > last legal value				*/
 } REGION_LEVEL;
 
@@ -122,6 +123,12 @@ typedef enum {
   RID_FLAGS_has_reg_alloc = 0x1, /* register allocation exists		*/
   RID_FLAGS_was_gra	  = 0x2  /* GRA did it (else must be SWP)	*/
 } REGION_FLAGS;
+
+
+typedef enum {  
+  ACC_REGION_FLAGS_undefined = 0x0, /* undefined	*/
+  ACC_REGION_FLAGS_UNROLLED	  = 0x1  /* The region is unrolled during LNO, basically it is an seq loop region	*/
+} ACC_REGION_FLAGS;
 
 /* Here's how these types work:
 
@@ -148,6 +155,7 @@ typedef enum {
   RID_TYPE_major  = 0x100, /* region type for major region */
   RID_TYPE_minor = 0x200,  /* region type for minor region*/
 #endif 
+  RID_TYPE_acc	      	= 0x400,	/* it's a ACC region (transparent)	     */
   RID_TYPE_eh	        = 0x3f000, /* EH region mask (all EH are transparent)*/
   RID_TYPE_try	        = 0x01000, /* it's a try-block			     */
   RID_TYPE_cleanup      = 0x02000, /* it's a cleanup region		     */
@@ -212,6 +220,8 @@ typedef union region_flags_union {
 #define URFLAG_contains_uplevel(r) ((r).rfs.contains_uplevel)
 #define URFLAG_contains_barrier(r) ((r).rfs.contains_barrier)
 
+#define ACCFLAG_flags(r)	((r)->acc_regionflags)
+
 typedef struct points_to_ref {
   POINTS_TO            *Pt;
   struct points_to_ref *Next;
@@ -260,6 +270,7 @@ typedef struct region_id {
   LOWER_ACTIONS	lowered; /* lowerer actions already applied to region	*/
   struct EH_RANGE  *eh_range_ptr; /* pointer to current EH range   	*/
   INT32 num_eh_ranges;   /* how many eh_ranges in this eh region        */
+  UINT32 acc_regionflags; 	  /* reserved for ACC region flag indication  */
 
 } RID;
 
@@ -313,6 +324,11 @@ typedef struct region_id {
 #define RID_was_gra_Set(r)          (RID_gra_flags(r) |= RID_FLAGS_was_gra) 
 #define RID_was_gra__Reset(r)       (RID_gra_flags(r) &= ~RID_FLAGS_was_gra) 
 
+#define ACC_FLAGS_is_loop_unrolled(r)             (ACCFLAG_flags(r) & RID_TYPE_loop)
+#define ACC_FLAGS_loop_unrolled_Set(r)             (ACCFLAG_flags(r) |= RID_TYPE_loop)
+#define ACC_FLAGS_loop_unrolled_Reset(r)             (ACCFLAG_flags(r) &= ~RID_TYPE_loop)
+
+
 /* RID type macros */
 #define RID_TYPE_func_entry(r)       (RID_type(r) & RID_TYPE_func_entry)
 #define RID_TYPE_func_entry_Set(r)   (RID_type(r) = \
@@ -341,6 +357,9 @@ typedef struct region_id {
 #define RID_TYPE_mp(r)               (RID_type(r) & RID_TYPE_mp)
 #define RID_TYPE_mp_Set(r)           (RID_type(r) = \
 				     (RID_TYPE)(RID_type(r) | RID_TYPE_mp))
+#define RID_TYPE_acc(r)           (RID_type(r) & RID_TYPE_acc)
+#define RID_TYPE_acc_Set(r)           (RID_type(r) = \
+				     (RID_TYPE)(RID_type(r) | RID_TYPE_acc))
 #define RID_TYPE_mp_Reset(r)         (RID_type(r) = \
 				     (RID_TYPE)(RID_type(r) & ~RID_TYPE_mp))
 
@@ -420,7 +439,8 @@ typedef struct region_id {
 				 || RID_TYPE_mp(r) \
 				 || RID_TYPE_eh(r) \
 				 || RID_TYPE_swp(r) \
-				 || RID_TYPE_cold(r))
+				 || RID_TYPE_cold(r)\
+				 || RID_TYPE_acc(r))
 
 #if defined(TARG_SL2)
 #define RID_TYPE_sl2_para(r)   ( RID_TYPE_major(r) \
@@ -565,6 +585,9 @@ extern BOOL REGION_is_EH(WN *);
 
 /* tell if a region is an MP region based on WHIRL pragmas */
 extern BOOL REGION_is_mp(WN *);
+
+/* tell if a region is an MP region based on WHIRL pragmas */
+extern BOOL REGION_is_acc(WN *);
 
 #if defined(TARG_SL2)
 /* tell if a region is an SL2 region based on WHIRL kind */

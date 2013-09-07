@@ -241,6 +241,8 @@ void (*W2C_Mark_Loads_p)(void);
 void (*W2C_Nomark_Loads_p)(void);
 void (*W2C_Outfile_Fini_p)(BOOL emit_global_decls);
 void (*W2C_Outfile_Init_p)(BOOL emit_global_decls);
+void (*W2C_Outfile_Fini_OpenACC_p)(BOOL emit_global_decls);
+void (*W2C_Outfile_Init_OpenACC_p)(BOOL emit_global_decls);
 void (*W2C_Outfile_Translate_Pu_p)(WN *pu, BOOL emit_global_decls);
 void (*W2C_Pop_PU_p)(void);
 void (*W2C_Process_Command_Line_p)(INT phase_argc, char * const

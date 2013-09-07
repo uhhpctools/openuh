@@ -2615,7 +2615,16 @@ vho_lower_comma ( WN * wn, WN *block, BOOL_INFO * bool_info, BOOL is_return=FALS
         result = WN_CreateLdid (OPR_LDID, desc, desc, 0, st, ty_idx);
       }
 #endif
-
+	  //Add by daniel tian. for OpenACC
+	  else if(TY_kind(ty_idx) == KIND_POINTER)// && LANG_Enable_CXX_Openacc)
+  	  {
+		ST* st = Gen_Temp_Symbol (ty_idx, "call");
+		wn = WN_Stid (rtype, 0, st, ty_idx, result);
+		WN_Set_Linenum ( wn, VHO_Srcpos );
+		WN_INSERT_BlockLast (comma_block, wn);
+		result = WN_Ldid(rtype,0, st, ty_idx);
+  	  }
+	  
       else {
 
 #ifdef KEY

@@ -232,7 +232,9 @@ private:
   BOOL         _rvi_break_stmt; // break at every stmt for rvi?
   OPT_FEEDBACK *_feedback;      // Pointer to feedback data -- NULL if no data
   STACK<MP_TY> _mp_type;        // the mp region type
+  STACK<ACC_TY> _acc_type;        // the mp region type
   STACK<RID *> _mp_rid;         // the rid of the region
+  STACK<RID *> _acc_rid;         // the rid of the region
   STACK<BB_REGION *> _bb_region;// the BB_REGION of the parent (not just mp)
   STACK<RID *> _eh_rid;         // the stack of eh_region's rid
   
@@ -433,7 +435,7 @@ private:
   // actually does not belong to the 'loop'.
   void         Screen_out_false_loopnest(BB_LOOP *loop, BB_LOOP *sibling);
 
-  void         Ident_mp_regions(void);
+  void         Ident_mp_acc_regions(void);
   void         Ident_eh_regions(void);
 #if defined(TARG_SL) //PARA_EXTENSION
   void         Ident_sl2_para_regions(void);
@@ -598,6 +600,26 @@ public:
   void         Clear_mp_type(void)       { _mp_type.Clear(); }
   void         Clear_mp_rid(void)        { _mp_rid.Clear(); }
 
+  // Assuming the ACC region has only one entry one exit
+  void         Push_acc_type(ACC_TY t)     { _acc_type.Push(t);}
+  void         Push_acc_rid(RID *rid)     { _acc_rid.Push(rid); }
+  ACC_TY        Pop_acc_type(void)         { return _acc_type.Pop(); }
+  RID         *Pop_acc_rid(void)          { return _acc_rid.Pop(); }
+  ACC_TY        Top_acc_type(void) const   { return _acc_type.Top(); }
+  RID         *Top_acc_rid(void) const    { return _acc_rid.Top(); }
+  BOOL         NULL_acc_type(void) const  { return _acc_type.Is_Empty(); }
+  void         Clear_acc_type(void)       { _acc_type.Clear(); }
+  void         Clear_acc_rid(void)        { _acc_rid.Clear(); }
+  BOOL         Is_ACC_Offload_Region(void)	{ 
+					return (!NULL_acc_type() && Top_acc_type() != ACC_DATAREGION);
+				}
+  BOOL         Is_ACC_DATA_Region(void)	{ 
+					return Top_acc_type() == ACC_DATAREGION;
+				}
+  BOOL         Inside_acc_do(void)        { return !NULL_acc_type() &&
+                                             Top_acc_type() == ACC_LOOP;
+                                         }
+
   void         Push_eh_rid(RID *rid)     { _eh_rid.Push(rid); }
   RID         *Pop_eh_rid(void)          { return _eh_rid.Pop(); }
   RID         *Top_eh_rid(void) const    { return _eh_rid.Top(); }
@@ -607,6 +629,7 @@ public:
   BOOL         Inside_mp_do(void)        { return !NULL_mp_type() &&
                                              Top_mp_type() != MP_REGION;
                                          }
+  
 #if defined(TARG_SL) //PARA_EXTENSION
   // Assuming the SL2 parallel region has only one entry one exit
   void      Push_sl2_para_type(SL2_PARA_TY t)     { _sl2_para_type.Push(t);}
@@ -660,6 +683,8 @@ public:
   // Find a parallel region that dominates the given BB.
   // Note that the region encloses "bb" and does not start with it
   BB_NODE *Find_enclosing_parallel_region_bb( BB_NODE *);
+  BB_NODE *Find_enclosing_acc_offload_region_bb( BB_NODE *bb);
+
 #endif
 
   // Determine if this loop is the outermost one in a parallel region

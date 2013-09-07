@@ -88,6 +88,8 @@ const char * sgi_comment_str = "CSGI$ " ;
 static BOOL  PU_Need_End_Contains = FALSE;  // f90 needs CONTAINS/END around nested procs.
 static BOOL  PU_Dangling_Contains = FALSE;  // f90 have done CONTAINS, need END...
 static INT32 PU_Host_Func_Id = 0 ;           // func id for END/CONTAINS
+BOOL isGPUKernelFunc = false;
+
 
 static void WN2F_End_Routine_Strings(TOKEN_BUFFER tokens, INT32 func_id);
 

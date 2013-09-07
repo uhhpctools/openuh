@@ -666,6 +666,8 @@ extern BOOL scalar_rename(WN* ref, HASH_TABLE<WN*,INT>* checked) {
       else if (Is_Reduction_In_Prallel_Region(scalar_ref))
 	can_rename = FALSE;
 #else
+	  else if(Is_ACC_Offloaded_Region(scalar_ref))
+	can_rename = FALSE;
       // Bug 6904 - cannot rename scalars that are shared variables in an
       // enclosing MP region. This combines the test for reduction variables.
       else if (Contains_MP && 

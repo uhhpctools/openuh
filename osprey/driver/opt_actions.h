@@ -59,6 +59,11 @@
 #define NORMAL_MP	0
 #define CRAY_MP		1
 
+//OPENACC
+#define NORMAL_ACC100	0
+#define NORMAL_ACC200	1
+#define UHEXT_ACC100	2
+
 typedef enum {
   M_CPU,
   M_ARCH,

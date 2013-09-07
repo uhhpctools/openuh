@@ -1,0 +1,30 @@
+CC = gcc
+
+CFLAGS = -Wall -g
+INCL = -I. -I/opt/cuda/5.0/include
+OPT = -O3
+
+DYNAMIC_LIBS = -lcuda -lcudart -lpthread
+LIBS = -L/opt/cuda/5.0/lib64 $(DYNAMIC_LIBS)
+
+LD = gcc
+LDFLAGS = -g
+
+TARGET = libOpenACC.a
+
+SRCDIR = .
+#SRCS = $(wildcard $(SRCDIR)/*.c)
+SRCS = acc_context.c acc_data.c acc_kernel.c acc_util.c acc_hashmap.c vector.c 
+OBJS = $(patsubst %.c, %.o, $(SRCS))
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	ar cr $@ $^ $(LIBS)
+	@rm -f *.o
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(OPT) $(INCL) -c $< -o $@
+
+clean:
+	@rm -f *.o

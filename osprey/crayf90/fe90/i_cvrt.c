@@ -104,6 +104,14 @@ static	void	send_namelist_group(int);
 static	TYPE	send_non_standard_aligned_type(int, int);
 static	void	send_procedure(int, int, int);
 static	void	send_stor_blk(int, int *);
+static  void    acc_create_boundary_ir_array_region(int	 il_boundary_idx, 
+														ACC_CONTEXT_TYPE acc_start_or_length);
+static void 	acc_create_int_expr_pragma(int	 il_clause_idx, 
+														ACC_CONTEXT_TYPE acc_int_expr_context_type);
+static void 	acc_array_region_process_for_data_clause(int list_idx, 
+														ACC_CONTEXT_TYPE acc_context_type);
+
+
 
 /*****************************************************************\
 |* Static data used in this module.                              *|
@@ -342,6 +350,68 @@ static	char		*p_tasking_context[] = {
 			"Context_Omp_Nest"
 						 };
 
+static	char		*p_acc_context[] = {			
+			"ACC_Context_None",
+			"ACC_Context_DeviceType",
+			"ACC_Context_Private",
+			"ACC_Context_FirstPrivate",
+			"ACC_Context_Copy",
+			"ACC_Context_PCopy",
+			"ACC_Context_Copyin",
+			"ACC_Context_PCopyin",
+			"ACC_Context_Copyout",
+			"ACC_Context_PCopyout",
+			"ACC_Context_Create",
+			"ACC_Context_PCreate",
+			"ACC_Context_Present",
+			"ACC_Context_DevicePtr",
+			"ACC_Context_Delete",
+			"ACC_Context_Reduction",
+			"ACC_Context_Reduction_ADD",
+			"ACC_Context_Reduction_MUL",
+			"ACC_Context_Reduction_MAX",
+			"ACC_Context_Reduction_MIN",
+			"ACC_Context_Reduction_IAND",
+			"ACC_Context_Reduction_IOR",
+			"ACC_Context_Reduction_IEOR",
+			"ACC_Context_Reduction_AND",
+			"ACC_Context_Reduction_OR",
+			"ACC_Context_Reduction_EQV",
+			"ACC_Context_Reduction_NEQV",
+			"ACC_Context_Array_Start",
+			"ACC_Context_Array_Length",
+			"ACC_Context_Num_Gangs",
+			"ACC_Context_Num_Workers",
+			"ACC_Context_Vector_Length",
+			"ACC_Context_Wait",
+			"ACC_Context_Async",
+			"ACC_Context_Default",
+			"ACC_Context_Use_Device",
+			"ACC_Context_Collapse",
+			"ACC_Context_Gang",
+			"ACC_Context_Worker",
+			"ACC_Context_Vector",
+			"ACC_Context_Seq",
+			"ACC_Context_Auto",
+			"ACC_Context_Tile",
+			"ACC_Context_Independent",
+			"ACC_Context_Read",
+			"ACC_Context_Write",
+			"ACC_Context_Update",
+			"ACC_Context_Capture",
+			"ACC_Context_Link",
+			"ACC_Context_Device_Resident",
+			"ACC_Context_Self",
+			"ACC_Context_Host",
+			"ACC_Context_Device",
+			"ACC_Context_Bind",
+			"ACC_Context_Nohost",
+			"ACC_Context_If",
+			"ACC_Context_Cache"
+		 };
+
+
+
 int     pdg_align[8] = {0,                      /* Signifies no alignment */
                         Bit_Align,
                         Byte_Align,
@@ -352,6 +422,7 @@ int     pdg_align[8] = {0,                      /* Signifies no alignment */
                         FWord_Align
                         };
 
+static int acc_is_offload_region = FALSE;
 
 /******************************************************************************\
 |*                                                                            *|
@@ -1456,6 +1527,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		long			last_task_idx		= NULL_IDX;
 		int			line;
    		int			list_array[OPEN_MP_LIST_CNT];
+   		int			list_array_acc[OPEN_ACC_LIST_CNT];
    		int			list_cnt;
    		int			list_idx1;
    		int			list_idx2;
@@ -3737,7 +3809,10 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_C("fei_exp");
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_exp(basic);
+			 if(acc_is_offload_region)
+             	fei_exp(basic);
+			 else
+             	fei_cuda_exp(basic);			 	
 # endif
              break;
 
@@ -3791,7 +3866,10 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_C("fei_atan2");
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_atan2(basic);
+			 if(acc_is_offload_region)
+			 	fei_cuda_atan2(basic);
+			 else
+             	fei_atan2(basic);
 # endif
              break;
 
@@ -3800,7 +3878,10 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_C("fei_cosh");
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_cosh(basic);
+			 if(acc_is_offload_region)
+			 	fei_cuda_cosh(basic);
+			 else
+             	fei_cosh(basic);
 # endif
              break;
 
@@ -3808,8 +3889,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_sinh");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_sinh(basic);
+# ifdef _ENABLE_FEI			 
+			 if(acc_is_offload_region)
+			 	fei_cuda_sinh(basic);
+			 else
+             	fei_sinh(basic);
 # endif
              break;
 
@@ -3817,8 +3901,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_tanh");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_tanh(basic);
+# ifdef _ENABLE_FEI             	 
+			 if(acc_is_offload_region)
+			 	fei_cuda_tanh(basic);
+			 else
+			 	fei_tanh(basic);
 # endif
              break;
 
@@ -3826,8 +3913,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_cos");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_cos(basic);
+# ifdef _ENABLE_FEI        	 
+			 if(acc_is_offload_region)
+             	fei_cuda_cos(basic);
+			 else
+             	fei_cos(basic);
 # endif
              break;
 
@@ -3835,8 +3925,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_sin");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_sin(basic);
+# ifdef _ENABLE_FEI        	 
+			 if(acc_is_offload_region)
+             	fei_cuda_sin(basic);
+			 else
+             	fei_sin(basic);
 # endif
              break;
 
@@ -3844,8 +3937,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_tan");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_tan(basic);
+# ifdef _ENABLE_FEI        	 
+			 if(acc_is_offload_region)
+             	fei_cuda_tan(basic);
+			 else
+             	fei_tan(basic);
 # endif
              break;
 
@@ -3853,8 +3949,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_log");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_log(basic);
+# ifdef _ENABLE_FEI        	 
+			 if(acc_is_offload_region)
+             	fei_cuda_log(basic);
+			 else
+             	fei_log(basic);
 # endif
              break;
 
@@ -3862,8 +3961,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_log10");
              PDG_DBG_PRINT_END
-# ifdef _ENABLE_FEI
-             fei_log10(basic);
+# ifdef _ENABLE_FEI        	 
+			 if(acc_is_offload_region)
+             	fei_cuda_log10(basic);
+			 else
+             	fei_log10(basic);
 # endif
              break;
 
@@ -9895,7 +9997,505 @@ CONTINUE:
         }
         break;
 
+	/***********************************************************************************
+	************************************************************************************/
+   //IR_OPR(ir_idx)		
+#define ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CLAUSE_IDX, OPEN_ACC_CONTEXT_IDX)		\
+	if (IL_FLD(list_array_acc[OPEN_ACC_CLAUSE_IDX]) == IL_Tbl_Idx) {		\
+           list_idx2 = IL_IDX(list_array_acc[OPEN_ACC_CLAUSE_IDX]);		\
+           acc_array_region_process_for_data_clause(list_idx2, OPEN_ACC_CONTEXT_IDX);		\
+        }
 
+#define SCALAR_CLAUSE_PROCESSING(OPEN_ACC_CLAUSE_IDX, OPEN_ACC_CONTEXT_IDX)		\
+	if (IL_FLD(list_array_acc[OPEN_ACC_CLAUSE_IDX]) == IL_Tbl_Idx)				\
+		{				\
+           list_idx2 = IL_IDX(list_array_acc[OPEN_ACC_CLAUSE_IDX]);				\
+           while (list_idx2) {				\
+              if (IL_FLD(list_idx2) == AT_Tbl_Idx) {				\
+                 send_attr_ntry(IL_IDX(list_idx2));				\
+				 fei_acc_region_var(PDG_AT_IDX(IL_IDX(list_idx2)), OPEN_ACC_CONTEXT_IDX);				\
+              }				\
+              list_idx2 = IL_NEXT_LIST_IDX(list_idx2);				\
+           }				\
+        }
+#define WAIT_CLAUSE_PROCESSING()	\	
+		if(IL_FLD(list_array_acc[OPEN_ACC_WAIT_IDX]) == IL_Tbl_Idx)	{		\
+			list_idx2 = IL_IDX(list_array_acc[OPEN_ACC_WAIT_IDX]);			\
+			while (list_idx2) {												\
+				acc_create_int_expr_pragma(list_idx2, ACC_Context_Wait);	\
+				list_idx2 = IL_NEXT_LIST_IDX(list_idx2);					\
+			}																\
+		}
+
+#define IF_CLAUSE_PROCESSING()				\		
+        if (IL_FLD(list_array_acc[OPEN_ACC_IF_IDX]) == AT_Tbl_Idx) {			\
+           send_attr_ntry(IL_IDX(list_array_acc[OPEN_ACC_IF_IDX]));				\
+           task_if_idx = PDG_AT_IDX(IL_IDX(list_array_acc[OPEN_ACC_IF_IDX]));	\
+		   fei_acc_region_var(task_if_idx, ACC_Context_If);						\
+        }
+	/*****************************************************************************************************
+	******************************************************************************************************/	
+   case Cache_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+		
+		/* process cache clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CACHE_IDX, ACC_Context_Cache);
+
+		
+		fei_cache_update_wait_declare_open_acc(ACC_Context_Dir_Cache);
+	   break;
+	   
+   case Update_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	   
+	    /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+	   
+	    /*int-exp processing*/
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Async);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEVICE_TYPE_IDX], ACC_Context_DeviceType);
+		WAIT_CLAUSE_PROCESSING();
+		
+		/* process Data clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_SELF_IDX, ACC_Context_Self);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_HOST_IDX, ACC_Context_Host);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_DEVICE_IDX, ACC_Context_Device);
+
+		
+		fei_cache_update_wait_declare_open_acc(ACC_Context_Dir_Update);
+	   break;
+	   
+   case Declare_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	   		
+		/* process Data clause */		
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		/* process Copyin clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYIN_IDX, ACC_Context_Copyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYIN_IDX, ACC_Context_PCopyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYIN_IDX, ACC_Context_PCopyin);
+		/* process Copyout clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYOUT_IDX, ACC_Context_Copyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYOUT_IDX, ACC_Context_PCopyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYOUT_IDX, ACC_Context_PCopyout);
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_CREATE_IDX, ACC_Context_PCreate);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCREATE_IDX, ACC_Context_PCreate);
+		/* process Present clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_IDX, ACC_Context_Present);
+		//declare device_resident/link clause
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_DEVICE_RESIDENT_IDX, ACC_Context_Device_Resident);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_LINK_IDX, ACC_Context_Link);
+
+		//device ptr processing
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_DEVICEPTR_IDX, ACC_Context_DevicePtr);
+
+		
+		fei_cache_update_wait_declare_open_acc(ACC_Context_Dir_Declare);
+	   break;
+	   
+   case Wait_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	    //wait clauses
+		WAIT_CLAUSE_PROCESSING();
+		
+		
+		fei_cache_update_wait_declare_open_acc(ACC_Context_Dir_Wait);
+	   break;
+	   
+   case Enter_Data_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	   
+	    /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+	   
+	    /*int-exp processing*/
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Async);
+		WAIT_CLAUSE_PROCESSING();
+		
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_CREATE_IDX, ACC_Context_PCreate);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCREATE_IDX, ACC_Context_PCreate);
+
+		//create the exit data region
+		fei_enter_exit_data_open_acc(ACC_Context_Dir_Enter_Data);
+	   break;
+	   
+   case Exit_Data_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	   
+	    /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+	   
+	    /*int-exp processing*/
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Async);
+		WAIT_CLAUSE_PROCESSING();
+		
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYOUT_IDX, ACC_Context_Copyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYOUT_IDX, ACC_Context_PCopyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYOUT_IDX, ACC_Context_PCopyout);
+		
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_DELETE_IDX, ACC_Context_Delete);
+
+		//create the exit data region
+		fei_enter_exit_data_open_acc(ACC_Context_Dir_Exit_Data);
+
+	   break;
+	   
+   case Loop_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+
+	    //int-exp processing
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Collapse);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_GANG_IDX], ACC_Context_Gang);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_WORKER_IDX], ACC_Context_Worker);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_VECTOR_IDX], ACC_Context_Vector);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_SEQ_IDX], ACC_Context_Seq);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_AUTO_IDX], ACC_Context_Auto);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_TILE_IDX], ACC_Context_Tile);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEVICE_TYPE_IDX], ACC_Context_DeviceType);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_INDEPENDENT_IDX], ACC_Context_Independent);
+
+		//scalar processing
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_PRIVATE_IDX, ACC_Context_Private);
+
+		/* process REDUCTION clause */
+        if (IL_FLD(list_array_acc[OPEN_ACC_REDUCTION_OPR_IDX]) == IL_Tbl_Idx &&
+            IL_FLD(list_array_acc[OPEN_ACC_REDUCTION_VAR_IDX]) == IL_Tbl_Idx) 
+        {
+           list_idx2 = IL_IDX(list_array_acc[OPEN_ACC_REDUCTION_OPR_IDX]);
+           list_idx3 = IL_IDX(list_array_acc[OPEN_ACC_REDUCTION_VAR_IDX]);
+           while (list_idx2) 
+		   {
+              if (IL_FLD(list_idx2) == IR_Tbl_Idx &&
+                  IL_FLD(list_idx3) == IL_Tbl_Idx) {
+                 switch (IR_OPR(IL_IDX(list_idx2))) {
+                    case Max_Opr :   
+                         context = ACC_Context_Reduction_MAX;
+                         break;
+                    case Min_Opr :   
+                         context = ACC_Context_Reduction_MIN;
+                         break;
+                    case Band_Opr :   
+                         context = ACC_Context_Reduction_IAND;
+                         break;
+                    case Bor_Opr :   
+                         context = ACC_Context_Reduction_IOR;
+                         break;
+                    case Bneqv_Opr :   
+                         context = ACC_Context_Reduction_IEOR;
+                         break;
+                    case Plus_Opr :   
+                         context = ACC_Context_Reduction_ADD;
+                         break;
+                    case Mult_Opr :   
+                         context = ACC_Context_Reduction_MUL;
+                         break;
+                    case And_Opr :   
+                         context = ACC_Context_Reduction_AND;
+                         break;
+                    case Or_Opr :   
+                         context = ACC_Context_Reduction_OR;
+                         break;
+                    case Eqv_Opr :   
+                         context = ACC_Context_Reduction_EQV;
+                         break;
+                    case Neqv_Opr :   
+                         context = ACC_Context_Reduction_NEQV;
+                         break;
+                 }
+                 list_idx4 = IL_IDX(list_idx3);
+                 while (list_idx4) 
+				 {
+
+                    if (IL_FLD(list_idx4) == AT_Tbl_Idx) 
+					{
+                       send_attr_ntry(IL_IDX(list_idx4));
+                       last_task_idx = fei_acc_region_var(PDG_AT_IDX(IL_IDX(list_idx4)), context);					   
+                    }
+                    list_idx4 = IL_NEXT_LIST_IDX(list_idx4); 
+                 }
+              }
+
+              list_idx2 = IL_NEXT_LIST_IDX(list_idx2); 
+              list_idx3 = IL_NEXT_LIST_IDX(list_idx3); 
+           }  
+        }
+		
+		fei_loop_open_acc(ACC_Context_Dir_Loop);
+   		break;
+		
+   case Data_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	   
+	    /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+	    
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		/* process Copyin clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYIN_IDX, ACC_Context_Copyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYIN_IDX, ACC_Context_PCopyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYIN_IDX, ACC_Context_PCopyin);
+		/* process Copyout clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYOUT_IDX, ACC_Context_Copyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYOUT_IDX, ACC_Context_PCopyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYOUT_IDX, ACC_Context_PCopyout);
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_CREATE_IDX, ACC_Context_PCreate);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCREATE_IDX, ACC_Context_PCreate);
+		/* process Present clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_IDX, ACC_Context_Present);
+
+		//device ptr processing
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_DEVICEPTR_IDX, ACC_Context_DevicePtr);
+		
+		fei_data_open_acc();
+   		break;
+   
+   case Host_Data_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+	    
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_USE_DEVICE_IDX, ACC_Context_Use_Device);
+		
+		fei_host_data_open_acc();
+   		break;
+		
+   case Kernels_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+        /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+
+	    //int-exp processing
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Async);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEVICE_TYPE_IDX], ACC_Context_DeviceType);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEFAULT_IDX], ACC_Context_Default);
+		/* Wait clause */
+		WAIT_CLAUSE_PROCESSING();
+
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		/* process Copyin clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYIN_IDX, ACC_Context_Copyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYIN_IDX, ACC_Context_PCopyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYIN_IDX, ACC_Context_PCopyin);
+		/* process Copyout clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYOUT_IDX, ACC_Context_Copyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYOUT_IDX, ACC_Context_PCopyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYOUT_IDX, ACC_Context_PCopyout);
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_CREATE_IDX, ACC_Context_PCreate);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCREATE_IDX, ACC_Context_PCreate);
+		/* process Present clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_IDX, ACC_Context_Present);
+
+		//device ptr processing
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_DEVICEPTR_IDX, ACC_Context_DevicePtr);
+		
+		fei_parallel_kernels_open_acc(ACC_Context_Dir_Kernels);
+		acc_is_offload_region = TRUE;
+   		break;
+	   
+   case Parallel_Open_Acc_Opr:	
+	   list_idx1 = IR_IDX_L(ir_idx);
+	   
+	   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+		  list_array_acc[i] = list_idx1;
+		  list_idx1 = IL_NEXT_LIST_IDX(list_idx1);
+	   }
+	   /*begin process clauses*/
+
+
+        /* process IF clause */
+        IF_CLAUSE_PROCESSING();
+		
+		//int-exp processing		
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_NUM_GANGS_IDX], ACC_Context_Num_Gangs);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_NUM_WORKERS_IDX], ACC_Context_Num_Workers);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_VECTOR_LENGTH_IDX], ACC_Context_Vector_Length);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Async);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEVICE_TYPE_IDX], ACC_Context_DeviceType);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_DEFAULT_IDX], ACC_Context_Default);
+		/* Wait clause */
+		WAIT_CLAUSE_PROCESSING();
+	
+		/* process Copy clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		/* process Copyin clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYIN_IDX, ACC_Context_Copyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYIN_IDX, ACC_Context_PCopyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYIN_IDX, ACC_Context_PCopyin);
+		/* process Copyout clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYOUT_IDX, ACC_Context_Copyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYOUT_IDX, ACC_Context_PCopyout);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYOUT_IDX, ACC_Context_PCopyout);
+		/* process Create clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_CREATE_IDX, ACC_Context_PCreate);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCREATE_IDX, ACC_Context_PCreate);
+		/* process Present clause */
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_IDX, ACC_Context_Present);
+
+		/*scalar process*/
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_FIRST_PRIVATE_IDX, ACC_Context_FirstPrivate);
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_PRIVATE_IDX, ACC_Context_Private);
+		SCALAR_CLAUSE_PROCESSING(OPEN_ACC_DEVICEPTR_IDX, ACC_Context_DevicePtr);
+
+		/* process REDUCTION clause */
+        if (IL_FLD(list_array_acc[OPEN_ACC_REDUCTION_OPR_IDX]) == IL_Tbl_Idx &&
+            IL_FLD(list_array_acc[OPEN_ACC_REDUCTION_VAR_IDX]) == IL_Tbl_Idx) 
+        {
+           list_idx2 = IL_IDX(list_array_acc[OPEN_ACC_REDUCTION_OPR_IDX]);
+           list_idx3 = IL_IDX(list_array_acc[OPEN_ACC_REDUCTION_VAR_IDX]);
+           while (list_idx2) 
+		   {
+              if (IL_FLD(list_idx2) == IR_Tbl_Idx &&
+                  IL_FLD(list_idx3) == IL_Tbl_Idx) {
+                 switch (IR_OPR(IL_IDX(list_idx2))) {
+                    case Max_Opr :   
+                         context = ACC_Context_Reduction_MAX;
+                         break;
+                    case Min_Opr :   
+                         context = ACC_Context_Reduction_MIN;
+                         break;
+                    case Band_Opr :   
+                         context = ACC_Context_Reduction_IAND;
+                         break;
+                    case Bor_Opr :   
+                         context = ACC_Context_Reduction_IOR;
+                         break;
+                    case Bneqv_Opr :   
+                         context = ACC_Context_Reduction_IEOR;
+                         break;
+                    case Plus_Opr :   
+                         context = ACC_Context_Reduction_ADD;
+                         break;
+                    case Mult_Opr :   
+                         context = ACC_Context_Reduction_MUL;
+                         break;
+                    case And_Opr :   
+                         context = ACC_Context_Reduction_AND;
+                         break;
+                    case Or_Opr :   
+                         context = ACC_Context_Reduction_OR;
+                         break;
+                    case Eqv_Opr :   
+                         context = ACC_Context_Reduction_EQV;
+                         break;
+                    case Neqv_Opr :   
+                         context = ACC_Context_Reduction_NEQV;
+                         break;
+                 }
+                 list_idx4 = IL_IDX(list_idx3);
+                 while (list_idx4) 
+				 {
+
+                    if (IL_FLD(list_idx4) == AT_Tbl_Idx) 
+					{
+                       send_attr_ntry(IL_IDX(list_idx4));
+                       last_task_idx = fei_acc_region_var(PDG_AT_IDX(IL_IDX(list_idx4)), context);					   
+                    }
+                    list_idx4 = IL_NEXT_LIST_IDX(list_idx4); 
+                 }
+              }
+
+              list_idx2 = IL_NEXT_LIST_IDX(list_idx2); 
+              list_idx3 = IL_NEXT_LIST_IDX(list_idx3); 
+           }  
+        }
+				
+		/*PDG_DBG_PRINT_START
+		PDG_DBG_PRINT_C("fei_parallel_open_acc");
+		PDG_DBG_PRINT_D("(1) if idx", task_if_idx);
+		PDG_DBG_PRINT_D("(2) num_threads idx", task_num_threads_idx); 
+		PDG_DBG_PRINT_LD("(3) defaultt", defaultt);
+		PDG_DBG_PRINT_END*/
+		
+		fei_parallel_kernels_open_acc(ACC_Context_Dir_Parallel);
+		acc_is_offload_region = TRUE;
+           
+   		break;
 
    case Parallel_Open_Mp_Opr:
    case Do_Open_Mp_Opr:
@@ -10761,6 +11361,33 @@ CONTINUE:
 # ifdef _ENABLE_FEI
         fei_endcritical_open_mp(criticalname);
 # endif
+        break;
+
+		
+     case Endparallel_Open_Acc_Opr:
+        fei_endparallel_open_acc();		
+		acc_is_offload_region = FALSE;
+        break;
+		
+     case Endkernels_Open_Acc_Opr:
+        fei_endkernels_open_acc();	
+		acc_is_offload_region = FALSE;
+        break;
+		
+     case Enddata_Open_Acc_Opr:
+        fei_enddata_open_acc();
+        break;
+		
+     case Endhost_Data_Open_Acc_Opr:
+        fei_endhost_data_open_acc();
+        break;
+		
+     //case Endloop_Open_Acc_Opr:
+     //   fei_endloop_open_acc();
+     //   break;
+		
+     case Endatomic_Open_Acc_Opr:
+        fei_endatomic_open_acc();
         break;
 
      }
@@ -13488,6 +14115,136 @@ static void allocate_pdg_link_tbls(void)
 
 }  /* allocate_pdg_link_tbls */
 
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	list_idx: the list index for specified data clause		*|
+|*   acc_context_type: ACC_Context_Copy/ACC_Context_Copyout/...
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+static void acc_array_region_process_for_data_clause(int list_idx, ACC_CONTEXT_TYPE acc_context_type)
+{
+	while (list_idx) 
+	{			
+          if (IL_FLD(list_idx) == AT_Tbl_Idx) {		
+             send_attr_ntry(IL_IDX(list_idx));		
+			 fei_acc_defaut_boundary_pragma(PDG_AT_IDX(IL_IDX(list_idx)));		
+			 fei_acc_region_array_clauses(PDG_AT_IDX(IL_IDX(list_idx)), acc_context_type, 1);
+			 //if dope exist, create additional one
+			 //fei_acc_dope_pragma(PDG_AT_IDX(IL_IDX(list_idx)));
+          }		
+		  else if(IL_FLD(list_idx) == IR_Tbl_Idx)		
+	  	  {		
+				int	array_ir_idx = IL_IDX(list_idx);		
+				int	name_idx = IR_IDX_L(array_ir_idx);			
+				int nDims = IR_LIST_CNT_R(array_ir_idx);		
+				int Section_num = nDims;		
+				int boundary_il_idx = IR_IDX_R(array_ir_idx);							
+				send_attr_ntry(name_idx);		
+				while(nDims > 0)		
+				{		
+					int	start_il_idx;		
+					int	length_il_idx;		
+					int boundary_ir_idx = IL_IDX(boundary_il_idx);		
+					int triplet_il_idx = IR_IDX_L(boundary_ir_idx);		
+					start_il_idx = triplet_il_idx;		
+					length_il_idx = IL_NEXT_LIST_IDX(triplet_il_idx);		
+					acc_create_boundary_ir_array_region(start_il_idx, ACC_Context_Array_Start);	
+					//calibrator the start position, cause array usually start from 1, not zero. 
+					fei_acc_region_array_start_calibration( PDG_AT_IDX(name_idx), nDims-1);
+					acc_create_boundary_ir_array_region(length_il_idx, ACC_Context_Array_Length);		
+					boundary_il_idx = IL_NEXT_LIST_IDX(boundary_il_idx);		
+					nDims --;		
+				}		
+				fei_acc_region_array_clauses(PDG_AT_IDX(name_idx), acc_context_type, Section_num);	
+			 	//if dope exist, create additional one			
+			 	//fei_acc_dope_pragma(PDG_AT_IDX(name_idx));
+	  	  }		
+          list_idx = IL_NEXT_LIST_IDX(list_idx);		
+    }
+}
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	il_boundary_idx: ir_list index, it is either array start or array length in OpenACC spec data clause*|
+|*   acc_start_or_length: it is either ACC_Context_Array_Start or ACC_Context_Array_End
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+static void acc_create_boundary_ir_array_region(int	 il_boundary_idx, 
+														ACC_CONTEXT_TYPE acc_start_or_length)
+{
+	int bound_index = IL_IDX(il_boundary_idx);
+	if(IL_FLD(il_boundary_idx) == CN_Tbl_Idx)
+	{
+		cvrt_exp_to_pdg(bound_index, CN_Tbl_Idx);		
+		fei_acc_boundary_pragma(acc_start_or_length);
+	}
+	else if(IL_FLD(il_boundary_idx) == AT_Tbl_Idx)
+	{
+		send_attr_ntry(bound_index);
+		fei_acc_region_var(PDG_AT_IDX(bound_index), acc_start_or_length);
+	}
+	//Bugs here, we do not support expressions in region clauses definition
+	else if(IL_FLD(il_boundary_idx) == IR_Tbl_Idx)
+	{
+		cvrt_exp_to_pdg(bound_index, IR_Tbl_Idx);
+	}			
+}
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	il_clause_idx: ir_list index, it should be one of the following, num_gangs, num_workers, vector_length
+|*	async, wait, gang, worker or vector.*|
+|*   acc_int_expr_context_type: respective acc context type
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+static void acc_create_int_expr_pragma(int	 il_clause_idx, 
+														ACC_CONTEXT_TYPE acc_int_expr_context_type)
+{
+	int intexp_index = IL_IDX(il_clause_idx);
+	if(IL_FLD(il_clause_idx) == CN_Tbl_Idx)
+	{
+		cvrt_exp_to_pdg(intexp_index, CN_Tbl_Idx);		
+		fei_acc_create_int_exp_pragma(acc_int_expr_context_type);
+		//extern void fei_acc_create_int_exp_pragma(INT32 context)
+	}
+	else if(IL_FLD(il_clause_idx) == AT_Tbl_Idx)
+	{
+		send_attr_ntry(intexp_index);
+		fei_acc_region_var(PDG_AT_IDX(intexp_index), acc_int_expr_context_type);
+	}
+	//Bugs here, we do not support expressions in region clauses definition
+	//else if(IL_FLD(il_boundary_idx) == IR_Tbl_Idx)
+	//{
+	//	cvrt_exp_to_pdg(bound_index, IR_Tbl_Idx);
+	//}			
+}
 
 
 /******************************************************************************\

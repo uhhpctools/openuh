@@ -96,6 +96,7 @@
 #include "ttype.h"
 #include "wio.h"
 #include "wn_mp.h"
+#include "wn_acc.h"
 #include "wn_pragmas.h"
 #include "wn_simp.h"
 #include "opt_alias_interface.h"
@@ -12848,7 +12849,29 @@ WN *lower_block(WN *tree, LOWER_ACTIONS actions)
 	 (WN_opcode(WN_first(WN_region_pragmas(node))) == OPC_XPRAGMA)) &&
         (WN_pragmas[WN_pragma(WN_first(WN_region_pragmas(node)))].users &
 	 PUSER_MP))))
-	node = lower_mp(out, node, actions);
+		node = lower_mp(out, node, actions);
+
+	
+    while (UHACC_Arch_Type==ACC_ARCH_TYPE_NVIDIA && Action(LOWER_ACC) && node &&
+      ((((WN_opcode(node) == OPC_PRAGMA) || (WN_opcode(node) == OPC_XPRAGMA))
+	&& (WN_pragmas[WN_pragma(node)].users & PUSER_ACC)) ||
+       ((WN_opcode(node) == OPC_REGION) && WN_first(WN_region_pragmas(node)) &&
+        ((WN_opcode(WN_first(WN_region_pragmas(node))) == OPC_PRAGMA) ||
+	 (WN_opcode(WN_first(WN_region_pragmas(node))) == OPC_XPRAGMA)) &&
+        (WN_pragmas[WN_pragma(WN_first(WN_region_pragmas(node)))].users &
+	 PUSER_ACC))))
+		node = lower_acc_nvidia(out, node, actions);
+	
+	while (UHACC_Arch_Type==ACC_ARCH_TYPE_APU && Action(LOWER_ACC) && node &&
+      ((((WN_opcode(node) == OPC_PRAGMA) || (WN_opcode(node) == OPC_XPRAGMA))
+        && (WN_pragmas[WN_pragma(node)].users & PUSER_ACC)) ||
+       ((WN_opcode(node) == OPC_REGION) && WN_first(WN_region_pragmas(node)) &&
+        ((WN_opcode(WN_first(WN_region_pragmas(node))) == OPC_PRAGMA) ||
+         (WN_opcode(WN_first(WN_region_pragmas(node))) == OPC_XPRAGMA)) &&
+        (WN_pragmas[WN_pragma(WN_first(WN_region_pragmas(node)))].users &
+         PUSER_ACC))))
+                node = lower_acc_apu(out, node, actions);
+	
     if (node == NULL) break;
 
     /*
@@ -16285,6 +16308,9 @@ const char * LOWER_ACTIONS_name(LOWER_ACTIONS actions)
   case LOWER_BIT_FIELD_ID:		return "LOWER_BIT_FIELD_ID";
   case LOWER_BITS_OP:			return "LOWER_BITS_OP";
   case LOWER_TO_MEMLIB:                 return "LOWER_TO_MEMLIB";
+  case LOWER_FAST_EXP:                 	return "LOWER_FAST_EXP";
+  case LOWER_ACC:                 		return "LOWER_ACC";
+  case LOWER_ACC_VH:                 		return "LOWER_ACC_VH";
   default:				return "<unrecognized>";
   }
 }

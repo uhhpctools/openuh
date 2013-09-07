@@ -2905,6 +2905,11 @@ static void end_do_blk(boolean	err_call)
                POP_BLK_STK;
                CLEAR_DIRECTIVE_STATE(Doacross_Region);
             }
+			else if (CURR_BLK == Open_Acc_Loop_Blk) {
+				//no !$acc loop directive
+               POP_BLK_STK;
+               CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
+            }
 
             goto EXIT;
          }
@@ -2966,6 +2971,11 @@ static void end_do_blk(boolean	err_call)
                      POP_BLK_STK;
                      CLEAR_DIRECTIVE_STATE(Doacross_Region);
                   }
+				  else if (CURR_BLK == Open_Acc_Loop_Blk) {
+					 //no !$acc loop directive
+		             POP_BLK_STK;
+		             CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
+		          }
                }
             }
             else if (unlabeled_do_idx == NULL_IDX) {
@@ -3016,6 +3026,11 @@ static void end_do_blk(boolean	err_call)
             else if (CURR_BLK == SGI_Doacross_Blk) {
                POP_BLK_STK;
                CLEAR_DIRECTIVE_STATE(Doacross_Region);
+            }
+		    else if (CURR_BLK == Open_Acc_Loop_Blk) {
+			 //no !$acc loop directive
+             POP_BLK_STK;
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
             }
          }
       }
@@ -5991,6 +6006,276 @@ void end_open_mp_workshare_blk(boolean  err_call)
    return;
 } /* end_open_mp_workshare_blk */
 
+/*OpenACC directives processing start here. by Daniel Tian*/
+/******************************************************************************\
+|*																			  *|
+|* Description: 															  *|
+|*		<description>														  *|
+|*																			  *|
+|* Input parameters:														  *|
+|*		NONE																  *|
+|*																			  *|
+|* Output parameters:														  *|
+|*		NONE																  *|
+|*																			  *|
+|* Returns: 																  *|
+|*		NOTHING 															  *|
+|*																			  *|
+\******************************************************************************/
+
+void end_open_acc_atomic_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_atomic_blk", NULL);
+
+   if (! err_call) {
+
+	  if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Atomic_Stmt, CURR_BLK)) {
+		 blk_match_err(Open_Acc_Atomic_Blk, FALSE, FALSE);
+	  }
+
+	  if (CURR_BLK == Open_Acc_Atomic_Blk) {
+		 /* point to the atomic directive */
+		 IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+		 IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+		 POP_BLK_STK;
+	  }
+   }
+   else {
+	  POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_atomic_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_atomic_blk */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_data_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_data_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Data_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Data_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Data_Blk) {
+         /* point to the data directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_data_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_data_blk */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_host_data_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_host_data_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Host_Data_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Host_Data_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Host_Data_Blk) {
+         /* point to the host_data directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_host_data_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_host_data_blk */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_parallel_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_parallel_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Parallel_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Parallel_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Parallel_Blk) {
+         /* point to the parallel directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_parallel_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_parallel_blk */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_kernels_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_kernels_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Kernels_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Kernels_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Kernels_Blk) {
+         /* point to the parallel directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_kernels_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_kernels_blk */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_loop_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_acc_loop_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Loop_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Loop_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Loop_Blk) {
+         /* point to the parallel directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_loop_blk", NULL);
+
+   return;
+
+}  /* end_open_acc_loop_blk */
 
 
 #ifdef _UH_COARRAYS

@@ -8654,6 +8654,98 @@ c_finish_omp_task (tree clauses, tree block)
   return add_stmt (stmt);
 }
 
+
+/* Like c_begin_compound_stmt, except force the retention of the BLOCK.  */
+
+tree
+c_begin_acc_parallel (void)
+{
+  tree block;
+
+  keep_next_level ();
+  block = c_begin_compound_stmt (true);
+
+  return block;
+}
+
+/* Generate ACC_PARALLEL, with CLAUSES and BLOCK as its compound statement.  */
+
+tree
+c_finish_acc_parallel (tree clauses, tree block)
+{
+  tree stmt;
+
+  block = c_end_compound_stmt (block, true);
+
+  stmt = make_node (ACC_PARALLEL);
+  TREE_TYPE (stmt) = void_type_node;
+  ACC_PARALLEL_CLAUSES (stmt) = clauses;
+  ACC_PARALLEL_BODY (stmt) = block;
+
+  return add_stmt (stmt);
+}
+
+/* Like c_begin_compound_stmt, except force the retention of the BLOCK.  */
+
+tree
+c_begin_acc_kernel(void)
+{
+  tree block;
+
+  keep_next_level ();
+  block = c_begin_compound_stmt (true);
+
+  return block;
+}
+
+/* Generate ACC_KERNEL, with CLAUSES and BLOCK as its compound statement.  */
+
+tree
+c_finish_acc_kernel (tree clauses, tree block)
+{
+  tree stmt;
+
+  block = c_end_compound_stmt (block, true);
+
+  stmt = make_node (ACC_KERNEL);
+  TREE_TYPE (stmt) = void_type_node;
+  ACC_KERNEL_CLAUSES (stmt) = clauses;
+  ACC_KERNEL_BODY (stmt) = block;
+
+  return add_stmt (stmt);
+}
+
+/* Like c_begin_compound_stmt, except force the retention of the BLOCK.  */
+
+tree
+c_begin_acc_loop (void)
+{
+  tree block;
+
+  keep_next_level ();
+  block = c_begin_compound_stmt (true);
+
+  return block;
+}
+
+/* Generate ACC_LOOP, with CLAUSES and BLOCK as its compound statement.  */
+
+/*tree
+c_finish_acc_loop (tree clauses, tree block)
+{
+  tree stmt;
+
+  block = c_end_compound_stmt (block, true);
+
+  stmt = make_node (ACC_LOOP);
+  TREE_TYPE (stmt) = void_type_node;
+  ACC_LOOP_CLAUSES (stmt) = clauses;
+  ACC_LOOP_BODY (stmt) = block;
+
+  return add_stmt (stmt);
+}*/
+
+
 /* For all elements of CLAUSES, validate them vs OpenMP constraints.
    Remove any elements from the list that are invalid.  */
 
@@ -8871,3 +8963,220 @@ c_finish_omp_clauses (tree clauses)
   bitmap_obstack_release (NULL);
   return clauses;
 }
+
+/* For all elements of CLAUSES, validate them vs OpenACC constraints.
+   Remove any elements from the list that are invalid.  */
+
+tree
+c_finish_acc_clauses (tree clauses)
+{
+  bitmap_head generic_head, firstprivate_head, lastprivate_head;
+  tree c, t, *pc = &clauses;
+  const char *name;
+
+  bitmap_obstack_initialize (NULL);
+  bitmap_initialize (&generic_head, &bitmap_default_obstack);
+  bitmap_initialize (&firstprivate_head, &bitmap_default_obstack);
+  bitmap_initialize (&lastprivate_head, &bitmap_default_obstack);
+
+  for (pc = &clauses, c = clauses; c ; c = *pc)
+    {
+      bool remove = false;
+      bool need_complete = false;
+      bool need_implicitly_determined = false;
+
+      switch (ACC_CLAUSE_CODE (c))
+	{
+	case ACC_CLAUSE_COPY:
+	  name = "copy";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_COPYIN:
+	  name = "copyin";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_COPYOUT:
+	  name = "copyout";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_CREATE:
+	  name = "create";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRESENT:
+	  name = "present";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRESENT_OR_COPY:
+	  name = "present_or_copy";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRESENT_OR_COPYIN:
+	  name = "present_or_copyin";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRESENT_OR_COPYOUT:
+	  name = "present_or_copyout";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRESENT_OR_CREATE:
+	  name = "present_or_create";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PARM:
+	  name = "param";
+	  need_implicitly_determined = true;
+	  //goto check_dup_generic;
+	  break;
+
+	case ACC_CLAUSE_DEVICEPTR:
+	  name = "deviceptr";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_USE_DEVICE:
+	  name = "use_device";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_FIRST_PRIVATE:
+	  name = "firstprivate";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_ACC_RESIDENT:
+	  name = "acc_resident";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_PRIVATE:
+	  name = "private";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_HOST:
+	  name = "host";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_DEVICE:
+	  name = "device";
+	  need_implicitly_determined = true;
+	  goto check_dup_generic;
+	  
+	case ACC_CLAUSE_CONST:
+	  name = "const";
+	  need_implicitly_determined = true;
+	  //goto check_dup_generic;
+	  break;
+
+	case ACC_CLAUSE_REDUCTION:
+	  name = "reduction";
+	  need_implicitly_determined = true;
+	  t = ACC_CLAUSE_DECL (c);
+	  if (AGGREGATE_TYPE_P (TREE_TYPE (t))
+	      || POINTER_TYPE_P (TREE_TYPE (t)))
+	    {
+	      error ("%qE has invalid type for %<reduction%>", t);
+	      remove = true;
+	    }
+	  else if (FLOAT_TYPE_P (TREE_TYPE (t)))
+	    {
+	      enum tree_code r_code = ACC_CLAUSE_REDUCTION_CODE (c);
+	      const char *r_name = NULL;
+
+	      switch (r_code)
+		{
+		case PLUS_EXPR:
+		case MULT_EXPR:
+		case MINUS_EXPR:
+		case BIT_AND_EXPR:
+		case BIT_XOR_EXPR:
+		case BIT_IOR_EXPR:
+		case TRUTH_ANDIF_EXPR:
+		case TRUTH_ORIF_EXPR:
+		case MAX_EXPR:
+		case MIN_EXPR:
+		  break;
+		default:
+		  gcc_unreachable ();
+		}
+	      if (r_name)
+		{
+		  error ("%qE has invalid type for %<reduction(%s)%>",
+			 t, r_name);
+		  remove = true;
+		}
+	    }
+	  goto check_dup_generic;
+
+
+	check_dup_generic:
+	  t = ACC_CLAUSE_DECL (c);
+	  if (TREE_CODE (t) != VAR_DECL && TREE_CODE (t) != PARM_DECL)
+	    {
+	      error ("%qE is not a variable in clause %qs", t, name);
+	      remove = true;
+	    }
+	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
+		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t))
+		   || bitmap_bit_p (&lastprivate_head, DECL_UID (t)))
+	    {
+	      error ("%qE appears more than once in data clauses", t);
+	      remove = true;
+	    }
+	  else
+	    bitmap_set_bit (&generic_head, DECL_UID (t));
+	  break;
+
+	case ACC_CLAUSE_IF:
+	case ACC_CLAUSE_ASYNC:
+	case ACC_CLAUSE_COLLAPSE:
+	case ACC_CLAUSE_GANG:
+	case ACC_CLAUSE_WORKER:
+	case ACC_CLAUSE_VECTOR:
+	case ACC_CLAUSE_INDEPENDENT:
+	case ACC_CLAUSE_NUM_GANGS:
+	case ACC_CLAUSE_NUM_WORKERS:
+    case ACC_CLAUSE_VECTOR_LENGTH:
+    case ACC_CLAUSE_SEQ:
+	case ACC_CLAUSE_INTEXP:
+	  pc = &ACC_CLAUSE_CHAIN (c);
+	  continue;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (!remove)
+	{
+	  t = ACC_CLAUSE_DECL (c);
+
+	  if (need_complete)
+	    {
+	      t = require_complete_type (t);
+	      if (t == error_mark_node)
+		remove = true;
+	    }
+
+	}
+
+      if (remove)
+	*pc = ACC_CLAUSE_CHAIN (c);
+      else
+	pc = &ACC_CLAUSE_CHAIN (c);
+    }
+
+  bitmap_obstack_release (NULL);
+  return clauses;
+}
+

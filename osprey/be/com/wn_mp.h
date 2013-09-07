@@ -93,6 +93,7 @@ extern "C" {
 #endif
 
 extern WN * lower_mp (WN * block, WN * node, INT32 actions);
+
 extern void LowerMP_PU_Init (void);
 
 extern WN * Gen_MP_Getlock ( ST * lock );

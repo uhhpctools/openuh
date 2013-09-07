@@ -742,7 +742,7 @@ do_include_common (cpp_reader *pfile, enum include_type type)
 
       if (pfile->cb.include)
 	pfile->cb.include (pfile, pfile->directive_line,
-			   pfile->directive->name, fname, angle_brackets,
+			   pfile->directive->name, fname, angle_brackets, pfile->line_table->depth,
 			   buf);
 
       _cpp_stack_include (pfile, fname, angle_brackets, type);

@@ -146,6 +146,883 @@ static int task_nest_count; /* number of indexes in NEST clause */
 static int task_lastthread_count; /* number of vars in LASTTHREAD */
 static int task_affinity_count; /* number of indexes in AFFINITY */
 
+//copy/copyin/copyout/create/present
+//pcopy/pcopyin/pcopyout/pcreate/
+static int acc_array_ptr_count; //
+static int acc_scalar_count;
+static int acc_device_ptr_count;
+static int acc_device_type_count;
+static int acc_reduction_count;
+static int acc_int_exp_count;
+static int acc_if_exp_count;
+
+static void cwh_directive_set_PU_acc_flags();
+BOOL acc_offload_region = FALSE;
+
+extern void fei_acc_boundary_pragma(INT32 context)
+{
+	WN* wn;
+	WN* wn_boundary = cwh_stk_pop_WN();
+	
+	switch((ACC_CONTEXT_TYPE) context)
+	{			
+    case ACC_Context_Array_Start:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_boundary;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Array_Length:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_boundary;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+	default:
+		DevAssert((0), ("fei_acc_boundary_pragma only support OpenACC region pragma "));
+	}
+}
+
+//kid0 is constant value, not a var
+extern void fei_acc_create_int_exp_pragma(INT32 context)
+{
+	WN* wn;
+	WN* wn_intexp = cwh_stk_pop_WN();
+	
+	switch((ACC_CONTEXT_TYPE) context)
+	{			
+    case ACC_Context_Seq:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_SEQ, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Independent:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_INDEPENDENT, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Num_Gangs:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_GANGS, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Num_Workers:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_WORKERS, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Vector_Length:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_LENGTH, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Gang:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_GANG, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Worker:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WORKER, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Vector:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Async:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_ASYNC, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Wait:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WAIT, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Collapse:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_COLLAPSE, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_DeviceType:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DEVICE_TYPE, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_intexp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+	default:
+		DevAssert((0), ("fei_acc_create_int_exp_pragma only support OpenACC int-exp pragma "));
+	}
+	
+	acc_int_exp_count ++;
+}
+
+/*===============================================
+ *
+ * fei_acc_region_array_start_calibration
+ *
+ * To calibrate the start pragma for a array
+ * The start pragma is on the top of the stack
+ *
+ *===============================================
+ */ 
+
+extern void fei_acc_region_array_start_calibration( INTPTR sym_idx, int idim)
+{
+	STB_pkt *p;
+	ST *st;
+	TY_IDX ty;
+	p = cast_to_STB(sym_idx);
+	DevAssert((p->form == is_ST),("Odd object ref"));
+
+	st = (ST *)p->item;
+	if (Has_Base_Block(st)) 
+	{
+		ST * base = ST_base(st);
+		if (ST_is_temp_var(base))
+		  if (ST_sclass(base) == SCLASS_AUTO)
+		    if (!ST_is_return_var(base))
+		       /* Do not generate a pragma for an automatic array */
+		       /* The base var is also on the list, and that is the */
+		       /* one that is needed. */
+		       return;
+	}
+	ty = ST_type(st);
+	if(TY_kind(ty) == KIND_ARRAY)
+	{
+		ARB_HANDLE arb = TY_arb(ty);
+		int ndims = ARB_dimension(arb);
+		if(idim > ndims)
+		{
+			DevAssert((0), ("exceed dimensions definition in array region."));
+		}
+		ARB_HANDLE dim_arb = arb[idim];
+		WN* wn_lower_bound = NULL;
+		if(ARB_const_lbnd(dim_arb))
+		{
+			int ilower_bound = ARB_lbnd_val(dim_arb);
+			wn_lower_bound = WN_Intconst(MTYPE_I4, ilower_bound);
+		}
+		else //var lower bound
+		{
+			ST_IDX st_lower_bound = ARB_lbnd_var(dim_arb);
+			wn_lower_bound = WN_Ldid(TY_mtype(ST_type(st_lower_bound)), 0, st_lower_bound, ST_type(st_lower_bound));
+		}
+		WN* wn_start_pragma = cwh_stk_pop_WN();
+		WN* wn_start = WN_kid0(wn_start_pragma);
+		wn_start = WN_Binary(OPR_SUB, WN_rtype(wn_start), wn_start, wn_lower_bound);
+		WN_kid0(wn_start_pragma) = wn_start;
+	    WN_set_pragma_acc(wn_start_pragma);
+	    cwh_stk_push(wn_start_pragma, WN_item);
+		//idims = TY_AR_ndims(ty);
+		//BOOL iFirst = ARB_first_dimen(TY_arb(ty));
+		//BOOL iLast = ARB_last_dimen(TY_arb(ty));
+		//WN* wn_lower_bound, *wn_upper_bound, *wn_stride;
+		//TY_IDX ty_element = TY_etype(ty);
+	}
+	else if(TY_kind(ty) == KIND_POINTER)
+	{
+		DevAssert((0), ("pointer type data region hasn't been implemented in fei_acc_region_array_start_calibration."));
+	}
+	else if (TY_kind(ty) == KIND_STRUCT && cwh_types_is_dope(ty))
+	{
+		//get the base pointer
+		FLD_HANDLE  fli ;
+		TY_IDX base_pointer_ty;
+		fli = TY_fld(Ty_Table[ST_type(st)]);
+		base_pointer_ty = FLD_type(fli);
+		
+		//DevAssert((p->form == is_ST),("Odd object ref"));
+
+		int ndims = ARB_dimension(TY_arb(TY_pointed(base_pointer_ty)));
+		if(idim > ndims)
+		{
+			DevAssert((0), ("exceed dimensions definition in array region."));
+		}
+		cwh_stk_push(st, ST_item);
+		fei_get_dv_low_bnd(idim, 0);
+		WN* wn_lower_bound = cwh_stk_pop_WN();
+		WN* wn_start_pragma = cwh_stk_pop_WN();
+		WN* wn_start = WN_kid0(wn_start_pragma);
+		wn_start = WN_Binary(OPR_SUB, WN_rtype(wn_start), wn_start, wn_lower_bound);
+		WN_kid0(wn_start_pragma) = wn_start;
+	    WN_set_pragma_acc(wn_start_pragma);
+	    cwh_stk_push(wn_start_pragma, WN_item);
+	}	
+	else
+		DevAssert((0), ("Unimplemented fei_acc_region_array_start_calibration type"));
+}
+
+
+/*===============================================
+ *
+ * fei_acc_defaut_boundary_pragma
+ *
+ * Generate the start and length pragma for a array which does not have 
+ * any region specified  in a acc directive
+ * list (start and length, etc...) and push it onto the stack.
+ *
+ * The stack popped when processing a directive
+ *
+ *===============================================
+ */ 
+extern void fei_acc_defaut_boundary_pragma( INTPTR	sym_idx)
+{
+  	STB_pkt *p;
+	ST *st;
+	TY_IDX ty;
+	p = cast_to_STB(sym_idx);
+	DevAssert((p->form == is_ST),("Odd object ref"));
+
+	st = (ST *)p->item;
+	if (Has_Base_Block(st)) 
+	{
+		ST * base = ST_base(st);
+		if (ST_is_temp_var(base))
+		  if (ST_sclass(base) == SCLASS_AUTO)
+		    if (!ST_is_return_var(base))
+		       /* Do not generate a pragma for an automatic array */
+		       /* The base var is also on the list, and that is the */
+		       /* one that is needed. */
+		       return;
+	}
+	ty = ST_type(st);
+	
+	if(TY_kind(ty) == KIND_POINTER && TY_kind(TY_pointed(ty)) == KIND_ARRAY)
+	{
+		//default mode should not have pointer,
+		//so check it points to an array
+		ty = TY_pointed(ty);
+	}
+	//DevAssert((TY_kind(ty) == KIND_ARRAY),("unspecified region must be for array."));
+	if(TY_kind(ty) == KIND_SCALAR)
+	{
+		WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
+		//always start from 0
+		WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, 0);
+	    WN_set_pragma_acc(wn_pragma);
+	    cwh_stk_push(wn_pragma, WN_item);
+		
+		wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
+		//always start from 0
+		WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, 0);
+	    WN_set_pragma_acc(wn_pragma);
+	    cwh_stk_push(wn_pragma, WN_item);
+	}
+	else if(TY_kind(ty) == KIND_ARRAY)
+	{
+		int idims = ARB_dimension(TY_arb(ty));
+		ARB_HANDLE bounds = TY_arb(ty);
+	
+		idims = TY_AR_ndims(ty);
+		BOOL iFirst, iLast;
+		WN* wn_lower_bound, *wn_upper_bound, *wn_stride;
+		WN* wn_total_elements = WN_Intconst(MTYPE_I4, 1);
+		for(int idx=0; idx<idims; idx++)
+		{
+			ARB_HANDLE tmp_b = bounds[idx];
+			iFirst = ARB_first_dimen(tmp_b);
+			iLast = ARB_last_dimen(tmp_b);
+			int itest_dim = ARB_dimension(tmp_b);
+			
+			//leave this for test, the stride is always the element size, not like C/C++			
+			if(ARB_const_stride(tmp_b))
+                	{
+                        	int istride = ARB_stride_val(tmp_b);
+                        	wn_stride = WN_Intconst(MTYPE_I4, istride);
+                	}
+                	else
+                	{
+                        	ST_IDX st_stride = ARB_stride_var(tmp_b);
+                        	wn_stride = WN_Ldid(TY_mtype(ST_type(st_stride)), 0, st_stride, ST_type(st_stride));
+                	}
+
+			if(ARB_const_lbnd(tmp_b))
+                	{
+                        	int ilower_bound = ARB_lbnd_val(tmp_b);
+                        	wn_lower_bound = WN_Intconst(MTYPE_I4, ilower_bound);
+                	}
+                	else //var lower bound
+                	{
+                        	ST_IDX st_lower_bound = ARB_lbnd_var(tmp_b);
+                        	wn_lower_bound = WN_Ldid(TY_mtype(ST_type(st_lower_bound)), 0, st_lower_bound, ST_type(st_lower_bound));
+                	}
+			
+			if(ARB_const_ubnd(tmp_b))
+                	{
+                        	int iupper_bound = ARB_ubnd_val(tmp_b);
+                        	wn_upper_bound = WN_Intconst(MTYPE_I4, iupper_bound);
+                	}
+                	else //var upper bound
+                	{
+                        	ST_IDX st_upper_bound = ARB_ubnd_var(tmp_b);
+                        	wn_upper_bound = WN_Ldid(TY_mtype(ST_type(st_upper_bound)), 0, st_upper_bound, ST_type(st_upper_bound));
+                	}
+			
+			wn_upper_bound = WN_Binary(OPR_SUB, WN_rtype(wn_upper_bound), wn_upper_bound, wn_lower_bound);
+	                wn_upper_bound = WN_Binary(OPR_ADD, WN_rtype(wn_upper_bound), wn_upper_bound, WN_Intconst(MTYPE_I4, 1));
+			wn_total_elements = WN_Binary(OPR_MPY, WN_rtype(wn_upper_bound), wn_total_elements, wn_upper_bound);
+		}
+
+		TY_IDX ty_element = TY_etype(ty);
+		wn_stride = WN_Intconst(MTYPE_I4, TY_size(ty_element));
+
+		WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
+		//always start from 0
+		WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, 0);
+	    WN_set_pragma_acc(wn_pragma);
+	    cwh_stk_push(wn_pragma, WN_item);
+		
+		wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
+		WN_kid0(wn_pragma) = wn_total_elements;
+	    WN_set_pragma_acc(wn_pragma);
+	    cwh_stk_push(wn_pragma, WN_item);
+	}
+	else if(TY_kind(ty) == KIND_STRUCT && cwh_types_is_dope(ty))
+	{
+		//get the base pointer
+		FLD_HANDLE  fli ;
+		TY_IDX base_pointer_ty;
+		fli = TY_fld(Ty_Table[ST_type(st)]);
+		base_pointer_ty = FLD_type(fli);
+		
+		//DevAssert((p->form == is_ST),("Odd object ref"));
+
+		int idims = ARB_dimension(TY_arb(TY_pointed(base_pointer_ty)));
+		TY_IDX pointed_ty = TY_pointed(base_pointer_ty);
+		if(TY_kind(pointed_ty) == KIND_ARRAY)
+		{
+			//get the element ty
+			TY_IDX e_ty = TY_etype(TY_pointed(base_pointer_ty));
+			/*get the last dimensional information*/
+			//get the low bound
+			//cwh_stk_push(st, ST_item);
+			//fei_get_dv_low_bnd(idims, 0);
+			//WN* wn_lower_bound = cwh_stk_pop_WN();
+			//get the extent which is actual the data length in this dimension
+			cwh_stk_push(st, ST_item);
+			fei_get_dv_extent(idims, 0);
+			WN* wn_extent = cwh_stk_pop_WN();
+			//get the stride
+			cwh_stk_push(st, ST_item);
+			fei_get_dv_str_mult(idims, 0);
+			WN* wn_stride = cwh_stk_pop_WN();
+
+			//create region pragma
+			WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
+			//always start from 0
+			WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, 0);
+		    WN_set_pragma_acc(wn_pragma);
+		    cwh_stk_push(wn_pragma, WN_item);
+			
+			//wn_upper_bound = WN_Binary(OPR_SUB, WN_rtype(wn_upper_bound), wn_upper_bound, wn_lower_bound);
+			//wn_extent = WN_Binary(OPR_ADD, WN_rtype(wn_extent), wn_extent, WN_Intconst(MTYPE_I4, 1));
+			
+			wn_extent = WN_Binary(OPR_MPY, WN_rtype(wn_stride), wn_stride, wn_extent);
+			
+			wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
+			WN_kid0(wn_pragma) = wn_extent;
+		    WN_set_pragma_acc(wn_pragma);
+		    cwh_stk_push(wn_pragma, WN_item);
+		}
+	}
+
+}
+
+/*===============================================
+ *
+ * fei_acc_dope_pragma
+ *
+ * Generate the start addr and dim pragma for a dynamic array which does not have 
+ * any region specified  in a acc directive
+ * list (start and dims, etc...) and push it onto the stack.
+ *
+ * The stack popped when processing a directive
+ *
+ *===============================================
+ */ 
+extern void fei_acc_dope_pragma( INTPTR	sym_idx)
+{
+  	STB_pkt *p;
+	ST *st;
+	TY_IDX ty;
+	p = cast_to_STB(sym_idx);
+	DevAssert((p->form == is_ST),("Odd object ref"));	
+	static  TYPE    null_type;
+
+	st = (ST *)p->item;
+	if (Has_Base_Block(st)) 
+	{
+		ST * base = ST_base(st);
+		if (ST_is_temp_var(base))
+		  if (ST_sclass(base) == SCLASS_AUTO)
+		    if (!ST_is_return_var(base))
+		       /* Do not generate a pragma for an automatic array */
+		       /* The base var is also on the list, and that is the */
+		       /* one that is needed. */
+		       return;
+	}
+	ty = ST_type(st);
+	
+	//DevAssert((TY_kind(ty) == KIND_ARRAY),("unspecified region must be for array."));	
+	if(TY_kind(ty) == KIND_STRUCT && cwh_types_is_dope(ty))
+	{
+		//get the base pointer
+		FLD_HANDLE  fli ;
+		int i;
+		TY_IDX base_pointer_ty;
+		fli = TY_fld(Ty_Table[ST_type(st)]);
+		base_pointer_ty = FLD_type(fli);
+		
+		//DevAssert((p->form == is_ST),("Odd object ref"));
+
+		int idims = ARB_dimension(TY_arb(TY_pointed(base_pointer_ty)));
+		TY_IDX pointed_ty = TY_pointed(base_pointer_ty);
+		while(i<idims)
+		{
+			cwh_stk_push(st, ST_item);
+			fei_get_dv_low_bnd(idims, 0);
+			WN* wn_lower_bound = cwh_stk_pop_WN();
+			//get the extent
+			cwh_stk_push(st, ST_item);
+			//no dim0, start from dim1
+			fei_get_dv_extent(i+1, 0);
+			WN* wn_extent = cwh_stk_pop_WN();
+			WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DOPE_DIM, (ST_IDX)NULL, 1);
+			WN_kid0(wn_pragma) = wn_extent;
+		    WN_set_pragma_acc(wn_pragma);
+		    cwh_stk_push(wn_pragma, WN_item);
+			i++;
+		}
+		cwh_stk_push(st, ST_item);
+		fei_dv_deref(null_type);
+		WN* wn_base_addr = cwh_stk_pop_WN();
+		WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DOPE_START_ADDR, (ST_IDX)NULL, 1);
+		WN_kid0(wn_pragma) = wn_base_addr;
+	    WN_set_pragma_acc(wn_pragma);
+	    cwh_stk_push(wn_pragma, WN_item);
+		wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DOPE, (ST_IDX)NULL, 1);
+		WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, idims+1);
+	    cwh_stk_push(wn_pragma, WN_item);
+	}
+
+}
+
+/*===============================================
+ *
+ * fei_acc_region_array_clauses
+ *
+ * Generate the pragma for a variable in a acc directive
+ * list (copy, copyin, copyout, etc...) and push it onto the stack.
+ * Handle multi-dimensional segments
+ * The stack popped when processing a directive
+ *
+ *===============================================
+ */ 
+extern INTPTR fei_acc_region_array_clauses( INTPTR	sym_idx, INT32	context, INT32 section_num)
+{
+  STB_pkt *p;
+  WN *wn;
+  WN* wn_boundary;
+#ifdef KEY /* Bug 10177 */
+  int op_code = 0;
+#else /* KEY Bug 10177 */
+  int op_code;
+#endif /* KEY Bug 10177 */
+  ST *st;
+  p = cast_to_STB(sym_idx);
+  DevAssert((p->form == is_ST),("Odd object ref"));
+
+  st = (ST *)p->item;
+  if (Has_Base_Block(st)) {
+    ST * base = ST_base(st);
+    if (ST_is_temp_var(base))
+      if (ST_sclass(base) == SCLASS_AUTO)
+        if (!ST_is_return_var(base))
+           /* Do not generate a pragma for an automatic array */
+           /* The base var is also on the list, and that is the */
+           /* one that is needed. */
+           return(sym_idx);
+  }
+  //ignore the scalar
+  //if(TY_kind(ST_type(st)) == KIND_SCALAR)
+  //		return sym_idx;
+  
+  switch((ACC_CONTEXT_TYPE) context) {	
+    case ACC_Context_Copy:
+    case ACC_Context_PCopy:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPY, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Copyin:
+    case ACC_Context_PCopyin:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYIN, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Copyout:
+    case ACC_Context_PCopyout:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYOUT, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Create:
+    case ACC_Context_PCreate:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_CREATE, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Present:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_PRESENT, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Delete:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DELETE, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Host:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_HOST, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Device:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DEVICE, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Self:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_SELF, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    case ACC_Context_Use_Device:
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_USE_DEVICE, (ST *)p->item, 1);
+		WN_kid0(wn) = WN_Intconst(MTYPE_I4, section_num);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_array_ptr_count ++;
+		break;
+		
+    default:
+		DevAssert((0), ("Unimplemented fei_acc_region_array_clauses type"));
+		break;
+  }
+  return sym_idx;
+}
+
+/*===============================================
+ *
+ * fei_acc_region_var
+ *
+ * Generate the pragma for a variable in a acc directive
+ * list (copy, copyin, copyout, etc...) and push it onto the stack.
+ *
+ * The stack popped when processing a directive
+ *
+ *===============================================
+ */ 
+extern INTPTR
+fei_acc_region_var( INTPTR	sym_idx,
+	      INT32	context)
+{
+  STB_pkt *p;
+  WN *wn;
+  WN* wn_boundary, *wn_exp, *wn_exp1;
+#ifdef KEY /* Bug 10177 */
+  int op_code = 0;
+#else /* KEY Bug 10177 */
+  int op_code;
+#endif /* KEY Bug 10177 */
+  ST *st;
+  p = cast_to_STB(sym_idx);
+  DevAssert((p->form == is_ST),("Odd object ref"));
+
+  st = (ST *)p->item;
+  if (Has_Base_Block(st)) {
+    ST * base = ST_base(st);
+    if (ST_is_temp_var(base))
+      if (ST_sclass(base) == SCLASS_AUTO)
+        if (!ST_is_return_var(base))
+           /* Do not generate a pragma for an automatic array */
+           /* The base var is also on the list, and that is the */
+           /* one that is needed. */
+           return(sym_idx);
+  }
+
+  switch((ACC_CONTEXT_TYPE) context) 
+  {
+    case ACC_Context_If:
+		//wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_IF, (ST *)p->item, 0, /* offset= */0);
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_IF, (ST_IDX)NULL, 1);
+		
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn_exp1 = WN_Intconst(TY_mtype(ST_type((ST *)p->item)), 0);
+		//non-zero
+		wn_exp = WN_Relational (OPR_NE, TY_mtype(ST_type((ST *)p->item)), 
+								WN_COPY_Tree(wn_exp), 
+								WN_COPY_Tree(wn_exp1));
+		WN_kid0(wn) = wn_exp;		
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_if_exp_count = 1;
+		break;
+    case ACC_Context_Private:
+		wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRIVATE, (ST *)p->item, 0, /* offset= */0);
+        WN_set_pragma_acc(wn);
+        cwh_stk_push(wn, WN_item);
+        acc_scalar_count++;
+		break;
+		
+    case ACC_Context_FirstPrivate:
+		wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_FIRST_PRIVATE, (ST *)p->item, 0, /* offset= */0);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_scalar_count++;
+		break;
+		
+    case ACC_Context_DevicePtr:
+		wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_DEVICEPTR, (ST *)p->item, 0, /* offset= */0);
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+	    acc_device_ptr_count++;
+		break;	
+		
+    case ACC_Context_Num_Gangs:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_GANGS, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Num_Workers:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_WORKERS, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Vector_Length:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_LENGTH, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Gang:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_GANG, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Worker:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WORKER, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Vector:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Async:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_ASYNC, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Wait:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WAIT, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_DeviceType:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DEVICE_TYPE, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+		
+    case ACC_Context_Collapse:
+		wn_exp = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_COLLAPSE, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_exp;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		acc_int_exp_count ++;
+		break;
+				
+    case ACC_Context_Array_Start:
+		wn_boundary = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_boundary;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+    case ACC_Context_Array_Length:
+		wn_boundary = WN_Ldid(TY_mtype(ST_type((ST *)p->item)),
+                                      0, (ST *)p->item, ST_type((ST *)p->item));
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
+		WN_kid0(wn) = wn_boundary;
+	    WN_set_pragma_acc(wn);
+	    cwh_stk_push(wn, WN_item);
+		break;
+		
+	case ACC_Context_Reduction_ADD:
+	case ACC_Context_Reduction_MUL:
+	case ACC_Context_Reduction_MAX:
+	case ACC_Context_Reduction_MIN:
+	case ACC_Context_Reduction_IAND:
+	case ACC_Context_Reduction_IOR:
+	case ACC_Context_Reduction_IEOR:
+	case ACC_Context_Reduction_AND:
+	case ACC_Context_Reduction_OR:
+	case ACC_Context_Reduction_EQV:
+	case ACC_Context_Reduction_NEQV:
+        switch((CONTEXT_TYPE) context) 
+		{
+	        case ACC_Context_Reduction_MAX:
+	            op_code = OPR_MAX;
+	            break;
+	        case ACC_Context_Reduction_MIN:
+	            op_code = OPR_MIN;
+	            break;
+	        case ACC_Context_Reduction_IAND:
+	            op_code = OPR_BAND;
+	            break;
+	        case ACC_Context_Reduction_IOR:
+	            op_code = OPR_BIOR;
+	            break;
+	        case ACC_Context_Reduction_IEOR:
+	            op_code = OPR_BXOR;
+	            break;
+	        case ACC_Context_Reduction_ADD:
+	            op_code = OPR_ADD;
+	            break;
+	        case ACC_Context_Reduction_MUL:
+	            op_code = OPR_MPY;
+	            break;
+	        case ACC_Context_Reduction_AND:
+	            op_code = OPR_LAND;
+	            break;
+	        case ACC_Context_Reduction_OR:
+	            op_code = OPR_LIOR;
+	            break;
+	        case ACC_Context_Reduction_EQV:
+	            op_code = OPR_EQ;
+	            break;
+	        case ACC_Context_Reduction_NEQV:
+	            op_code = OPR_NE;
+	            break;
+        }
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_REDUCTION, (ST *)p->item, 0, op_code);
+        WN_set_pragma_acc(wn);
+        cwh_stk_push(wn, WN_item);
+        acc_reduction_count++;
+        break;
+		
+    default:
+		DevAssert((0), ("Unimplemented fei_acc_region_var type"));
+		break;
+  }
+  return sym_idx;
+} /* fei_task_var */
+
+
 /*===============================================
  *
  * fei_task_var
@@ -354,6 +1231,42 @@ cwh_region(REGION_KIND kind)
 
   return(body);
 } 
+
+
+/*===============================================
+ *
+ * cwh_acc_region
+ *
+ * This generates a REGION and marks it as a acc region.  These are
+ * needed for each parallel loop or region.  Also attaches all
+ * collected pragmas and data clauses to the region pragma list.
+ *
+ * wn_pragma_id - the pragma of the region (PARALLEL, KERNELS, DATA, LOOP, etc...)
+ * count of exprs on stack for affinity clause
+ * ontocount, reductioncount, chunkcount - count of exprs on stack
+ * 
+ * returns the region body block (which the caller should set as the
+ * current block after all the pragmas are loaded into the region pragma
+ * block
+ *
+ *===============================================
+ */ 
+extern WN *
+cwh_acc_region(WN_PRAGMA_ID wn_pragma_id)
+{
+
+  WN *body;
+ 
+  /* create region */
+
+  body = cwh_region(REGION_KIND_ACC);
+
+  /* now attach all applicable pragmas */
+  cwh_stmt_add_pragma_acc(wn_pragma_id,(ST_IDX) NULL, 0, 0);
+
+
+  return(body);
+} /* cwh_acc_region */
 
 /*===============================================
  *
@@ -2197,6 +3110,433 @@ fei_parallelworkshare_open_mp(INTPTR task_if_idx,
 
 /*===============================================
  *
+ * fei_parallel_kernels_open_acc
+ * 
+ *===============================================
+*/ 
+void fei_parallel_kernels_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+{
+  WN *body;
+  WN_PRAGMA_ID wn_pragma_id;
+  
+  DevAssert((acc_context_directive_id==ACC_Context_Dir_Parallel || acc_context_directive_id==ACC_Context_Dir_Kernels), 
+  			("fei_parallel_kernels_open_acc only support OpenACC Parallel or Kernels pragma "));
+  
+  if(acc_context_directive_id == ACC_Context_Dir_Parallel)
+  	wn_pragma_id = WN_PRAGMA_ACC_PARALLEL_BEGIN;
+  else
+	wn_pragma_id = WN_PRAGMA_ACC_KERNELS_BEGIN;
+	
+  body = cwh_acc_region(wn_pragma_id);
+  
+  nested_do_descriptor.acc_loop_depth = 0;
+
+  /* now attach all applicable pragmas */
+  
+  //DO NOT CHANGE THE SEQUENCE OF THE FOLLOWING STMTS
+  //THE POP STMT SHOULD BE EXACT THE OPPOSITE SEQUENCE
+  //AS THE PUSH STMT IN cvrt_exp_to_pdg IN I_CVRT.C
+
+  //deal with the reduction nodes
+  while(acc_reduction_count)
+  {
+  	WN* wn_reductionexp = cwh_stk_pop_WN();
+	cwh_block_append(wn_reductionexp);
+  	acc_reduction_count --;
+  }
+  
+  //process first deviceptr clauses
+  while(acc_device_ptr_count)
+  {
+  	WN* wn_deviceptr = cwh_stk_pop_WN();
+	cwh_block_append(wn_deviceptr);
+  	acc_device_ptr_count --;
+  }
+  
+  //process first private and private clauses
+  while(acc_scalar_count)
+  {
+  	WN* wn_scalar = cwh_stk_pop_WN();
+	cwh_block_append(wn_scalar);
+  	acc_scalar_count --;
+  }
+
+  //process array/pointer region clauses
+  while(acc_array_ptr_count)
+  {
+  	WN* wn_array = cwh_stk_pop_WN();
+	WN_PRAGMA_ID wid = (WN_PRAGMA_ID) WN_pragma(wn_array);
+	/*if(wid == WN_PRAGMA_ACC_CLAUSE_DOPE)
+	{
+		UINT32 iKid_num = WN_const_val(WN_kid0(wn_array));
+		cwh_block_append(wn_array);
+		while(iKid_num > 0)
+		{
+		  	WN* wn_item = cwh_stk_pop_WN();
+			cwh_block_append(wn_item);
+			iKid_num --;
+		}
+		//it must follow an acc array section description
+		wn_array = cwh_stk_pop_WN();
+	}*/
+	UINT32 iSection_num = WN_const_val(WN_kid0(wn_array));
+	cwh_block_append(wn_array);
+	//handling multi dimensional array segments
+	while(iSection_num > 0)
+	{
+	  	WN* wn_array_length = cwh_stk_pop_WN();
+	  	WN* wn_array_start = cwh_stk_pop_WN();
+		cwh_block_append(wn_array_start);
+		cwh_block_append(wn_array_length);
+		iSection_num --;
+	}
+  	acc_array_ptr_count --;
+  }
+  
+  //process int exp clauses
+  while(acc_int_exp_count)
+  {
+  	WN* wn_intexp = cwh_stk_pop_WN();
+	cwh_block_append(wn_intexp);
+  	acc_int_exp_count --;
+  }
+
+  //if exp clause
+  if(acc_if_exp_count)
+  {
+      WN* wn_ifexp = cwh_stk_pop_WN();
+	  cwh_block_append(wn_ifexp);
+  	  acc_if_exp_count = 0;
+  }
+  /* append statements to region body */
+  cwh_block_set_current(body);
+
+  cwh_directive_set_PU_acc_flags();
+  acc_offload_region = TRUE;
+}
+
+/*===============================================
+ *
+ * Function name: fei_enter_exit_data_open_acc
+ * For creating enter/exit data region for OpenACC 2.0
+ *===============================================
+*/
+void fei_enter_exit_data_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+{
+	WN *body, *region;
+  	WN_PRAGMA_ID wn_pragma_id;
+  
+  	DevAssert((acc_context_directive_id==ACC_Context_Dir_Enter_Data || acc_context_directive_id==ACC_Context_Dir_Exit_Data), 
+  			("fei_enter_exit_data_open_acc only support OpenACC Data ENTER or EXIT pragma "));
+	
+  if(acc_context_directive_id == ACC_Context_Dir_Enter_Data)
+  	wn_pragma_id = WN_PRAGMA_ACC_ENTER_DATA;
+  else
+	wn_pragma_id = WN_PRAGMA_ACC_EXIT_DATA;
+	
+  	body = cwh_acc_region(wn_pragma_id);
+
+	
+	//process array/pointer region clauses
+	while(acc_array_ptr_count)
+	{
+		WN* wn_array = cwh_stk_pop_WN();
+		UINT32 iSection_num = WN_const_val(WN_kid0(wn_array));
+		cwh_block_append(wn_array);
+		//handling multi dimensional array segments
+		while(iSection_num > 0)
+		{
+		  	WN* wn_array_length = cwh_stk_pop_WN();
+		  	WN* wn_array_start = cwh_stk_pop_WN();
+			cwh_block_append(wn_array_start);
+			cwh_block_append(wn_array_length);
+			iSection_num --;
+		}
+		acc_array_ptr_count --;
+	}
+
+	//process int exp clauses
+	while(acc_int_exp_count)
+	{
+		WN* wn_intexp = cwh_stk_pop_WN();
+		cwh_block_append(wn_intexp);
+		acc_int_exp_count --;
+	}
+
+	//if exp clause
+	if(acc_if_exp_count)
+	{
+	  	WN* wn_ifexp = cwh_stk_pop_WN();
+	  	cwh_block_append(wn_ifexp);
+		acc_if_exp_count = 0;
+	}
+	/* append statements to region body */
+	cwh_block_set_current(body);
+
+	cwh_directive_set_PU_acc_flags();
+	//an empty region
+	cwh_directive_pop_acc();
+}
+
+/*===============================================
+ *
+ * Function name: fei_cache_update_wait_declare_open_acc
+ * For creating enter/exit data region for OpenACC 2.0
+ *===============================================
+*/
+void fei_cache_update_wait_declare_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+{
+	WN *body, *region;
+  	WN_PRAGMA_ID wn_pragma_id;
+  
+  	DevAssert((acc_context_directive_id==ACC_Context_Dir_Cache || acc_context_directive_id==ACC_Context_Dir_Update
+				|| acc_context_directive_id==ACC_Context_Dir_Wait || acc_context_directive_id==ACC_Context_Dir_Declare), 
+  			("fei_cache_update_wait_declare_open_acc only support OpenACC Data Cache, Update, Wait and Declare directives. "));
+	
+  if(acc_context_directive_id == ACC_Context_Dir_Cache)
+  	wn_pragma_id = WN_PRAGMA_ACC_CACHE;
+  else if(acc_context_directive_id == ACC_Context_Dir_Update)
+	wn_pragma_id = WN_PRAGMA_ACC_UPDATE;
+  else if(acc_context_directive_id == ACC_Context_Dir_Wait)
+	wn_pragma_id = WN_PRAGMA_ACC_WAIT;
+  else //if(acc_context_directive_id == ACC_Context_Dir_Declare)
+	wn_pragma_id = WN_PRAGMA_ACC_DECLARE;
+	
+  	body = cwh_acc_region(wn_pragma_id);
+
+	//process first deviceptr clauses
+	while(acc_device_ptr_count)
+	{
+		WN* wn_deviceptr = cwh_stk_pop_WN();
+		cwh_block_append(wn_deviceptr);
+		acc_device_ptr_count --;
+	}
+	
+	//process array/pointer region clauses
+	while(acc_array_ptr_count)
+	{
+		WN* wn_array = cwh_stk_pop_WN();		
+		UINT32 iSection_num = WN_const_val(WN_kid0(wn_array));
+		cwh_block_append(wn_array);
+		//handling multi dimensional array segments
+		while(iSection_num > 0)
+		{
+		  	WN* wn_array_length = cwh_stk_pop_WN();
+		  	WN* wn_array_start = cwh_stk_pop_WN();
+			cwh_block_append(wn_array_start);
+			cwh_block_append(wn_array_length);
+			iSection_num --;
+		}
+		acc_array_ptr_count --;
+	}
+
+	//process int exp clauses
+	while(acc_int_exp_count)
+	{
+		WN* wn_intexp = cwh_stk_pop_WN();
+		cwh_block_append(wn_intexp);
+		acc_int_exp_count --;
+	}
+
+	//if exp clause
+	if(acc_if_exp_count)
+	{
+	  	WN* wn_ifexp = cwh_stk_pop_WN();
+	  	cwh_block_append(wn_ifexp);
+		acc_if_exp_count = 0;
+	}
+	/* append statements to region body */
+	cwh_block_set_current(body);
+
+	cwh_directive_set_PU_acc_flags();
+	//an empty region
+	cwh_directive_pop_acc();
+}
+
+
+/*===============================================
+ *
+ * Function name: fei_loop_open_acc
+ * For creating loop region for OpenACC 
+ *===============================================
+*/
+void fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+{
+	WN *body, *region;
+  	WN_PRAGMA_ID wn_pragma_id;
+  
+  	DevAssert((acc_context_directive_id==ACC_Context_Dir_Loop), 
+  			("fei_enter_exit_data_open_acc only support OpenACC Loop pragma "));
+
+	wn_pragma_id = WN_PRAGMA_ACC_LOOP_BEGIN;
+	
+  	body = cwh_acc_region(wn_pragma_id);
+
+	nested_do_descriptor.acc_loop_depth ++;
+	//acc loop is never explicit end. It is always implicit end by loop end
+	nested_do_descriptor.explicit_end = FALSE;
+	nested_do_descriptor.type = WN_PRAGMA_ACC_LOOP_BEGIN;
+	acc_doloop_count = 1;
+	
+	//process reduction clauses
+	while(acc_reduction_count)
+	{
+		WN* wn_reductionexp = cwh_stk_pop_WN();
+		cwh_block_append(wn_reductionexp);
+		acc_reduction_count --;
+	}
+	
+	//process first private and private clauses
+	while(acc_scalar_count)
+	{
+	  WN* wn_scalar = cwh_stk_pop_WN();
+	  cwh_block_append(wn_scalar);
+	  acc_scalar_count --;
+	}
+
+	//process int exp clauses
+	while(acc_int_exp_count)
+	{
+		WN* wn_intexp = cwh_stk_pop_WN();
+		cwh_block_append(wn_intexp);
+		acc_int_exp_count --;
+	}
+	//handle the reduction later.
+
+	/* append statements to region body */
+	cwh_block_set_current(body);
+
+	cwh_directive_set_PU_acc_flags();
+}
+
+/*===============================================
+ *
+ * Function name: fei_atomic_open_acc
+ * For creating loop region for OpenACC 
+ *===============================================
+*/
+void fei_atomic_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+{
+	WN *body, *region;
+  	WN_PRAGMA_ID wn_pragma_id;
+  
+  	DevAssert((acc_context_directive_id==ACC_Context_Dir_Atomic), 
+  			("fei_atomic_open_acc only support OpenACC Atomic pragma "));
+
+	wn_pragma_id = WN_PRAGMA_ACC_ATOMIC_BEGIN;
+	
+  	body = cwh_acc_region(wn_pragma_id);
+
+	//process int exp clauses
+	if(acc_int_exp_count)
+	{
+		WN* wn_intexp = cwh_stk_pop_WN();
+		cwh_block_append(wn_intexp);
+		acc_int_exp_count --;
+	}
+	//handle the reduction later.
+
+	/* append statements to region body */
+	cwh_block_set_current(body);
+
+	cwh_directive_set_PU_acc_flags();
+}
+
+
+/*===============================================
+ *
+ * Function name: fei_host_data_open_acc
+ * Creating OpenACC Data Region
+ *===============================================
+*/ 
+void fei_host_data_open_acc() 
+{
+  WN *body;
+  
+  body = cwh_acc_region(WN_PRAGMA_ACC_HOSTDATA_BEGIN);
+
+  /* now attach all applicable pragmas */
+    //process array/pointer region clauses
+  while(acc_array_ptr_count)
+  {
+  	WN* wn_array = cwh_stk_pop_WN();		
+	UINT32 iSection_num = WN_const_val(WN_kid0(wn_array));
+	cwh_block_append(wn_array);
+	//handling multi dimensional array segments
+	while(iSection_num > 0)
+	{
+	  	WN* wn_array_length = cwh_stk_pop_WN();
+	  	WN* wn_array_start = cwh_stk_pop_WN();
+		cwh_block_append(wn_array_start);
+		cwh_block_append(wn_array_length);
+		iSection_num --;
+	}
+  	acc_array_ptr_count --;
+  }
+  
+  /* append statements to region body */
+  cwh_block_set_current(body);
+  //cwh_block_pop_region
+  cwh_directive_set_PU_acc_flags();
+}
+
+
+/*===============================================
+ *
+ * Function name: fei_data_open_acc
+ * Creating OpenACC Data Region
+ *===============================================
+*/ 
+void fei_data_open_acc() 
+{
+  WN *body;
+  
+  body = cwh_acc_region(WN_PRAGMA_ACC_DATA_BEGIN);
+
+  /* now attach all applicable pragmas */
+  
+  //process first deviceptr clauses
+  while(acc_device_ptr_count)
+  {
+  	WN* wn_deviceptr = cwh_stk_pop_WN();
+	cwh_block_append(wn_deviceptr);
+  	acc_device_ptr_count --;
+  }
+  
+  //process array/pointer region clauses
+  while(acc_array_ptr_count)
+  {
+  	WN* wn_array = cwh_stk_pop_WN();		
+	UINT32 iSection_num = WN_const_val(WN_kid0(wn_array));
+	cwh_block_append(wn_array);
+	//handling multi dimensional array segments
+	while(iSection_num > 0)
+	{
+	  	WN* wn_array_length = cwh_stk_pop_WN();
+	  	WN* wn_array_start = cwh_stk_pop_WN();
+		cwh_block_append(wn_array_start);
+		cwh_block_append(wn_array_length);
+		iSection_num --;
+	}
+  	acc_array_ptr_count --;
+  }
+  
+  //if exp clause
+  if(acc_if_exp_count)
+  {
+      WN* wn_ifexp = cwh_stk_pop_WN();
+	  cwh_block_append(wn_ifexp);
+  	  acc_if_exp_count = 0;
+  }
+  /* append statements to region body */
+  cwh_block_set_current(body);
+  //cwh_block_pop_region
+  cwh_directive_set_PU_acc_flags();
+}
+
+
+/*===============================================
+ *
  * fei_parallel_open_mp 
  * 
  *===============================================
@@ -2553,6 +3893,107 @@ fei_endtask_open_mp   ( void )
 
 /*===============================================
  *
+ * fei_endatomic_open_acc 
+ *
+ * processes a C$ACC END ATOMIC
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_endatomic_open_acc     ( void )
+{
+  cwh_directive_pop_acc();
+}
+
+
+/*===============================================
+ *
+ * fei_endparallel_open_acc 
+ *
+ * processes a C$ACC END PARALLEL
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_endparallel_open_acc     ( void )
+{
+  cwh_directive_pop_acc();  
+  acc_offload_region = FALSE;
+}
+
+/*===============================================
+ *
+ * fei_endkernels_open_acc 
+ *
+ * processes a C$ACC END KERNELS
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_endkernels_open_acc     ( void )
+{
+  cwh_directive_pop_acc();  
+  acc_offload_region = FALSE;
+}
+
+/*===============================================
+ *
+ * fei_enddata_open_acc 
+ *
+ * processes a C$ACC END DATA
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_enddata_open_acc     ( void )
+{
+  cwh_directive_pop_acc();
+}
+
+/*===============================================
+ *
+ * fei_enddata_open_acc 
+ *
+ * processes a C$ACC END DATA
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_endhost_data_open_acc     ( void )
+{
+  cwh_directive_pop_acc();
+}
+
+/*===============================================
+ *
+ * fei_endloop_open_acc 
+ *
+ * processes a C$ACC END LOOP
+ *
+ * simply pops off the ACC region
+ *
+ *===============================================
+ */
+extern void
+fei_endloop_open_acc     ( void )
+{
+  cwh_directive_pop_acc();
+}
+
+
+
+/*===============================================
+ *
  * fei_endparallel_open_mp 
  *
  * processes a C$OMP END PARALLEL
@@ -2744,6 +4185,13 @@ cwh_directive_set_PU_flags(BOOL nested)
     cwh_directive_set_LNO_flags() ;
 }
 
+static void cwh_directive_set_PU_acc_flags()
+{
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+}
+
 /*================================================================
  *
  * cwh_directive_set_LNO_flags
@@ -2758,6 +4206,34 @@ cwh_directive_set_LNO_flags(void)
   Set_PU_mp_needs_lno (Get_Current_PU());
   Set_FILE_INFO_needs_lno (File_info);
 }
+
+/*================================================================
+ *
+ * cwh_directive_pop_and_nowait
+ * 
+ * Pop the current region and issue a NOWAIT to the region
+ * pragmas if required. If NOWAIT absent, issue an ENDMARKER,
+ * to mark the line number at the end of the region.
+ *
+ *================================================================
+*/
+static void
+cwh_directive_pop_acc()
+{
+  WN *region, *wn ;
+  WN_PRAGMA_ID  p ;
+
+  region = cwh_block_pop_region();
+
+  p = WN_PRAGMA_END_MARKER;
+
+  wn = WN_CreatePragma (p, (ST_IDX) NULL, 0, 0);
+
+  WN_set_pragma_acc(wn);
+
+  cwh_directive_pragma_to_region(wn,region);
+}
+
 
 /*================================================================
  *
@@ -2853,6 +4329,35 @@ cwh_directive_work_dist(INT32 work_dist, INTPTR work_dist_opnd)
     break;
   }
 }
+
+/*================================================================
+ *
+ * cwh_directive_load_value_pragma_acc
+ * 
+ * Utility routine for maxcpus, if_expr etc. Given an item
+ * packet, extracts the ST, loads the value and puts a pragma
+ * with the load into the current block.
+ *
+ * Used in parallel region, doall etc.
+ *
+ *================================================================
+*/
+static void
+cwh_directive_load_value_pragma_acc(INTPTR item, WN_PRAGMA_ID pragma)
+{
+  WN * wn1 ;
+  STB_pkt *p;
+
+  if (item) {
+
+    p = cast_to_STB(item);
+    DevAssert((p->form == is_ST),("Odd item"));
+
+    wn1 = cwh_addr_load_ST((ST *)p->item, 0, 0);
+    cwh_stmt_add_xpragma_acc(pragma,wn1);
+  }
+}
+
 
 /*================================================================
  *

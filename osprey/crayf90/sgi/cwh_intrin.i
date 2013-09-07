@@ -59,7 +59,6 @@ typedef enum {
 	t_BAD = t_LAST
 } t_enum;
 
-
 typedef enum {
 i_abs,
 i_acos,
@@ -104,6 +103,17 @@ i_atan2d,
 i_cosd,
 i_sind,
 i_tand,
+i_cuda_atan,
+i_cuda_atan2,
+i_cuda_cos,
+i_cuda_cosh,
+i_cuda_exp,
+i_cuda_log,
+i_cuda_log10,
+i_cuda_sin,
+i_cuda_sinh,
+i_cuda_tan,
+i_cuda_tanh,
 i_LAST
 } i_enum;
 
@@ -116,6 +126,7 @@ typedef struct {
 /* Accessor macros */
 #define WOP(x) {INTRINSIC_NONE,OPC_##x}
 #define IOP(x) {INTRN_##x,OPCODE_UNKNOWN}
+#define IOP_CUDA(x) {INTRN_CUDA_##x,OPCODE_UNKNOWN}
 #define NOWI   {INTRINSIC_NONE,OPCODE_UNKNOWN}
 #define GET_WOP(x) ((x).O)
 #define GET_IOP(x) ((x).I)
@@ -132,7 +143,8 @@ typedef struct {
 #define WREALS(x) WOP(F4##x),WOP(F8##x),WOP(FQ##x)
 #define WCMPXS(x) WOP(C4##x),WOP(C8##x),WOP(CQ##x)
 #define WINTS(x)  WOP(I4##x),WOP(I4##x),WOP(I4##x),WOP(I8##x)
-
+#define IREALS_CUDA(x) 	IOP_CUDA(F4##x),IOP_CUDA(F8##x),NOWI
+#define IINTS_CUDA(x) 	 IOP_CUDA(I1##x),IOP_CUDA(I2##x),IOP(I4##x),NOWI
 
 /* Intrinsic table */
 
@@ -190,6 +202,17 @@ itab_entry intrinsic_lookup[i_LAST] = {
 {"cosd",{ NOINT,IREALS(COSD), NOCMPX }},
 {"sind",{ NOINT, IREALS(SIND), NOCMPX }},
 {"tand",{ NOINT, IREALS(TAND), NOCMPX }},
+{"atan",{ NOINT,IREALS_CUDA(ATAN),NOCMPX }}, 	//i_cuda_atan,
+{"atan2", { NOINT,IREALS_CUDA(ATAN2),NOCMPX }},//i_cuda_atan2,
+{"cos",{ NOINT,IREALS_CUDA(COS),NOCMPX }}, 	//i_cuda_cos,
+{"cosh",{ NOINT,IREALS_CUDA(COSH),NOCMPX }},	//i_cuda_cosh,
+{"exp",{ NOINT, IREALS_CUDA(EXP),NOCMPX }}, 	//i_cuda_exp,
+{"log",{ NOINT, IREALS_CUDA(LOG), NOCMPX }}, 	//i_cuda_log,
+{"log10",{ NOINT, IREALS_CUDA(LOG10), NOCMPX }}, 	//i_cuda_log10,
+{"sin",{ NOINT,IREALS_CUDA(SIN),NOCMPX }}, 	//i_cuda_sin,
+{"sinh",{ NOINT,IREALS_CUDA(SINH),NOCMPX }}, 	//i_cuda_sinh,
+{"tan",{ NOINT,IREALS_CUDA(TAN),NOCMPX }}, 	//i_cuda_tan,
+{"tanh",{ NOINT,IREALS_CUDA(TANH),NOCMPX }}	//i_cuda_tanh,
 };
 
 

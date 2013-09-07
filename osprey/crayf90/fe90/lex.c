@@ -80,6 +80,7 @@ static boolean	get_format_str (void);
 static boolean	get_label (void);
 static boolean	get_micro_directive (void);
 static boolean get_open_mp_directive (void);
+static boolean get_open_acc_directive (void);
 static boolean	get_sgi_directive (void);
 static boolean	get_operand_digit (void);
 static boolean	get_operand_dot (void);
@@ -790,6 +791,18 @@ boolean get_token (token_class_type class)
             TOKEN_BUF_IDX(token) = LA_CH_BUF_IDX;
             TOKEN_STMT_NUM(token) = LA_CH_STMT_NUM;
             result              = get_open_mp_directive ();
+         }
+         break;
+		 
+      case Tok_Class_Open_Acc_Dir_Kwd :
+         if (LA_CH_CLASS == Ch_Class_Letter) {
+            sig_blank           = FALSE;
+            token               = initial_token;
+            TOKEN_LINE(token)   = LA_CH_LINE;
+            TOKEN_COLUMN(token) = LA_CH_COLUMN;
+            TOKEN_BUF_IDX(token) = LA_CH_BUF_IDX;
+            TOKEN_STMT_NUM(token) = LA_CH_STMT_NUM;
+            result              = get_open_acc_directive ();
          }
          break;
 
@@ -1684,6 +1697,141 @@ EXIT:
 
 }  /* is_par_directive */
 
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      get_open_mp_directive is called by the get_token routine to attempt   *|
+|*      recognition of a !$ACC        keyword by matching the look ahead char *|
+|*      and following characters of class Ch_Class_Letter with entries in the *|
+|*      kwd_mic table.  If a keyword is not found, an id token is created.    *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      la_ch                   first character of !$  kwd token              *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      la_ch                   next character of input source statement      *|
+|*      token                   token created by get_open_mp_directive        *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      TRUE indicates a keyword or id token was produced.                    *|
+|*      FALSE indicates that an error was encountered.                        *|
+|*                                                                            *|
+\******************************************************************************/
+
+static boolean get_open_acc_directive (void)
+{
+   int          beg_idx;
+   la_type      la_queue[MAX_KWD_LEN + 1];
+   int          letter_idx;
+   int          lim_idx;
+   int          tok_len         = 0;
+
+
+   TRACE (Func_Entry, "get_open_acc_directive", NULL);
+
+# ifdef _DEBUG
+   if (LA_CH_CLASS != Ch_Class_Letter) {
+      PRINTMSG(TOKEN_LINE(token), 295, Internal, TOKEN_COLUMN(token),
+               "get_open_acc_directive", "letter");
+   }
+# endif
+
+   TOKEN_VALUE(token) = Tok_Id;
+
+   /* check for any keywords starting with look ahead char */
+   letter_idx = LA_CH_VALUE - 'A';
+
+   beg_idx = kwd_open_acc_dir_idx[letter_idx];
+   lim_idx = kwd_open_acc_dir_idx[letter_idx+1];
+
+   if (beg_idx != lim_idx) {
+
+#ifdef _DEBUG
+      if (kwd_open_acc_dir_len[beg_idx] > MAX_ID_LEN) {
+         PRINTMSG(TOKEN_LINE(token), 384, Internal, TOKEN_COLUMN(token),
+                  beg_idx, kwd_open_acc_dir_len[beg_idx]);
+      }
+#endif
+
+      while ((LA_CH_CLASS == Ch_Class_Letter ||
+              LA_CH_CLASS == Ch_Class_Digit  ||
+              LA_CH_VALUE == USCORE) &&
+             tok_len < kwd_open_acc_dir_len[beg_idx]) {
+         la_queue[tok_len]              = la_ch;
+         TOKEN_STR(token)[tok_len]      = LA_CH_VALUE;
+         tok_len++;
+         NEXT_LA_CH;
+      }
+
+      TOKEN_LEN(token) = tok_len;
+
+      if (tok_len >= kwd_open_acc_dir_len[lim_idx-1]) {
+
+         /* compare token string to keyword entries */
+
+         while (beg_idx < lim_idx) {
+
+            if (kwd_open_acc_dir_len[beg_idx] <= tok_len) {
+
+               if (strncmp(TOKEN_STR(token),
+                           kwd_open_acc_dir[beg_idx].name,
+                           kwd_open_acc_dir_len[beg_idx]) == IDENTICAL) {
+
+                  /* the following chars and preceding letter can't be */
+                  /* part of a keyword on full length match of string. */
+
+                  if (tok_len == kwd_open_acc_dir_len[beg_idx]  &&
+                      (LA_CH_VALUE == USCORE  ||
+                       LA_CH_VALUE == DOLLAR  ||
+                       LA_CH_VALUE == AT_SIGN)) {
+                  }
+                  else {
+                     TOKEN_VALUE(token) = kwd_open_acc_dir[beg_idx].value;
+
+                     /* adjust la_ch to be char following keyword */
+
+                     if (tok_len > kwd_open_acc_dir_len[beg_idx]) {
+                        tok_len = kwd_open_acc_dir_len[beg_idx];
+                        la_ch   = la_queue[tok_len];
+                        TOKEN_LEN(token) = tok_len;
+
+                        /* reset src input buffer and col index to la_ch pos */
+                        reset_src_input (LA_CH_BUF_IDX, LA_CH_STMT_NUM);
+                     }
+                     break;
+                  }
+               }
+            }  /* if */
+
+            beg_idx++;
+
+         }  /* while */
+      }  /* if */
+   }  /* if */
+
+   if (TOKEN_VALUE(token) == Tok_Id) {                  /* keyword not found  */
+
+      while (VALID_LA_CH) {
+         ADD_TO_TOKEN_STR (LA_CH_VALUE, tok_len);
+         NEXT_LA_CH;
+      }
+
+#ifdef KEY /* Bug 3635 */
+      id_too_long(&tok_len);
+#else
+      if (tok_len > MAX_ID_LEN) { /* Id len exceeds maximum of 31 characters. */
+         PRINTMSG (TOKEN_LINE(token), 67, Error, TOKEN_COLUMN(token));
+         tok_len = MAX_ID_LEN;
+      }
+#endif /* KEY Bug 3635 */
+      TOKEN_LEN(token) = tok_len;
+   }
+
+   TRACE (Func_Exit, "get_open_acc_directive", NULL);
+
+   return (TRUE);
+}
+
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
@@ -5479,6 +5627,26 @@ void set_up_token_tables(void)
    }
 
    set_up_letter_idx_table(kwd_open_mp_dir_idx, kwd_open_mp_dir, len);
+
+   /*************************\
+   |* kwd_open_acc_dir table , by daniel tian*|
+   \*************************/
+
+   len = 0;
+
+   while (kwd_open_acc_dir[len].value != Tok_LAST) {
+      len++;
+   }
+
+   len++;
+
+   kwd_open_acc_dir_len = malloc(sizeof(int) * len);
+
+   for (i = 0; i < len; i++) {
+      kwd_open_acc_dir_len[i] = strlen(kwd_open_acc_dir[i].name);
+   }
+
+   set_up_letter_idx_table(kwd_open_acc_dir_idx, kwd_open_acc_dir, len);
 
 # ifdef _DEBUG
    /*****************\

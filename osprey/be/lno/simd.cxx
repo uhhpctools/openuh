@@ -2685,7 +2685,8 @@ static BOOL SIMD_Is_Vectorizable_Loop (WN* vect_loop, WN* body)
       !Do_Loop_Is_Good(vect_loop) ||
       Do_Loop_Has_Calls(vect_loop) ||
       Do_Loop_Has_Gotos(vect_loop) ||
-      Do_Loop_Is_Mp(vect_loop)) {
+      Do_Loop_Is_Mp(vect_loop) ||
+      Do_Loop_Is_ACC(vect_loop)) {
     return FALSE;
   }
 
@@ -2863,7 +2864,7 @@ extern void Mark_Auto_Vectorizable_Loops (WN* wn)
     return;
   else if (opc==OPC_DO_LOOP) {
     if (Do_Loop_Is_Good(wn) && Do_Loop_Is_Inner(wn) && !Do_Loop_Has_Calls(wn)
-	&& !Do_Loop_Is_Mp(wn) && !Do_Loop_Has_Gotos(wn)) {
+	&& !Do_Loop_Is_Mp(wn) && !Do_Loop_Has_Gotos(wn)&& !Do_Loop_Is_ACC(wn)) {
       if (SIMD_Is_Vectorizable_Loop (wn, WN_do_body (wn))) {
 	DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn, FALSE);
 	dli->Vectorizable = TRUE;
@@ -3285,6 +3286,12 @@ static BOOL Simd_Pre_Analysis(WN *innerloop, char *verbose_msg)
     sprintf(verbose_msg, "Loop is not innermost");
     return FALSE;
    }
+
+   //all the acc loop can not be vectorized at this point
+   if(Do_Loop_Is_ACC(innerloop))
+   {
+   	 return FALSE;
+   }
   
   // Bug 3784
   // Check for useless loops (STID's use_list is empty) of the form
@@ -3312,7 +3319,7 @@ static BOOL Simd_Pre_Analysis(WN *innerloop, char *verbose_msg)
       sprintf(verbose_msg, "Index variale lives at the exit of OpenMP loop.");
       return FALSE;
     }
-
+	
     if (!Upper_Bound_Standardize(WN_end(innerloop),TRUE)){
       sprintf(verbose_msg, "Loop upper bound can not be std.");
       return FALSE;
@@ -5883,7 +5890,7 @@ static BOOL Simd_Simplify_LB_UB (WN* vect_loop, WN* remainder, INT vect)
     // 
     return TRUE;
   }
-
+  
   // Step 3: replace the init statement of the remainder loop from 
   //  "loop_idx = complicate_expr" to identity "loop_idx = loop_idx".
   //

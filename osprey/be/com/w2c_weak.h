@@ -49,6 +49,8 @@ extern void (*W2C_Cleanup_p)(void);
 extern void (*W2C_Init_p)(void);
 extern void (*W2C_Outfile_Fini_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Init_p)(BOOL emit_global_decls);
+extern void (*W2C_Outfile_Fini_OpenACC_p)(BOOL emit_global_decls);
+extern void (*W2C_Outfile_Init_OpenACC_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Translate_Pu_p)(WN *pu, BOOL emit_global_decls);
 extern void (*W2C_Pop_PU_p)(void);
 extern void (*W2C_Process_Command_Line_p)(INT phase_argc, const char * const
@@ -67,6 +69,8 @@ extern void (*W2C_Translate_Wn_Str_p)(char *strbuf, UINT bufsize, const WN *wn);
 #define W2C_Init (*W2C_Init_p)
 #define W2C_Outfile_Fini (*W2C_Outfile_Fini_p)
 #define W2C_Outfile_Init (*W2C_Outfile_Init_p)
+#define W2C_Outfile_Fini_OpenACC (*W2C_Outfile_Fini_OpenACC_p)
+#define W2C_Outfile_Init_OpenACC (*W2C_Outfile_Init_OpenACC_p)
 #define W2C_Outfile_Translate_Pu (*W2C_Outfile_Translate_Pu_p)
 #define W2C_Pop_PU (*W2C_Pop_PU_p)
 #define W2C_Process_Command_Line (*W2C_Process_Command_Line_p)
@@ -103,6 +107,8 @@ extern void (*W2C_Translate_Wn_Str_p)(char *strbuf, UINT bufsize, const WN *wn);
 #define W2C_Init() Fail_FmtAssertion("whirl2c not built")
 #define W2C_Outfile_Fini(x) Fail_FmtAssertion("whirl2c not built")
 #define W2C_Outfile_Init(x) Fail_FmtAssertion("whirl2c not built")
+#define W2C_Outfile_Fini_OpenACC(x) Fail_FmtAssertion("whirl2c not built")
+#define W2C_Outfile_Init_OpenACC(x) Fail_FmtAssertion("whirl2c not built")
 #define W2C_Outfile_Translate_Pu(a,b) Fail_FmtAssertion("whirl2c not built")
 #define W2C_Pop_PU() Fail_FmtAssertion("whirl2c not built")
 #define W2C_Process_Command_Line(a,b,c,d) Fail_FmtAssertion("whirl2c not built")

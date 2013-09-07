@@ -298,6 +298,9 @@ BOOL LANG_IEEE_Minus_Zero_Set = FALSE;
 BOOL LANG_Enable_CXX_Openmp = FALSE;
 BOOL LANG_Enable_CXX_Openmp_Set = FALSE;
 
+BOOL LANG_Enable_CXX_Openacc = FALSE;
+BOOL LANG_Enable_CXX_Openacc_Set = FALSE;
+
 BOOL LANG_Enable_Global_Asm = FALSE;
 BOOL LANG_Enable_Global_Asm_Set = FALSE;
 # endif /* KEY Bug 3405 */
@@ -776,6 +779,9 @@ static OPTION_DESC Options_LANG[] = {
     { OVK_BOOL, OV_INTERNAL,    TRUE, "cxx_openmp",             "",
       0, 0, 0,  &LANG_Enable_CXX_Openmp,        &LANG_Enable_CXX_Openmp_Set,
       "C++: Enable OpenMP processing." },
+    { OVK_BOOL, OV_INTERNAL,    TRUE, "cxx_openacc",             "",
+      0, 0, 0,  &LANG_Enable_CXX_Openacc,        &LANG_Enable_CXX_Openacc_Set,
+      "C++: Enable OpenACC processing." },
     { OVK_BOOL, OV_INTERNAL,	TRUE, "global_asm",		"",
       0, 0, 0,	&LANG_Enable_Global_Asm,	&LANG_Enable_Global_Asm_Set,
       "Handle global scope ASMs fully." },
@@ -1014,6 +1020,19 @@ BOOL OSA_Flag = FALSE;
 
 #ifdef BACK_END
 /* back end phases options */
+BOOL run_ACCS2S = FALSE;		    /* run code generator */
+BOOL run_autoConstCacheOpt = FALSE;		    /* run auto generate constant cache for NVIDIA GPGPU */
+BOOL Enable_UHACC = FALSE;		    /* run OpenACC generator */
+/*reduction flags: 0bit-global/shared memory: if shared memory is used, it is 0; else it is 1; shared memory is default option
+			      1bit-rolling/unrolling: if unrolling, it is 0; else it is 1. default is unrolling*/
+/*DFA analysis flag: bit 2. If the DFA is enabled, set to 1; else set to 0*/
+UINT32 Enable_UHACCFlag = 0;  
+UINT32 Enable_UHACCInfoFlag = 0;
+UINT32 Enable_UHACCRegNum = 0;
+ACC_REGISTER_FEEDBACK Enable_UHACCFeedback = ACC_REGISTER_FEEDBACK_NONE;
+ACC_ARCH_TYPE UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;
+
+
 BOOL Run_lno = FALSE;		    /* run loop-nest optimizer */
 BOOL Run_wopt = FALSE;		    /* run WHIRL global optimizer */
 BOOL Run_preopt = FALSE;	    /* run WHIRL preopt optimizer */

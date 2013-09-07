@@ -4228,6 +4228,12 @@ PARSE_LOGICAL_IF:
          case Open_MP_End_Master_Stmt:
          case Open_MP_End_Critical_Stmt:
          case Open_MP_End_Ordered_Stmt:
+         case Open_ACC_End_Parallel_Stmt:
+         case Open_ACC_End_Atomic_Stmt:
+         case Open_ACC_End_Kernels_Stmt:
+         case Open_ACC_End_Data_Stmt:
+         case Open_ACC_End_Host_Data_Stmt:
+		 case Open_ACC_End_Loop_Stmt:
      
 # if defined(_DEBUG)
                 

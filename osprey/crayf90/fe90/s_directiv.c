@@ -105,6 +105,10 @@ static void	prefetch_ref_semantics(void);
 static void	push_task_blk(int);
 static void	set_open_mp_task_flags(int, boolean);
 static void	wait_send_semantics(void);
+static void	open_acc_directive_semantics(open_acc_directive_type);
+static void open_acc_array_region_clauses_semantics(int list_idx);
+static void open_acc_int_exp_clauses_semantics(int list_idx);
+
 
 /******************************************************************************\
 |*									      *|
@@ -2196,6 +2200,58 @@ void directive_stmt_semantics(void)
       case Task_Open_Mp_Opr:
          break;
 
+	  /*OpenACC, by daniel tian,  from UH*/
+      case  Parallel_Open_Acc_Opr:
+        open_acc_directive_semantics(Parallel_Acc);
+        break;
+		
+      case  Kernels_Open_Acc_Opr:
+        open_acc_directive_semantics(Kernels_Acc);
+        break;
+		
+      case  Data_Open_Acc_Opr:
+        open_acc_directive_semantics(Data_Acc);
+        break;
+		
+      case  Enter_Data_Open_Acc_Opr:
+        open_acc_directive_semantics(Enter_Data_Acc);
+        break;
+		
+      case  Exit_Data_Open_Acc_Opr:
+        open_acc_directive_semantics(Exit_Data_Acc);
+        break;
+		
+      case  Wait_Open_Acc_Opr:
+        open_acc_directive_semantics(Wait_Acc);
+        break;
+		
+      case  Routine_Open_Acc_Opr:
+        open_acc_directive_semantics(Routine_Acc);
+        break;
+		
+      case  Loop_Open_Acc_Opr:
+        open_acc_directive_semantics(Loop_Acc);
+        break;
+		
+      case  Update_Open_Acc_Opr:
+        open_acc_directive_semantics(Update_Acc);
+        break;
+		
+      case  Declare_Open_Acc_Opr:
+        open_acc_directive_semantics(Declare_Acc);
+        break;
+		
+      case  Cache_Open_Acc_Opr:
+        open_acc_directive_semantics(Cache_Acc);
+        break;
+		
+      case  Atomic_Open_Acc_Opr:
+        open_acc_directive_semantics(Atomic_Acc);
+        break;
+		
+      case  Host_Data_Open_Acc_Opr:
+        open_acc_directive_semantics(Host_Data_Acc);
+        break;
    }
 
    TRACE (Func_Exit, "directive_stmt_semantics", NULL);
@@ -6307,6 +6363,509 @@ static void open_mp_directive_semantics(open_mp_directive_type directive)
    return;
 
 }  /* open_mp_directive_semantics */
+
+/******************************************************************************\
+|*			 by daniel tian, 07/10/14 									      *|
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>   int-exp checking for gang/worker/vector/num_gangs/    *|
+|*	num_workers/vector_length/async/wait/tile/collapse                        *|
+|*                                                                            *|
+|* Input parameters: ir list index for the specified clause                   *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+static void open_acc_int_exp_clauses_semantics(int list_idx)
+{
+   expr_arg_type	exp_desc;
+   opnd_type		opnd;
+   opnd_type		l_opnd;
+   int			line, column;
+   int			idx;
+   if (IL_FLD(list_idx) != NO_Tbl_Idx)
+   {
+		COPY_OPND(opnd, IL_OPND(list_idx));
+		exp_desc.rank = 0;
+		expr_semantics(&opnd, &exp_desc);
+
+		find_opnd_line_and_column(&opnd, &line, &column);
+		if (exp_desc.type != Integer ||
+		 exp_desc.rank != 0)      {
+		PRINTMSG(line, 1731, Error, column);
+		}
+
+		//if it is CN_Tbl_Idx, leave it as CN
+		if(OPND_FLD(opnd) != CN_Tbl_Idx)
+		{
+			IL_FLD(list_idx) = AT_Tbl_Idx;
+			idx = create_tmp_asg(&opnd,
+			                  &exp_desc,
+			                  &l_opnd,
+			                  Intent_In,
+			                  FALSE,
+			                  FALSE);
+			IL_IDX(list_idx) = idx;
+			IL_LINE_NUM(list_idx) = line;
+			IL_COL_NUM(list_idx) = column;
+		}
+		else
+	 	{
+	        IL_FLD(list_idx) = CN_Tbl_Idx;
+	        COPY_OPND(IL_OPND(list_idx), opnd);
+	 	}
+    }
+} /* open_acc_int_exp_clauses_semantics */
+
+/******************************************************************************\
+|*			 by daniel tian, 07/10/14 									      *|
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>   array region expr checking for copy,pcopy,copyin,     *|
+|*                      pcopyin,copyout,pcopyout,create,pcreate,present,      *|
+|*                      delete			                                      *|
+|*                                                                            *|
+|* Input parameters: ir list index for the specified clause                   *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+static void open_acc_array_region_clauses_semantics(int list_idx)
+{
+   expr_arg_type	exp_desc;
+   opnd_type		opnd;
+   opnd_type		l_opnd;
+   int			line, column;
+   int			idx;
+   int list2_idx;
+
+   if (IL_FLD(list_idx) != NO_Tbl_Idx)
+   {
+
+	  list2_idx = IL_IDX(list_idx);
+
+	  while (list2_idx)
+	  {
+            if (IL_FLD(list2_idx) == IR_Tbl_Idx)
+        	{
+        		int	array_ir_idx = IL_IDX(list2_idx);
+				int	name_idx = IR_IDX_L(array_ir_idx);
+				int nDims = IR_LIST_CNT_R(array_ir_idx);
+				int Section_num = nDims;
+				int boundary_il_idx = IR_IDX_R(array_ir_idx);
+				while(nDims > 0)
+				{
+					int	start_il_idx;
+					int	length_il_idx;
+					int boundary_ir_idx = IL_IDX(boundary_il_idx);
+					int triplet_il_idx = IR_IDX_L(boundary_ir_idx);
+					start_il_idx = triplet_il_idx;
+					length_il_idx = IL_NEXT_LIST_IDX(triplet_il_idx);
+
+					 //deal with start
+			         COPY_OPND(opnd, IL_OPND(start_il_idx));
+			         exp_desc.rank = 0;
+			         expr_semantics(&opnd, &exp_desc);
+			         find_opnd_line_and_column(&opnd, &line, &column);
+			         if (exp_desc.type != Integer ||
+			             exp_desc.rank != 0)
+			         {
+			            PRINTMSG(line, 1732, Error, column);
+			         }
+					 //if it is CN_Tbl_Idx, leave it as CN
+					 if(OPND_FLD(opnd) != CN_Tbl_Idx && OPND_FLD(opnd) != AT_Tbl_Idx)
+					 {
+				         IL_FLD(start_il_idx) = AT_Tbl_Idx;
+				         idx = create_tmp_asg(&opnd,
+				                              &exp_desc,
+				                              &l_opnd,
+				                              Intent_In,
+				                              FALSE,
+				                              FALSE);
+				         IL_IDX(start_il_idx) = idx;
+				         IL_LINE_NUM(start_il_idx) = line;
+				         IL_COL_NUM(start_il_idx) = column;
+					 }
+					 //else
+				 	 //{
+				     //    IL_FLD(start_il_idx) = CN_Tbl_Idx;
+				     //    COPY_OPND(IL_OPND(start_il_idx), opnd);
+				 	 //}
+
+					 //deal with length
+					 COPY_OPND(opnd, IL_OPND(length_il_idx));
+			         exp_desc.rank = 0;
+			         expr_semantics(&opnd, &exp_desc);
+			         find_opnd_line_and_column(&opnd, &line, &column);
+			         if (exp_desc.type != Integer ||
+			             exp_desc.rank != 0)
+			         {
+			            PRINTMSG(line, 1732, Error, column);
+			         }
+					 //if it is CN_Tbl_Idx, leave it as CN
+					 if(OPND_FLD(opnd) != CN_Tbl_Idx && OPND_FLD(opnd) != AT_Tbl_Idx)
+					 {
+				         IL_FLD(length_il_idx) = AT_Tbl_Idx;
+				         idx = create_tmp_asg(&opnd,
+				                              &exp_desc,
+				                              &l_opnd,
+				                              Intent_In,
+				                              FALSE,
+				                              FALSE);
+				         IL_IDX(length_il_idx) = idx;
+				         IL_LINE_NUM(length_il_idx) = line;
+				         IL_COL_NUM(length_il_idx) = column;
+					 }
+					 //else
+				 	 //{
+				     //    IL_FLD(length_il_idx) = CN_Tbl_Idx;
+				     //    COPY_OPND(IL_OPND(length_il_idx), opnd);
+				 	 //}
+
+					 boundary_il_idx = IL_NEXT_LIST_IDX(boundary_il_idx);
+					 nDims --;
+				}
+        	}
+
+	    list2_idx = IL_NEXT_LIST_IDX(list2_idx);
+	  }
+    }
+} /* open_acc_array_region_clauses_semantics */
+
+
+/******************************************************************************\
+|*			 by daniel tian, 07/10/14 									      *|
+|* Description:								      *|
+|*      The ir looks like this coming in ...                                  *|
+|*                                                                            *|
+|*                        (open acc directive operator)                        *|
+|*                       /                                                    *|
+|*                      |- IF condition                                       *|
+|*                      |- async int-expr                          *|
+|*                      |- wait int-expr-list                          *|
+|*                      |- num_gangs int-expr                          *|
+|*                      |- num_workers int-expr                          *|
+|*                      |- vector_length int-expr                          *|
+|*                      |- gang int-expr                          *|
+|*                      |- worker int-expr                          *|
+|*                      |- vector int-expr                          *|
+|*                      |- PRIVATE var list                                   *|
+|*                      |- FIRSTPRIVATE var list                                   *|
+|*                      |- default (none)                                   *|
+|*                      |- deviceptr var list                                   *|
+|*                      |- device_type( device-type-list)                                    *|
+|*                      |- reduction operator: var-list                               *|
+|*                      |- copy (var-list)                  *|
+|*                      |- pcopy (var-list)                  *|
+|*                      |- copyin (var-list)                  *|
+|*                      |- pcopyin (var-list)                  *|
+|*                      |- copyout (var-list)                  *|
+|*                      |- pcopyout (var-list)                  *|
+|*                      |- create (var-list)                  *|
+|*                      |- pcreate (var-list)                  *|
+|*                      |- present (var list )                                   *|
+|*                      |- delete (var list )                                   *|
+|*                      |- use_device (var list )                                   *|
+|*                      |- link (var list )                                   *|
+|*                      |- device_resident (var list )                                   *|
+|*                      |- self (var list )                                   *|
+|*                      |- host (var list )                                   *|
+|*                      |- device (var list )                                   *|
+|*                      |- bind (name)                                   *|
+|*                      |- bind (string )                                   *|
+|*                      |- nohost                                *|
+|*                      |- SEQ                                             *|
+|*                      |- AUTO                                             *|
+|*                      |- TILE(size-expr-list)                                             *|
+|*                      |- Independent                                             *|
+|*                      |- read                                             *|
+|*                      |- write                                             *|
+|*                      |- update                                             *|
+|*                      |- capture                                             *|
+|*                      |- COLLAPSE constant (CN_Tbl_Idx)                     *|
+|*									      *|
+|*	Not all clauses are valid for all directives.                         *|
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+static void open_acc_directive_semantics(open_acc_directive_type directive)
+
+{
+   int			attr_idx;
+   int			column;
+   expr_arg_type	exp_desc;
+   int			i;
+   int			idx;
+   int			ir_idx;
+   int			line;
+   int          	list_array[OPEN_ACC_LIST_CNT];
+   int			list_idx;
+   int			list2_idx;
+   int			list3_idx;
+   opnd_type		l_opnd;
+   boolean		ok;
+   opnd_type		opnd;
+   int			orig_sh_idx;
+   int			save_curr_stmt_sh_idx;
+   boolean		save_error_flag;
+   boolean		work_sharing_dir = FALSE;
+   long64		value;
+
+
+   TRACE (Func_Entry, "open_acc_directive_semantics", NULL);
+
+
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   save_curr_stmt_sh_idx = curr_stmt_sh_idx;
+   orig_sh_idx = curr_stmt_sh_idx;
+   save_error_flag = SH_ERR_FLG(curr_stmt_sh_idx);
+
+   list_idx = IR_IDX_L(ir_idx);
+
+   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+      list_array[i] = list_idx;
+      list_idx = IL_NEXT_LIST_IDX(list_idx);
+   }
+
+   /* process the clauses that capture an expression with create_tmp_asg */
+   /* first (before push_task_blk) so that any temps get placed on the   */
+   /* private (or shared) lists of containing parallel blocks.           */
+
+   if (open_acc_clause_allowed[directive][If_Acc_Clause]) {
+      list_idx = list_array[OPEN_ACC_IF_IDX];
+
+      /* process IF condition */
+
+      if (IL_FLD(list_idx) != NO_Tbl_Idx) {
+         COPY_OPND(opnd, IL_OPND(list_idx));
+         exp_desc.rank = 0;
+         expr_semantics(&opnd, &exp_desc);
+
+         find_opnd_line_and_column(&opnd, &line, &column);
+         if (exp_desc.type != Logical ||
+             exp_desc.rank != 0)      {
+            PRINTMSG(line, 1511, Error, column);
+         }
+
+         IL_FLD(list_idx) = AT_Tbl_Idx;
+         idx = create_tmp_asg(&opnd,
+                              &exp_desc,
+                              &l_opnd,
+                              Intent_In,
+                              FALSE,
+                              FALSE);
+         IL_IDX(list_idx) = idx;
+         IL_LINE_NUM(list_idx) = line;
+         IL_COL_NUM(list_idx) = column;
+      }
+   }
+#define OPEN_ACC_INT_EXP_SEMANTICS(ACC_CLAUSE, ACC_CLAUSE_IDX)		\
+   if (open_acc_clause_allowed[directive][ACC_CLAUSE]) {			\
+      list_idx = list_array[ACC_CLAUSE_IDX];						\
+      open_acc_int_exp_clauses_semantics(list_idx);					\
+   }
+
+   /*INTEGER EXPRESSION SEMANTICS CHECKING*/
+   OPEN_ACC_INT_EXP_SEMANTICS(Num_Gangs_Acc_Clause, OPEN_ACC_NUM_GANGS_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Num_Workers_Acc_Clause, OPEN_ACC_NUM_WORKERS_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Vector_Length_Acc_Clause, OPEN_ACC_VECTOR_LENGTH_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Async_Acc_Clause, OPEN_ACC_ASYNC_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Gang_Acc_Clause, OPEN_ACC_GANG_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Worker_Acc_Clause, OPEN_ACC_WORKER_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Vector_Acc_Clause, OPEN_ACC_VECTOR_IDX);
+   OPEN_ACC_INT_EXP_SEMANTICS(Collapse_Acc_Clause, OPEN_ACC_COLLAPSE_IDX);
+
+#define OPEN_ACC_ARRAY_REGION_SEMANTICS(ACC_CLAUSE, ACC_CLAUSE_IDX)  	\
+   if (open_acc_clause_allowed[directive][ACC_CLAUSE]) {				\
+      list_idx = list_array[ACC_CLAUSE_IDX];    						\
+      open_acc_array_region_clauses_semantics(list_idx);	  			\
+   }
+
+   /*ARRAY REGION SEMANTICS CHECKING in data directives*/
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Copy_Acc_Clause, 	OPEN_ACC_COPY_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Copyin_Acc_Clause, 	OPEN_ACC_COPYIN_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Copyout_Acc_Clause, 	OPEN_ACC_COPYOUT_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Create_Acc_Clause, 	OPEN_ACC_CREATE_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Present_Acc_Clause, 	OPEN_ACC_PRESENT_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Pcopy_Acc_Clause, 	OPEN_ACC_PCOPY_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Pcopyin_Acc_Clause, 	OPEN_ACC_PCOPYIN_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Pcopyout_Acc_Clause, OPEN_ACC_PCOPYOUT_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Pcreate_Acc_Clause, 	OPEN_ACC_PCREATE_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Delete_Acc_Clause, 	OPEN_ACC_DELETE_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Cache_Acc_Clause, 	OPEN_ACC_CACHE_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Host_Acc_Clause, 	OPEN_ACC_HOST_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Device_Acc_Clause, 	OPEN_ACC_DEVICE_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Self_Acc_Clause, 	OPEN_ACC_SELF_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Device_Resident_Acc_Clause,
+   														OPEN_ACC_DEVICE_RESIDENT_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Link_Acc_Clause, 	OPEN_ACC_LINK_IDX);
+   OPEN_ACC_ARRAY_REGION_SEMANTICS(Cache_Acc_Clause, 	OPEN_ACC_CACHE_IDX);
+
+   //Check the Wait
+   if (open_acc_clause_allowed[directive][Wait_Acc_Clause]) 
+   {
+      /* process Wait var list */
+    
+      list_idx = list_array[OPEN_ACC_WAIT_IDX];
+    
+      if (IL_FLD(list_idx) != NO_Tbl_Idx) 
+	  {    
+		 list2_idx = IL_IDX(list_idx);
+	    
+		 while (list2_idx) 
+		 {
+		    open_acc_int_exp_clauses_semantics(list2_idx);    
+		    list2_idx = IL_NEXT_LIST_IDX(list2_idx);
+		 }
+      }
+   }
+
+   if (open_acc_clause_allowed[directive][Reduction_Acc_Clause]) 
+   {
+      /* process REDUCTION var list */
+    
+      list_idx = list_array[OPEN_ACC_REDUCTION_VAR_IDX];
+    
+      if (IL_FLD(list_idx) != NO_Tbl_Idx) {
+    
+         list_idx = IL_IDX(list_idx);
+         while (list_idx) 
+		 {
+
+	    	list2_idx = IL_IDX(list_idx);
+    
+	    	while (list2_idx) 
+			{
+               attr_idx = IL_IDX(list2_idx);
+               AT_LOCKED_IN(attr_idx) = TRUE;
+
+               while (AT_ATTR_LINK(attr_idx)) 
+			   {
+                  attr_idx = AT_ATTR_LINK(attr_idx);
+                  AT_LOCKED_IN(attr_idx) = TRUE;
+               }
+
+               IL_IDX(list2_idx) = attr_idx;
+    
+               if (AT_OBJ_CLASS(attr_idx) != Data_Obj) 
+			   {
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1473, Error,
+                           IL_COL_NUM(list2_idx),
+                           AT_OBJ_NAME_PTR(attr_idx),
+			   		"REDUCTION", open_acc_dir_str[directive]);
+               }
+               else if (ATD_CLASS(attr_idx) == Constant) 
+			   {
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1473, Error,
+                           IL_COL_NUM(list2_idx),
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           "REDUCTION", open_acc_dir_str[directive]);
+               }			   
+               else if (ATD_CLASS(attr_idx) == CRI__Pointee) {
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1477, Error,
+                           IL_COL_NUM(list2_idx),
+                           AT_OBJ_NAME_PTR(attr_idx));
+               }
+               else if (TYP_TYPE(ATD_TYPE_IDX(attr_idx)) == CRI_Ptr ||
+                        TYP_TYPE(ATD_TYPE_IDX(attr_idx)) == CRI_Ch_Ptr) {
+
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1484, Error,
+                           IL_COL_NUM(list2_idx),
+                           "Cray pointer",
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           open_acc_dir_str[directive]);
+               }
+               else if (ATD_POINTER(attr_idx)) {
+
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1484, Error,
+                           IL_COL_NUM(list2_idx),
+                           "Pointer",
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           open_acc_dir_str[directive]);
+               }
+               else if (ATD_ALLOCATABLE(attr_idx)) {
+
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1484, Error,
+                           IL_COL_NUM(list2_idx),
+                           "Allocatable array",
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           open_acc_dir_str[directive]);
+               }
+               else if (ATD_CLASS(attr_idx) == Dummy_Argument   &&
+                        ATD_INTENT(attr_idx) == Intent_In) {
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1492, Error,
+                           IL_COL_NUM(list2_idx),
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           "REDUCTION");
+               }
+               else if (ATD_PURE(attr_idx)) {
+                  PRINTMSG(IL_LINE_NUM(list2_idx), 1493, Error,
+                           IL_COL_NUM(list2_idx),
+                           AT_OBJ_NAME_PTR(attr_idx),
+                           "REDUCTION");
+               }
+			 else 
+			 {
+	          ATD_TASK_REDUCTION(attr_idx) = TRUE;
+
+                if (ATD_CLASS(attr_idx) == Variable &&
+                    ATD_AUTOMATIC(attr_idx) &&
+                    ATD_AUTO_BASE_IDX(attr_idx) != NULL_IDX &&
+                    ! ATD_TASK_REDUCTION(ATD_AUTO_BASE_IDX(attr_idx))) 
+                {
+
+                     ATD_TASK_REDUCTION(ATD_AUTO_BASE_IDX(attr_idx)) = TRUE;
+
+                     NTR_IR_LIST_TBL(list3_idx);
+                     IL_PREV_LIST_IDX(IL_IDX(list_idx)) = list3_idx;
+                     IL_NEXT_LIST_IDX(list3_idx) = IL_IDX(list_idx);
+                     IL_IDX(list_idx) = list3_idx;
+                     IL_LIST_CNT(list_idx)++;
+
+                     IL_FLD(list3_idx) = AT_Tbl_Idx;
+                     IL_IDX(list3_idx) = ATD_AUTO_BASE_IDX(attr_idx);
+                     IL_LINE_NUM(list3_idx) = IL_LINE_NUM(list2_idx);
+                     IL_COL_NUM(list3_idx) = IL_COL_NUM(list2_idx);
+              }
+
+	       }
+       
+	       list2_idx = IL_NEXT_LIST_IDX(list2_idx);
+	    }
+
+            list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+         }
+      }
+   }
+   
+   curr_stmt_sh_idx = save_curr_stmt_sh_idx;
+
+   /* restore error flag on curr_stmt_sh_idx. */
+   SH_ERR_FLG(orig_sh_idx) = save_error_flag;
+
+   TRACE (Func_Exit, "open_acc_directive_semantics", NULL);
+
+   return;
+}  /* open_acc_directive_semantics */
 
 /* the following are added by jhs, 02/7/21 */
 /******************************************************************************\

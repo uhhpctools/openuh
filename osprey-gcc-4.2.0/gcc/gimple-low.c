@@ -252,6 +252,15 @@ lower_stmt (tree_stmt_iterator *tsi, struct lower_data *data)
     case OMP_CRITICAL:
     case OMP_RETURN:
     case OMP_CONTINUE:
+	case ACC_PARALLEL:
+	case ACC_KERNEL:
+	case ACC_LOOP:
+	case ACC_HOST_DATA:
+	case ACC_DATA:
+	case ACC_UPDATE:
+	case ACC_CACHE:
+	case ACC_DECLARE:
+	case ACC_WAIT:
       break;
 
     case MODIFY_EXPR:

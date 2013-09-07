@@ -429,6 +429,342 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
     }
 }
 
+/* Validate and emit code for the OpenACC directive #pragma acc loop.
+   INIT, COND, INCR, BODY are the four basic elements
+   of the loop (initialization expression, controlling predicate, increment
+   expression, body of the loop and statements to go before the loop).
+   DECL is the iteration variable.  */
+
+tree
+c_finish_acc_loop (location_t locus, tree declv, tree initv, tree condv,
+		  tree incrv, tree body)
+{
+  location_t elocus;
+  bool fail = false;
+  int i;
+
+  gcc_assert (TREE_VEC_LENGTH (declv) == TREE_VEC_LENGTH (initv));
+  gcc_assert (TREE_VEC_LENGTH (declv) == TREE_VEC_LENGTH (condv));
+  gcc_assert (TREE_VEC_LENGTH (declv) == TREE_VEC_LENGTH (incrv));
+  for (i = 0; i < TREE_VEC_LENGTH (declv); i++)
+    {
+      tree decl = TREE_VEC_ELT (declv, i);
+      tree init = TREE_VEC_ELT (initv, i);
+      tree cond = TREE_VEC_ELT (condv, i);
+      tree incr = TREE_VEC_ELT (incrv, i);
+
+      elocus = locus;
+      if (EXPR_HAS_LOCATION (init))
+	elocus = EXPR_LOCATION (init);
+
+      /* Validate the iteration variable.  */
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (decl))
+	  && TREE_CODE (TREE_TYPE (decl)) != POINTER_TYPE)
+	{
+	  error ("%Hinvalid type for iteration variable %qE", &elocus, decl);
+	  fail = true;
+	}
+
+      /* In the case of "for (int i = 0...)", init will be a decl.  It should
+	 have a DECL_INITIAL that we can turn into an assignment.  */
+      if (init == decl)
+	{
+	  elocus = DECL_SOURCE_LOCATION (decl);
+
+	  init = DECL_INITIAL (decl);
+	  if (init == NULL)
+	    {
+	      error ("%H%qE is not initialized", &elocus, decl);
+	      init = integer_zero_node;
+	      fail = true;
+	    }
+
+	  init = build_modify_expr (decl, NOP_EXPR, init);
+	  SET_EXPR_LOCATION (init, elocus);
+	}
+      gcc_assert (TREE_CODE (init) == MODIFY_EXPR);
+      gcc_assert (TREE_OPERAND (init, 0) == decl);
+
+      if (cond == NULL_TREE)
+	{
+	  error ("%Hmissing controlling predicate", &elocus);
+	  fail = true;
+	}
+      else
+	{
+	  bool cond_ok = false;
+
+	  if (EXPR_HAS_LOCATION (cond))
+	    elocus = EXPR_LOCATION (cond);
+
+	  if (TREE_CODE (cond) == LT_EXPR
+	      || TREE_CODE (cond) == LE_EXPR
+	      || TREE_CODE (cond) == GT_EXPR
+	      || TREE_CODE (cond) == GE_EXPR)
+	    {
+	      tree op0 = TREE_OPERAND (cond, 0);
+	      tree op1 = TREE_OPERAND (cond, 1);
+
+	      /* 2.5.1.  The comparison in the condition is computed in
+		 the type of DECL, otherwise the behavior is undefined.
+
+		 For example:
+		 long n; int i;
+		 i < n;
+
+		 according to ISO will be evaluated as:
+		 (long)i < n;
+
+		 We want to force:
+		 i < (int)n;  */
+	      if (TREE_CODE (op0) == NOP_EXPR
+		  && decl == TREE_OPERAND (op0, 0))
+		{
+		  TREE_OPERAND (cond, 0) = TREE_OPERAND (op0, 0);
+		  TREE_OPERAND (cond, 1)
+		    = fold_build1 (NOP_EXPR, TREE_TYPE (decl),
+				   TREE_OPERAND (cond, 1));
+		}
+	      else if (TREE_CODE (op1) == NOP_EXPR
+		       && decl == TREE_OPERAND (op1, 0))
+		{
+		  TREE_OPERAND (cond, 1) = TREE_OPERAND (op1, 0);
+		  TREE_OPERAND (cond, 0)
+		    = fold_build1 (NOP_EXPR, TREE_TYPE (decl),
+				   TREE_OPERAND (cond, 0));
+		}
+
+	      if (decl == TREE_OPERAND (cond, 0))
+		cond_ok = true;
+	      else if (decl == TREE_OPERAND (cond, 1))
+		{
+		  TREE_SET_CODE (cond,
+				 swap_tree_comparison (TREE_CODE (cond)));
+		  TREE_OPERAND (cond, 1) = TREE_OPERAND (cond, 0);
+		  TREE_OPERAND (cond, 0) = decl;
+		  cond_ok = true;
+		}
+	    }
+
+	  if (!cond_ok)
+	    {
+	      error ("%Hinvalid controlling predicate", &elocus);
+	      fail = true;
+	    }
+	}
+
+      if (incr == NULL_TREE)
+	{
+	  error ("%Hmissing increment expression", &elocus);
+	  fail = true;
+	}
+      else
+	{
+	  bool incr_ok = false;
+
+	  if (EXPR_HAS_LOCATION (incr))
+	    elocus = EXPR_LOCATION (incr);
+
+	  /* Check all the valid increment expressions: v++, v--, ++v, --v,
+	     v = v + incr, v = incr + v and v = v - incr.  */
+	  switch (TREE_CODE (incr))
+	    {
+	    case POSTINCREMENT_EXPR:
+	    case PREINCREMENT_EXPR:
+	    case POSTDECREMENT_EXPR:
+	    case PREDECREMENT_EXPR:
+	      if (TREE_OPERAND (incr, 0) != decl)
+		break;
+
+	      incr_ok = true;
+	      if (POINTER_TYPE_P (TREE_TYPE (decl)))
+		{
+		  tree t = fold_convert (sizetype, TREE_OPERAND (incr, 1));
+
+		  if (TREE_CODE (incr) == POSTDECREMENT_EXPR
+		      || TREE_CODE (incr) == PREDECREMENT_EXPR)
+		    t = fold_build1 (NEGATE_EXPR, sizetype, t);
+		  t = build2 (POINTER_PLUS_EXPR, TREE_TYPE (decl), decl, t);
+		  incr = build2 (MODIFY_EXPR, void_type_node, decl, t);
+		}
+	      break;
+
+	    case MODIFY_EXPR:
+	      if (TREE_OPERAND (incr, 0) != decl)
+		break;
+	      if (TREE_OPERAND (incr, 1) == decl)
+		break;
+	      if (TREE_CODE (TREE_OPERAND (incr, 1)) == PLUS_EXPR
+		  && (TREE_OPERAND (TREE_OPERAND (incr, 1), 0) == decl
+		      || TREE_OPERAND (TREE_OPERAND (incr, 1), 1) == decl))
+		incr_ok = true;
+	      else if ((TREE_CODE (TREE_OPERAND (incr, 1)) == MINUS_EXPR
+			|| (TREE_CODE (TREE_OPERAND (incr, 1))
+			    == POINTER_PLUS_EXPR))
+		       && TREE_OPERAND (TREE_OPERAND (incr, 1), 0) == decl)
+		incr_ok = true;
+	      else
+		{
+		  tree t = check_omp_for_incr_expr (TREE_OPERAND (incr, 1),
+						    decl);
+		  if (t != error_mark_node)
+		    {
+		      incr_ok = true;
+		      t = build2 (PLUS_EXPR, TREE_TYPE (decl), decl, t);
+		      incr = build2 (MODIFY_EXPR, void_type_node, decl, t);
+		    }
+		}
+	      break;
+
+	    default:
+	      break;
+	    }
+	  if (!incr_ok)
+	    {
+	      error ("%Hinvalid increment expression", &elocus);
+	      fail = true;
+	    }
+	}
+
+      TREE_VEC_ELT (initv, i) = init;
+      TREE_VEC_ELT (incrv, i) = incr;
+    }
+
+  if (fail)
+    return NULL;
+  else
+    {
+      tree t = make_node (ACC_LOOP);
+
+      TREE_TYPE (t) = void_type_node;
+      ACC_LOOP_INIT (t) = initv;
+      ACC_LOOP_COND (t) = condv;
+      ACC_LOOP_INCR (t) = incrv;
+      ACC_LOOP_BODY (t) = body;
+
+      SET_EXPR_LOCATION (t, locus);
+      return add_stmt (t);
+    }
+}
+
+
+
+/* Divide CLAUSES into two lists: those that apply to a parallel construct,
+   and those that apply to a work-sharing construct.  Place the results in
+   *PAR_CLAUSES and *WS_CLAUSES respectively.  In addition, add a nowait
+   clause to the work-sharing(acc loop) list.  */
+
+void
+c_split_acc_kernels_loop_clauses (tree clauses, tree *par_clauses, tree *ws_clauses)
+{
+  tree next;
+
+  *par_clauses = NULL;
+  *ws_clauses = NULL;
+
+  for (; clauses ; clauses = next)
+    {
+	    next = ACC_CLAUSE_CHAIN (clauses);
+
+	    switch (ACC_CLAUSE_CODE (clauses))
+		{
+			case ACC_CLAUSE_COLLAPSE:
+			case ACC_CLAUSE_GANG:
+			case ACC_CLAUSE_WORKER:
+			case ACC_CLAUSE_VECTOR:
+			case ACC_CLAUSE_SEQ:
+			case ACC_CLAUSE_INDEPENDENT:
+			case ACC_CLAUSE_PRIVATE:
+			case ACC_CLAUSE_REDUCTION:
+			  ACC_CLAUSE_CHAIN (clauses) = *ws_clauses;
+			  *ws_clauses = clauses;
+			  break;
+
+			case ACC_CLAUSE_IF:
+			case ACC_CLAUSE_ASYNC:
+			case ACC_CLAUSE_COPY:
+			case ACC_CLAUSE_COPYIN:
+			case ACC_CLAUSE_COPYOUT:
+			case ACC_CLAUSE_CREATE:
+			case ACC_CLAUSE_PRESENT_OR_COPY:
+			case ACC_CLAUSE_PRESENT_OR_COPYIN:
+			case ACC_CLAUSE_PRESENT_OR_COPYOUT:
+			case ACC_CLAUSE_PRESENT_OR_CREATE:
+			case ACC_CLAUSE_PRESENT:
+			case ACC_CLAUSE_DEVICEPTR:
+			case ACC_CLAUSE_PARM:
+			case ACC_CLAUSE_CONST:
+			  ACC_CLAUSE_CHAIN (clauses) = *par_clauses;
+			  *par_clauses = clauses;
+			  break;
+
+			default:
+			  gcc_unreachable ();
+		}
+    }
+}
+
+
+
+/* Divide CLAUSES into two lists: those that apply to a parallel construct,
+   and those that apply to a work-sharing construct.  Place the results in
+   *PAR_CLAUSES and *WS_CLAUSES respectively.  In addition, add a nowait
+   clause to the work-sharing list.  */
+
+void
+c_split_acc_parallel_loop_clauses (tree clauses, tree *par_clauses, tree *ws_clauses)
+{
+  tree next;
+
+  *par_clauses = NULL;
+  *ws_clauses = NULL;
+
+  for (; clauses ; clauses = next)
+    {
+	    next = ACC_CLAUSE_CHAIN (clauses);
+
+	    switch (ACC_CLAUSE_CODE (clauses))
+		{
+			case ACC_CLAUSE_COLLAPSE:
+			case ACC_CLAUSE_GANG:
+			case ACC_CLAUSE_WORKER:
+			case ACC_CLAUSE_VECTOR:
+			case ACC_CLAUSE_SEQ:
+			case ACC_CLAUSE_INDEPENDENT:
+			case ACC_CLAUSE_REDUCTION:
+			  ACC_CLAUSE_CHAIN (clauses) = *ws_clauses;
+			  *ws_clauses = clauses;
+			  break;
+
+			case ACC_CLAUSE_IF:
+			case ACC_CLAUSE_NUM_GANGS:
+			case ACC_CLAUSE_NUM_WORKERS:
+			case ACC_CLAUSE_VECTOR_LENGTH:
+			case ACC_CLAUSE_PRIVATE:
+			case ACC_CLAUSE_FIRST_PRIVATE:
+			case ACC_CLAUSE_ASYNC:
+			case ACC_CLAUSE_COPY:
+			case ACC_CLAUSE_COPYIN:
+			case ACC_CLAUSE_COPYOUT:
+			case ACC_CLAUSE_CREATE:
+			case ACC_CLAUSE_PRESENT_OR_COPY:
+			case ACC_CLAUSE_PRESENT_OR_COPYIN:
+			case ACC_CLAUSE_PRESENT_OR_COPYOUT:
+			case ACC_CLAUSE_PRESENT_OR_CREATE:
+			case ACC_CLAUSE_PRESENT:
+			case ACC_CLAUSE_DEVICEPTR:
+			case ACC_CLAUSE_PARM:
+			case ACC_CLAUSE_CONST:
+			  ACC_CLAUSE_CHAIN (clauses) = *par_clauses;
+			  *par_clauses = clauses;
+			  break;
+
+			default:
+			  gcc_unreachable ();
+		}
+    }
+}
+
 
 /* Divide CLAUSES into two lists: those that apply to a parallel construct,
    and those that apply to a work-sharing construct.  Place the results in

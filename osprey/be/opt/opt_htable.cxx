@@ -220,6 +220,45 @@ static BOOL Symbol_mp_local_in_region(BB_NODE *bb,
   }
   return FALSE;
 }
+
+static BOOL Is_Symbol_In_ACC_offload_region(BB_NODE *bb, 
+				      OPT_STAB *opt_stab, 
+				      AUX_ID aux_id) {
+  Is_True(bb->Kind() == BB_REGIONSTART,
+  	  ("Symbol_mp_local_in_region: bad bb argument"));
+  WN *wn;
+  ST *st;
+  // try whirl
+  STMT_ITER stmt_iter;
+  FOR_ALL_ELEM(wn, stmt_iter, Init(bb->Firststmt(), bb->Laststmt())) 
+  {
+    if (WN_opcode(wn) == OPC_PRAGMA && 
+	((WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_PARALLEL_BEGIN||
+	 (WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_KERNELS_BEGIN ||
+	 (WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_LOOP_BEGIN)) 
+	{
+      return TRUE;
+    }
+  }
+  // try stmtrep
+  STMTREP     *stmt;
+  STMTREP_ITER srep_iter(bb->Stmtlist());
+  FOR_ALL_NODE(stmt, srep_iter, Init()) 
+  {
+    if ( stmt->Op() == OPC_PRAGMA ) 
+	{
+      wn = stmt->Orig_wn();
+      if ((WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_PARALLEL_BEGIN ||
+	  (WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_KERNELS_BEGIN ||
+	  (WN_PRAGMA_ID)WN_pragma(wn) == WN_PRAGMA_ACC_LOOP_BEGIN) 
+	  {        
+      	return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
 #endif
 
 /* CVTL-RELATED start (correctness) */
@@ -3796,7 +3835,7 @@ STMTREP::Has_mu(void) const
     if (Bb()->Kind() == BB_REGIONSTART || Bb()->Kind() == BB_REGIONEXIT) {
       RID *rid = Bb()->Regioninfo()->Rid();
       Is_True(rid != NULL, ("STMTREP::Has_mu, NULL RID"));
-      if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid))
+      if (RID_TYPE_acc(rid) || RID_TYPE_mp(rid) || RID_TYPE_eh(rid))
 	return FALSE;
     }
   }
@@ -3810,7 +3849,7 @@ STMTREP::Has_chi(void) const
     if (Bb()->Kind() == BB_REGIONSTART || Bb()->Kind() == BB_REGIONEXIT) {
       RID *rid = Bb()->Regioninfo()->Rid();
       Is_True(rid != NULL, ("STMTREP::Has_chi, NULL RID"));
-      if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid))
+      if (RID_TYPE_acc(rid) || RID_TYPE_mp(rid) || RID_TYPE_eh(rid))
 	return FALSE;
     }
   }
@@ -4126,6 +4165,19 @@ STMTREP::Enter_lhs(CODEMAP *htable, OPT_STAB *opt_stab, COPYPROP *copyprop)
       }
       if (! is_mp_local)
 	Lhs()->Set_mp_shared();
+    }
+    if (htable->Phase() != MAINOPT_PHASE && PU_has_acc(Get_Current_PU())) {
+      BOOL is_acc_offload = FALSE;
+      if (Bb()->ACC_offload_region()) {
+	BB_NODE *regionbb = Bb();
+	if (regionbb->Kind() == BB_REGIONSTART) 
+	  is_acc_offload = Is_Symbol_In_ACC_offload_region(regionbb, opt_stab, Lhs()->Aux_id());
+	while (! is_acc_offload && 
+	       (regionbb = htable->Cfg()->Find_enclosing_acc_offload_region_bb(regionbb)) != NULL)
+	  is_acc_offload = Is_Symbol_In_ACC_offload_region(regionbb, opt_stab, Lhs()->Aux_id());
+      }
+      if (is_acc_offload)
+	Lhs()->Set_acc_offload();
     }
 #endif
 

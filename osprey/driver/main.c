@@ -146,6 +146,75 @@ static void no_args(void)
 boolean Dragon_Flag;
 #endif
 
+extern boolean compiling_acc;
+extern boolean compiling_acc_s2s;
+extern boolean compiling_cuda; //if it is true, uhcc will call nvcc to compile the cuda into ptx code
+extern boolean acc_feedback; 	//if it is true, uhcc will call ptxas to analysis the ptx code to get register usage
+extern char* nvptxas_cmd;
+extern char* nvcc_cmd;
+extern char* nvcc_path;
+extern char* native_cmd;
+extern char* native_flags;
+extern char* native_path;
+
+static void check_openacc_flags(int argc, char **argv)
+{
+	int i;
+
+    for (i = 0; i < argc; i++) 
+	{
+		if (argv[i])
+		{
+			if(!strcmp(argv[i], "-fopenacc") || !strcmp(argv[i], "-acc"))
+				compiling_acc = TRUE;
+			else if(!strcmp(argv[i], "-s2s"))
+				compiling_acc_s2s = TRUE;
+			else if(!strncmp(argv[i], "-nacmd=", 7))
+			{
+				//native compiler command: uhcc, gcc, etc.
+				native_cmd = argv[i] + 7;
+			}
+			else if(!strncmp(argv[i], "-naflags=", 9))
+			{
+				native_flags = argv[i] + 9;
+			}
+			else if(!strncmp(argv[i], "-napath=", 8))
+			{
+				native_path = argv[i] + 8;
+			}
+			else if(!strncmp(argv[i], "-nvcc", 5))
+			{
+				compiling_cuda = TRUE;
+				if(argv[i][5] == ',')
+					nvcc_cmd = argv[i] + 6;
+				else
+					nvcc_cmd = NULL;
+			}
+			else if(!strncmp(argv[i], "-accfeedback", strlen("-accfeedback")))
+			{
+					acc_feedback = TRUE;
+			}
+			else if(!strncmp(argv[i], "-nvptxas", strlen("-nvptxas")))
+			{
+				if(argv[i][strlen("-nvptxas")] == ',')
+					nvptxas_cmd= argv[i] + strlen("-nvptxas")+1;
+				else
+					nvptxas_cmd = NULL;
+			}
+			else if(!strncmp(argv[i], "-nvpath", 7))
+			{
+				if(argv[i][7] == ',')
+					nvcc_path = argv[i] + 8;
+				else
+				{
+					nvcc_path = NULL;
+					fprintf(stderr, "NVIDIA CUDA compiler should be provided with -nvccpath,PATH.\n");
+				}
+			}
+		}
+    }
+}
+
 int 
 main (int argc, char *argv[])
 {
@@ -161,7 +230,8 @@ main (int argc, char *argv[])
 	program_name = drop_path(argv[0]);	/* don't print path */
 	orig_program_name = string_copy(argv[0]);
         file_utils_set_program_name(orig_program_name);
-
+		
+	check_openacc_flags(argc, argv);
 	/* Add the contents of OPEN64_GENFLAGS to the command line */
 	#ifdef PSC_TO_OPEN64
 	append_open64_env_flags(&argc, &argv, "OPEN64_GENFLAGS");
@@ -172,6 +242,7 @@ main (int argc, char *argv[])
 	append_default_options(&argc, &argv);
 
 	save_command_line(argc, argv);		/* for prelinker    */	
+	
 	files = init_string_list();
 	file_suffixes = init_string_list();
 	feedback_files = init_string_list ();	/* for cord feedback files */
@@ -235,6 +306,22 @@ main (int argc, char *argv[])
 		  parsing_default_options = TRUE;
 		  i++;
 		  continue;
+		}
+		//they are for nvidia cuda compiler. ignore them.
+		else if(!strncmp(argv[i], "-nvcc", 5) || !strncmp(argv[i], "-nvptxas", 8))
+		{	
+		  	i++;
+			continue;
+		}
+		else if(!strncmp(argv[i], "-nvpath", 7))
+		{
+			i++;
+		  	continue;
+		}
+		else if(!strncmp(argv[i], "-nacmd", 6) || !strncmp(argv[i], "-naflags", 8) || !strncmp(argv[i], "-napath", 7))
+		{
+			i++;
+			continue;
 		}
 
 		set_current_arg_pos(i);

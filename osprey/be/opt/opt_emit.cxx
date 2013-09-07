@@ -109,6 +109,7 @@ static char *rcs_id = 	opt_emit_CXX"$Revision: 1.13 $";
 #include "opt_emit_template.h"
 #include "wssa_emitter.h"  // WSSA emitter
 #include "pu_info.h"
+#include "opt_dfa_openacc.h"
 
 #if defined(TARG_NVISA)
 // To get better loop depth comments in the ptx file
@@ -146,6 +147,8 @@ inline void
 BB_NODE::Gen_wn(EMITTER *emitter, BOOL copy_phi)
 {
   Gen_bb_wn(this, emitter);
+  if(OPT_Enable_OpenACC_Liveness_Analysis)
+  	dfa_def_use_info_bb_openacc(this);
   if (OPT_Enable_WHIRL_SSA && copy_phi &&
       Firststmt() != NULL &&
       WN_operator_is(Firststmt(), OPR_LABEL)) {
@@ -1430,7 +1433,8 @@ EMITTER::Gen_wn(BB_NODE *first_bb, BB_NODE *last_bb)
       BB_REGION *bb_region = bb->Regioninfo();
       // we want to emit MP and EH regions
       // also emit any transparent region when Preopt is called from IPA or LNO
-      if (RID_TYPE_mp(bb_region->Rid()) || RID_TYPE_eh(bb_region->Rid()) ||
+      if (RID_TYPE_mp(bb_region->Rid()) || RID_TYPE_acc(bb_region->Rid()) 
+	  	|| RID_TYPE_eh(bb_region->Rid()) ||
 	  // kludge for 7.2, see pv 457243
 	  RID_TYPE_olimit(bb_region->Rid()) || 
 #if defined(TARG_SL) //region_type_for_major
@@ -1444,6 +1448,11 @@ EMITTER::Gen_wn(BB_NODE *first_bb, BB_NODE *last_bb)
 	Push_region(Region_stack(), bb, Loc_pool());
 	BB_NODE *rstart = bb_region->Region_start();
 	if (RID_TYPE_mp(bb_region->Rid())) {
+	  rstart->Gen_wn(this); // generate pragmas
+	  // for mp, generate a new pragma block, for others use the one saved
+	  bb_region->Set_region_pragmas(Create_block_stmt(rstart,rstart));
+	}
+	else if (RID_TYPE_acc(bb_region->Rid())) {
 	  rstart->Gen_wn(this); // generate pragmas
 	  // for mp, generate a new pragma block, for others use the one saved
 	  bb_region->Set_region_pragmas(Create_block_stmt(rstart,rstart));

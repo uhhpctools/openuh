@@ -1478,8 +1478,27 @@ char		*operator_str[]		= {
             "ChangeTeam_Opr",
             "EndTeam_Opr",
 #endif
+			"Wait_Open_Acc_Opr",
+			"Update_Open_Acc_Opr",
+			"Declare_Open_Acc_Opr",
+			"Cache_Open_Acc_Opr",
+			"Atomic_Open_Acc_Opr",
+			"Endatomic_Open_Acc_Opr",
+			"Data_Open_Acc_Opr",
+			"Enddata_Open_Acc_Opr",
+			"Host_Data_Open_Acc_Opr",
+			"Endhost_Data_Open_Acc_Opr",
+			"Kernels_Open_Acc_Opr",
+			"Endkernels_Open_Acc_Opr",
+			"Parallel_Open_Acc_Opr",
+			"Endparallel_Open_Acc_Opr",
+			"Loop_Open_Acc_Opr",
+			"Endloop_Open_Acc_Opr",
+			"Enter_Data_Open_Acc_Opr",
+			"Exit_Data_Open_Acc_Opr",
+			"Routine_Open_Acc_Opr",
 
-                        "The_Last_Opr"
+            "The_Last_Opr"
 		};
 
 char		*reference_str[]	= {
@@ -2487,6 +2506,53 @@ static char *open_mp_dir_opr_str[] = {
                          "UNTIED clause",
                          "COLLAPSE clause",
 		};
+
+static char *open_acc_dir_opr_str[] = {
+                                "If Acc Clause",
+                                "Async Acc Clause", 
+                                "Private Acc Clause",
+                                "First Private Acc Clause",
+                                "Wait Acc Clause",
+                                "Copy Acc Clause",
+                                "Present Or Copy Acc Clause",
+                                "Pcopy Acc Clause",
+                                "Copyin Acc Clause",
+                                "Present Or Copyin Acc Clause",
+                                "Pcopyin Acc Clause",
+                                "Copyout Acc Clause",
+                                "Present Or Copyout Acc Clause",
+                                "Pcopyout Acc Clause",
+                                "Create Acc Clause",
+                                "Present Or Create Acc Clause",
+                                "Pcreate Acc Clause",
+                                "Present Acc Clause",
+                                "Delete Acc Clause",
+                                "Deviceptr Acc Clause",
+                                "Use Device Acc Clause",
+								"Collapse Acc Clause",
+								"Seq Acc Clause",
+								"Auto Acc Clause",
+								"Tile Acc Clause",
+								"Device Type Acc Clause",
+								"Reduction Acc Clause",
+								"Gang Acc Clause",
+								"Worker Acc Clause",
+								"Vector Acc Clause",
+								"Num Gangs Acc Clause",
+								"Num Workers Acc Clause",
+								"Vector Length Acc Clause",
+								"Independent Acc Clause",
+								"Default Acc Clause",
+                                "Read Acc Clause",
+                                "Write Acc Clause",
+                                "Update Acc Clause",
+                                "Capture Acc Clause",
+                                "Self Acc Clause",
+                                "Host Acc Clause",
+                                "Device Acc Clause",
+                                "Bind Acc Clause",
+                                "Nohost Acc Clause"
+						};
 
 static char *mp_dir_opr_str[] = {
 			"IF clause",

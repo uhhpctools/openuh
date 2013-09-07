@@ -100,7 +100,13 @@ Required_pragmas_for_region( WN * region_pragma_list )
       WN_PRAGMA_ID pragma = (WN_PRAGMA_ID)WN_pragma(stmt);
 
       switch ( pragma ) {
-	case WN_PRAGMA_COPYIN:
+	case WN_PRAGMA_COPYIN:	
+	case WN_PRAGMA_ACC_WAIT:
+	case WN_PRAGMA_ACC_UPDATE:
+	case WN_PRAGMA_ACC_DECLARE:
+	case WN_PRAGMA_ACC_CACHE:
+	case WN_PRAGMA_ACC_ENTER_DATA:
+	case WN_PRAGMA_ACC_EXIT_DATA:
 	  return TRUE;
 
 	default:

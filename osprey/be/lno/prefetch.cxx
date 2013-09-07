@@ -760,6 +760,13 @@ void Prefetch_Driver ( WN* func_nd, ARRAY_DIRECTED_GRAPH16 * ) {
 static WN* PF_Get_First_Do_Loop (WN* wn) {
   WN* tmp;
   if (OPCODE_is_leaf(WN_opcode(wn))) return NULL;
+  if(WN_opcode(wn) == OPC_REGION && REGION_is_acc(wn) == TRUE
+  	&& WN_opcode(WN_first(WN_region_pragmas(wn))) == OPC_PRAGMA
+  	&& (WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_PARALLEL_BEGIN
+  		|| WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_KERNELS_BEGIN))
+  {
+  	 return NULL;
+  }
   if (WN_opcode(wn) == OPC_DO_LOOP) return wn;
   if (WN_opcode(wn) == OPC_BLOCK) {
     WN *kid = WN_first (wn);

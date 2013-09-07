@@ -459,6 +459,36 @@ extern gs_t gs_build_2(gs_tree_code_class_t code_class,
 #define GS_OMP_MASTER_BODY              7
 
 #define GS_OMP_ORDERED_BODY             7
+/*OpenACC pragma&clause*/
+#define GS_ACC_WAIT_CLAUSES  			7
+
+#define GS_ACC_UPDATE_CLAUSES    		7
+
+#define GS_ACC_DECLARE_CLAUSES    		7 
+
+#define GS_ACC_CACHE_CLAUSES    			7
+
+#define GS_ACC_PARALLEL_BODY    		7  
+#define GS_ACC_PARALLEL_CLAUSES    		8
+
+#define GS_ACC_KERNELS_BODY      		7
+#define GS_ACC_KERNELS_CLAUSES     		8 
+
+#define GS_ACC_DATA_BODY      			7
+#define GS_ACC_DATA_CLAUSES      		8
+
+#define GS_ACC_HOSTDATA_BODY      		7
+#define GS_ACC_HOSTDATA_CLAUSES      	8
+
+#define GS_ACC_LOOP_BODY      			7
+#define GS_ACC_LOOP_CLAUSES      		8
+#define GS_ACC_LOOP_INIT                9
+#define GS_ACC_LOOP_COND                10
+#define GS_ACC_LOOP_INCR                11
+
+
+
+
 #endif
 
 /* ---- C++ ---- */
@@ -574,6 +604,31 @@ extern gs_t gs_build_2(gs_tree_code_class_t code_class,
 
 #define GS_OMP_CLAUSE_COLLAPSE_LEVEL       GS_OMP_CLAUSE_DECL
 #endif
+
+#ifdef FE_GNU_4_2_0
+/* GS_ACC_CLAUSE */
+#define GS_ACC_CLAUSE_CODE              4
+
+#define GS_ACC_CLAUSE_DECL              5
+#define GS_ACC_CLAUSE_IF_EXPR           GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_NUM_EXPR  		GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_REDUCTION_CODE    6
+#define GS_ACC_CLAUSE_NUM_GANGS_EXPR	   		GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_NUM_WORKERS_EXPR		 	GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_VECTOR_LENGTH_EXPR	   	GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_GANG_EXPR 	  			GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_WORKER_EXPR				GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_VECTOR_EXPR				GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_ASYNC_EXPR	   			GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_COLLAPSE_EXPR 	  		GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_INTEXP_EXPR 	  		GS_ACC_CLAUSE_DECL
+#define GS_ACC_CLAUSE_DATA_START 	  		6
+#define GS_ACC_CLAUSE_DATA_END 	  			7
+
+
+
+#endif
+
 /*   ==== end GS_TCC_EXCEPTIONAL fields */
 
 
@@ -1187,6 +1242,56 @@ GS_LOOKUP (gs_omp_for_cond, GS_OMP_FOR_COND)
 GS_LOOKUP (gs_omp_for_incr, GS_OMP_FOR_INCR)
 GS_LOOKUP (gs_omp_master_body, GS_OMP_MASTER_BODY)
 GS_LOOKUP (gs_omp_ordered_body, GS_OMP_ORDERED_BODY)
+/*OpenACC pragma*/
+GS_LOOKUP (gs_acc_wait_clauses, GS_ACC_WAIT_CLAUSES)
+GS_LOOKUP (gs_acc_update_clauses, GS_ACC_UPDATE_CLAUSES)  
+GS_LOOKUP (gs_acc_declare_clauses, GS_ACC_DECLARE_CLAUSES)  
+GS_LOOKUP (gs_acc_cache_clauses, GS_ACC_CACHE_CLAUSES)
+GS_LOOKUP (gs_acc_parallel_body, GS_ACC_PARALLEL_BODY) 
+GS_LOOKUP (gs_acc_parallel_clauses, GS_ACC_PARALLEL_CLAUSES)  
+GS_LOOKUP (gs_acc_kernels_body, GS_ACC_KERNELS_BODY) 
+GS_LOOKUP (gs_acc_kernels_clauses, GS_ACC_KERNELS_CLAUSES) 
+GS_LOOKUP (gs_acc_data_body, GS_ACC_DATA_BODY) 
+GS_LOOKUP (gs_acc_data_clauses, GS_ACC_DATA_CLAUSES) 
+GS_LOOKUP (gs_acc_hostdata_body, GS_ACC_HOSTDATA_BODY)  
+GS_LOOKUP (gs_acc_hostdata_clauses, GS_ACC_HOSTDATA_CLAUSES)  
+GS_LOOKUP (gs_acc_loop_body, GS_ACC_LOOP_BODY)  
+GS_LOOKUP (gs_acc_loop_clauses, GS_ACC_LOOP_CLAUSES)
+GS_LOOKUP (gs_acc_loop_init, GS_ACC_LOOP_INIT)  
+GS_LOOKUP (gs_acc_loop_cond, GS_ACC_LOOP_COND)
+GS_LOOKUP (gs_acc_loop_incr, GS_ACC_LOOP_INCR)
+	
+GS_LOOKUP (gs_acc_clause_decl, GS_ACC_CLAUSE_DECL)
+GS_LOOKUP (gs_acc_clause_data_start, GS_ACC_CLAUSE_DATA_START)
+GS_LOOKUP (gs_acc_clause_data_end, GS_ACC_CLAUSE_DATA_END)
+GS_LOOKUP (gs_acc_clause_if_expr, GS_ACC_CLAUSE_IF_EXPR)
+GS_LOOKUP (gs_acc_clause_chain, GS_TREE_CHAIN) /* ACC_CLAUSE_CHAIN */
+  
+GS_LOOKUP (gs_acc_clause_num_gangs_expr, GS_ACC_CLAUSE_NUM_GANGS_EXPR)
+GS_LOOKUP (gs_acc_clause_num_workers_expr, GS_ACC_CLAUSE_NUM_WORKERS_EXPR)
+GS_LOOKUP (gs_acc_clause_vector_length_expr, GS_ACC_CLAUSE_VECTOR_LENGTH_EXPR)
+GS_LOOKUP (gs_acc_clause_gang_expr, GS_ACC_CLAUSE_GANG_EXPR)
+GS_LOOKUP (gs_acc_clause_worker_expr, GS_ACC_CLAUSE_WORKER_EXPR)
+GS_LOOKUP (gs_acc_clause_vector_expr, GS_ACC_CLAUSE_VECTOR_EXPR)
+GS_LOOKUP (gs_acc_clause_async_expr, GS_ACC_CLAUSE_ASYNC_EXPR)
+GS_LOOKUP (gs_acc_clause_collapse_expr, GS_ACC_CLAUSE_COLLAPSE_EXPR)
+GS_LOOKUP (gs_acc_clause_intexp_expr, GS_ACC_CLAUSE_INTEXP_EXPR)
+
+
+static inline gs_code_t gs_acc_clause_reduction_code (gs_t t)
+{
+  gs_t reduction_code = gs_operand(t, GS_ACC_CLAUSE_REDUCTION_CODE);
+  return (reduction_code != (gs_t) NULL) ?
+          (gs_code_t) gs_n(reduction_code): GS_ERROR_MARK;
+}
+
+static inline gs_acc_clause_code_t gs_acc_clause_code (gs_t t)
+{
+  gs_t clause_code = gs_operand(t, GS_ACC_CLAUSE_CODE);
+  return (clause_code != (gs_t) NULL) ?
+          (gs_acc_clause_code_t) gs_n(clause_code) : GS_ACC_CLAUSE_ERROR;
+}
+
 #endif
 
 /* C++ Expr Flags+ { */

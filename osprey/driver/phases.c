@@ -154,6 +154,17 @@ boolean ldscript_file = FALSE;
 boolean Long_Long_Support = FALSE;
 boolean Float_Point_Support = FALSE;
 #endif
+boolean compiling_acc = FALSE;
+boolean compiling_acc_s2s = FALSE;
+boolean compiling_cuda = FALSE; //if it is true, uhcc will call nvcc to compile the cuda into ptx code
+boolean acc_feedback = FALSE; 
+char* nvptxas_cmd;
+int accfeedback_phase = 0;
+char* nvcc_cmd = NULL;
+char* nvcc_path = NULL;
+char* native_cmd = NULL;
+char* native_flags = NULL;
+char* native_path = NULL;
 
 extern void turn_down_opt_level (int new_olevel, char *msg);
 
@@ -289,6 +300,60 @@ add_implied_string (string_list_t *list, int iflag, int flag, phases_t phase)
 		else if (strcmp(iname, "-mp") == 0
 			 && (phase == P_spin_cc1 || phase == P_spin_cc1plus)) {
 			add_string(list, "-fopenmp");
+		}
+		else if (strcmp(iname, "-acc") == 0
+			 && (phase == P_spin_cc1 || phase == P_spin_cc1plus)) {
+			add_string(list, "-fopenacc");
+			//NOW OPENACC is source2source
+			compiling_acc = TRUE;
+		}
+		else if (strcmp(iname, "-acc") == 0 && phase == P_gcpp) {
+			add_string(list, "-D_OPENACC");
+		}
+		else if (strcmp(iname, "-acc") == 0 && (phase == P_be)) {
+			add_string(list, "-enableacc");
+			add_string(list, "-PHASE:clist");
+			add_string(list, "-CLIST:emit_nested_pu");
+		}
+		else if (strcmp(iname, "-s2s") == 0 && (phase == P_be)) {
+			add_string(list, "-s2s");
+			compiling_acc_s2s = TRUE;
+		}
+		else if (strcmp(iname, "-rdglobal") == 0 && (phase == P_be)) {
+			add_string(list, "-rdglobal");
+		}
+		else if (strcmp(iname, "-accdfa") == 0 && (phase == P_be)) {
+			add_string(list, "-accdfa");
+		}
+		else if (strcmp(iname, "-accscalar") == 0 && (phase == P_be)) {
+			add_string(list, "-accscalar");
+			return;
+		}
+		else if (strcmp(iname, "-accfeedback") == 0 && (phase == P_be)) {
+            if (accfeedback_phase == 0 && (phase == P_be)) {
+			  add_string(list, "-accfeedback:p0");
+			  return;
+		    } 
+		    else if (accfeedback_phase == 1 && (phase == P_be)) {
+			  add_string(list, "-accfeedback:p1");
+			  return;
+		    }
+		    else if (accfeedback_phase == 2 && (phase == P_be)) {
+			  add_string(list, "-accfeedback:p2");
+			  return;
+		    }
+        }
+		else if(strcmp(iname, "-accunrolling") == 0 && (phase == P_be)) {
+			add_string(list, "-accunrolling");
+			add_string(list, "-PHASE:l");
+			return;
+		}
+		else if (strcmp(iname, "-rdrolling") == 0 && (phase == P_be)) {
+			add_string(list, "-rdrolling");
+		}
+		else if (strncmp (iname, "-O", 2) == 0 && (phase == P_gcpp && compiling_acc)) 
+		{
+			return;
 		}
 		else
 			add_string(list, iname);
@@ -809,7 +874,7 @@ add_file_args_first (string_list_t *args, phases_t index)
       if (option_was_seen(O_pthread))
 	add_string(args, "-D_REENTRANT");
       #ifdef PSC_TO_OPEN64
-      if (!option_was_seen(O_no_opencc)) {
+      if (!option_was_seen(O_no_opencc) && !compiling_acc) {
 	add_string(args, "-D__OPEN64__=\"" OPEN64_FULL_VERSION "\"");
 	add_string(args, "-D__OPENCC__=" OPEN64_MAJOR_VERSION);
 	add_string(args, "-D__OPENCC_MINOR__=" OPEN64_MINOR_VERSION);
@@ -848,7 +913,7 @@ static void
 add_file_args (string_list_t *args, phases_t index)
 {
 	buffer_t buf;
-	char *temp;
+	char *temp, *temp1;
 	string_item_t *p;
 	char *count_file_name;
 	char *the_file = fix_name_by_phase(source_file, index);
@@ -976,11 +1041,11 @@ add_file_args (string_list_t *args, phases_t index)
 		
 		// Call gcc preprocessor using "gcc -E ...".
 		add_string(args, "-E");
-		if (sse2 == TRUE)
+		if (sse2 == TRUE && !compiling_acc)
 			add_string(args, "-msse2");
-		else if(sse == TRUE)
+		else if(sse == TRUE && !compiling_acc)
 			add_string(args, "-msse");
-		else if(mmx == TRUE)
+		else if(mmx == TRUE && !compiling_acc)
 			add_string(args, "-mmmx");
                 
 
@@ -1449,7 +1514,233 @@ add_file_args (string_list_t *args, phases_t index)
 		    add_string (args, "-cmds");
 		    append_string_lists (args, ipl_cmds);
 		}
-		break; 
+		break;
+	case P_nativecc:
+		if(native_flags != NULL)
+                {
+                        temp = native_flags;
+                        while(temp)
+                        {
+                                char* newloc = strchr(temp, ',');
+                                if(newloc)
+                                {
+                                        *newloc = '\0';
+                                        newloc ++;
+                                }
+                                sprintf (buf, "%s", temp);
+                                temp = newloc;
+                                add_string(args, buf);
+                        }
+                }
+		{
+			char* pname = strdup(the_file);
+			int index;
+			for ( index=strlen(pname)-1; index>=0; index-- )
+                        {
+                            if ( pname[index] == '/' ) break;   /* Don't touch directory prefixes */
+                            if ( pname[index] == '.' )
+                                {
+                              pname[index] = 0;
+                              break;
+                            }
+                        }
+                        temp = pname;
+			sprintf (buf, "%s.w2c.c", temp);
+			add_string(args, buf);
+			add_string(args, "-o");
+			sprintf (buf, "%s.o", temp);
+			add_string(args, buf);
+		}
+		break;	
+		
+	case P_nvptxas:	
+			if(nvptxas_cmd != NULL)
+			{
+				temp = nvptxas_cmd;
+				while(temp)
+				{
+					char* newloc = strchr(temp, ',');
+					if(newloc)
+					{
+						*newloc = '\0';
+						newloc ++;
+					}	
+					sprintf (buf, "%s", temp);
+					temp = newloc;
+					add_string(args, buf);
+				}
+			}
+			add_string(args, "-v");
+			{
+				char* pname = strdup(the_file);
+				int index;
+
+				for ( index=strlen(pname)-1; index>=0; index-- ) 
+				{
+				    if ( pname[index] == '/' ) break;	/* Don't touch directory prefixes */
+				    if ( pname[index] == '.' ) 
+					{
+				      pname[index] = 0;
+				      break;
+				    }
+			  	}
+				temp = pname;
+			}
+			sprintf (buf, "%s.w2c.cu", temp);
+
+			//find the ptx file
+			{
+				char* pname;
+				int index = -1;
+				if(outfile)
+				{
+					pname = strdup(outfile);
+					//char *cp = strdup(pname) + strlen(pname);
+	
+					//ptx output path
+					for ( index=strlen(pname)-1; index>=0; index-- ) 
+					{
+						if ( pname[index] == '/' )	
+						{
+						  pname[index] = 0;
+						  break;
+						}
+					}
+				}
+				if(index < 0)
+					temp = ".";
+				else
+					temp = pname;
+	
+				//ptx name
+				for ( index=strlen(buf)-1; index>=0; index-- ) 
+				{
+					if ( buf[index] == '.' ) 
+					{
+						buf[index] = 0;
+						break;
+					}
+				}
+				//in case there is no '/'
+				for ( index=strlen(buf)-1; index>=0; index-- ) 
+				{
+					if ( buf[index] == '/' ) 
+					{
+						buf[index] = 0;
+						temp1 = &buf[index+1];
+						break;	/* Don't touch directory prefixes */
+					}
+				}
+				if(index < 0)
+					temp1 = strdup(buf);
+				else
+					temp1 = strdup(temp1);
+			}
+			//add_string(args, "-o");
+			sprintf (buf, "%s/%s.ptx", temp, temp1);
+			add_string(args, buf);			
+			
+			//output the feedback information
+			//.accfeedback.txt should be at the same location as the source code
+			add_string(args, ">&");
+			//sprintf (buf, ">&.accfeedback.txt");
+			add_string(args, "./.accfeedback.txt");
+			break;
+
+	case P_nvcc:	
+		if(nvcc_cmd != NULL)
+		{
+			temp = nvcc_cmd;
+			while(temp)
+			{
+				char* newloc = strchr(temp, ',');
+				if(newloc)
+				{
+					*newloc = '\0';
+					newloc ++;
+				}	
+				sprintf (buf, "%s", temp);
+				temp = newloc;
+				add_string(args, buf);
+			}
+		}
+		add_string(args, "-ptx");
+		{
+			char* pname = strdup(the_file);
+			//char *cp = strdup(pname) + strlen(pname);
+			int index;
+
+			//while (cp != pname) {
+			//if (*cp == '/') return cp+1;
+			//--cp;
+			//}
+			//if (*cp == '/') return cp+1;
+			//temp = cp;
+			for ( index=strlen(pname)-1; index>=0; index-- ) 
+			{
+			    if ( pname[index] == '/' ) break;	/* Don't touch directory prefixes */
+			    if ( pname[index] == '.' ) 
+				{
+			      pname[index] = 0;
+			      break;
+			    }
+		  	}
+			temp = pname;
+		}
+		//temp = strcat(temp,"w2c.cu");
+		sprintf (buf, "%s.w2c.cu", temp);
+		add_string(args, buf);
+		{
+			char* pname;
+			int index = -1;
+			if(outfile)
+			{
+				pname = strdup(outfile);
+				//char *cp = strdup(pname) + strlen(pname);
+
+				//ptx output path
+				for ( index=strlen(pname)-1; index>=0; index-- ) 
+				{
+				    if ( pname[index] == '/' )  
+					{
+				      pname[index] = 0;
+				      break;
+				    }
+			  	}
+			}
+			if(index < 0)
+				temp = ".";
+			else
+				temp = pname;
+
+			//ptx name
+			for ( index=strlen(buf)-1; index>=0; index-- ) 
+			{
+			    if ( buf[index] == '.' ) 
+				{
+			      	buf[index] = 0;
+					break;
+			    }
+		  	}
+			//in case there is no '/'
+			for ( index=strlen(buf)-1; index>=0; index-- ) 
+			{
+			    if ( buf[index] == '/' ) 
+				{
+					buf[index] = 0;
+					temp1 = &buf[index+1];
+					break;	/* Don't touch directory prefixes */
+				}
+		  	}
+			if(index < 0)
+				temp1 = strdup(buf);
+			else
+				temp1 = strdup(temp1);
+		}
+		add_string(args, "-o");
+		sprintf (buf, "%s/%s.ptx", temp, temp1);
+		add_string(args, buf);
+		break;
 	case P_be:
 #if defined(TARG_NVISA)
 	case P_bec:
@@ -2092,7 +2383,11 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
                 }
                 add_string(args, "-lstdc++");
             }
-
+	    if (option_was_seen(O_acc) ||
+			option_was_seen(O_fopenacc))
+	    {
+		add_string(args, "-lopenacc");
+	    }
             if (option_was_seen (O_fprofile_arcs))
                 add_string(args, "-lgcov");    // bug 12754
 	    if (option_was_seen(O_pthread) ||
@@ -2415,10 +2710,12 @@ post_fe_phase (void)
     // from the front-end.  Bug 11325
     else if (run_inline != UNDEFINED)
       return run_inline == TRUE ? P_inline : be_phase;
+	else if(compiling_acc == TRUE)
+	  return be_phase;		
     else if (inline_t == TRUE || inline_t == UNDEFINED)
-	return P_inline;
+	  return P_inline;
     else
-	return be_phase;
+	  return be_phase;
 } /* post_fe_phase */
     
 /* If -INLINE:%s option was seen, pass it to ld if ipa run, or inline if
@@ -2700,7 +2997,15 @@ determine_phase_order (void)
 			add_phase(next_phase);
                         if (cordflag==TRUE) {
 			   next_phase = P_cord;
-			} else {
+			} 
+			/*else if(compiling_acc&&!compiling_acc_s2s)
+			{
+				//run GPU compiler to generate PTX from CUDA source, if s2s is disabled.
+				add_phase(P_nvcc);
+				add_phase(P_NONE);
+				next_phase = P_NONE;
+			}*/
+			else {
 			  add_phase(P_NONE);
 			  next_phase = P_NONE;
 			}
@@ -3372,6 +3677,7 @@ run_compiler (int argc, char *argv[])
 {
 	int i;
 	string_list_t *args;
+	string_list_t *nvcc_args;
 	boolean inst_info_updated = FALSE;
 	boolean cmd_line_updated = FALSE;
         buffer_t rii_file_name;
@@ -3413,17 +3719,26 @@ run_compiler (int argc, char *argv[])
 	set_stack_size();
 
 	for (i = 0; phase_order[i] != P_NONE; i++) {
+			if(phase_order[i] == P_be)
+				accfeedback_phase = 0;
+			acc_feedback_startpoint:				
 	        /* special case where the frontend decided that
 		   inliner should not be run */
 	        if (run_inline == FALSE &&	// bug 11325
 		    phase_order[i] == P_inline)
 		    continue;
 
+			//NOW OPENACC source2source is used, p_gas, p_gld is not allowed
+			if((phase_order[i] > P_be) 
+				&& (compiling_acc == TRUE) && compiling_acc_s2s == TRUE)
+				continue;
+
 		if (is_matching_phase(get_phase_mask(phase_order[i]), P_any_ld)) {
 			source_kind = S_o;
 			/* reset source-lang to be invoked-lang for linking */
 			source_lang = get_source_lang(source_kind);
 			run_ld ();
+			
 			if (Gen_feedback)
 			   run_pixie ();
 		} else {
@@ -3487,6 +3802,74 @@ run_compiler (int argc, char *argv[])
 #endif
 			run_phase (phase_order[i],
 				   get_full_phase_name(phase_order[i]), args);
+			//check if it is necessary to run CUDA files
+			if(phase_order[i] == P_be && compiling_cuda == TRUE)
+			{
+				char *the_file = fix_name_by_phase(source_file, P_nvcc);
+ 				char* pname = strdup(the_file);
+				int index;
+				buffer_t buf;
+				FILE* file;
+	
+				for ( index=strlen(pname)-1; index>=0; index-- ) 
+				{
+				    if ( pname[index] == '/' ) 
+					break;
+			    	    if ( pname[index] == '.' ) 
+				    {
+			      		pname[index] = 0;
+			      		break;
+			    	    }
+		  		}
+				if(compiling_acc_s2s)
+				{
+					string_list_t *nacc_args;
+					sprintf(buf, "%s.w2c.c", pname);
+                                	file = fopen(buf, "r");
+					if(file != NULL && native_path && native_cmd && native_flags)
+					{
+						fclose(file);
+						char* full_native_path = concat_strings(native_path, native_cmd);
+						nacc_args = init_string_list();
+						add_file_args (nacc_args, P_nativecc);
+						run_phase (P_nativecc, full_native_path, nacc_args);
+					}
+				}
+				sprintf(buf, "%s.w2c.cu", pname);
+				file = fopen(buf, "r");
+				if(file != NULL)
+				{
+					fclose(file);
+					if(!nvcc_path)					
+					{
+						fprintf(stderr, "NVIDIA CUDA compiler should be provided with -nvpath,PATH.\n");
+						nvcc_path = "";
+					}
+					char* full_path =concat_strings(nvcc_path, get_phase_name(P_nvcc));
+					nvcc_args = init_string_list();
+					add_file_args (nvcc_args, P_nvcc);
+					run_phase (P_nvcc, full_path, nvcc_args);
+				}
+
+				sprintf(buf, "%s.w2c.ptx", pname);
+				file = fopen(buf, "r"); 
+				if(acc_feedback==TRUE && nvcc_path != NULL && accfeedback_phase<2 && file != NULL)
+				{
+					//accfeedback_phase = 0: analysis the register usage without scalar replacement
+					//accfeedback_phase = 1: analysis the register usage with scalar replacement 
+					//					     and determine the threads setup
+					string_list_t *nvptxas_args;
+					fclose(file);
+					//the ptxas is in the same folder as nvcc
+					char* full_path =concat_strings(nvcc_path, get_phase_name(P_nvptxas));
+					nvptxas_args = init_string_list();
+					add_file_args (nvptxas_args, P_nvptxas);
+					run_phase (P_nvptxas, full_path, nvptxas_args);
+					accfeedback_phase ++;
+					goto acc_feedback_startpoint;
+				}
+			}
+			//acc_feedback_endpoint:	
                         /* undefine the environment variable
                          * DEPENDENCIES_OUTPUT after the pre-processor phase -
                          * bug 386.

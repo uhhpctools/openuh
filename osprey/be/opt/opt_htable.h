@@ -258,6 +258,7 @@ enum ISVAR_FLAG {
   					// to register size (4- or 8-bytes) via
   					// extract/compose
   ISVAR_MP_SHARED	      = 0x08,   // shared variable in MP region
+  ISVAR_ACC_OFFLOAD	      = 0x10,   // offload variable in ACC parallel/kernels region
 #endif
 };
 
@@ -868,13 +869,20 @@ public:
   BOOL Promote_to_reg_size() const {
     return u2.isvar._isvar_flags & ISVAR_PROMOTE_TO_REG_SIZE;
   }
-
+  
   void Set_mp_shared() {
     u2.isvar._isvar_flags |= ISVAR_MP_SHARED;
   }
 
   BOOL Mp_shared() const {
     return u2.isvar._isvar_flags & ISVAR_MP_SHARED;
+  }
+  void Set_acc_offload() {
+    u2.isvar._isvar_flags |= ISVAR_ACC_OFFLOAD;
+  }
+
+  BOOL acc_offload() const {
+    return u2.isvar._isvar_flags & ISVAR_ACC_OFFLOAD;
   }
 #endif
 #if defined(TARG_SL)

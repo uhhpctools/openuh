@@ -80,6 +80,9 @@
 
 
 // W2FC flag accessors..
+extern void Set_TY_is_translated_to_cuda(const TY_IDX ty) ;
+extern void Reset_TY_is_translated_to_cuda(const TY_IDX ty) ;
+extern BOOL TY_is_translated_to_cuda(const TY_IDX ty) ;
 
 extern void Set_TY_is_translated_to_c(const TY_IDX ty) ;
 extern void Reset_TY_is_translated_to_c(const TY_IDX ty) ;

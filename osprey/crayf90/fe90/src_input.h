@@ -69,7 +69,8 @@ enum	dir_prefix_values	{Cdir_Dir,
 				 Cdollar_Dir,
 				 Comp_Dir,
 				 Cdbg_Dir,
-				 Csgi_Dir};
+				 Csgi_Dir,
+				 Cacc_Dir};
 
 typedef enum dir_prefix_values	dir_prefix_type;
 

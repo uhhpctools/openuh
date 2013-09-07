@@ -56,6 +56,8 @@ extern void (*W2C_Init_p)(void);
 extern const char * (*W2C_Object_Name_p)(const ST *func_st);
 extern void (*W2C_Outfile_Fini_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Init_p)(BOOL emit_global_decls);
+extern void (*W2C_Outfile_Fini_OpenACC_p)(BOOL emit_global_decls);
+extern void (*W2C_Outfile_Init_OpenACC_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Translate_Pu_p)(WN *pu, BOOL emit_global_decls);
 extern void (*W2C_Pop_PU_p)(void);
 extern void (*W2C_Process_Command_Line_p)(INT phase_argc, const char * const phase_argv[], INT argc, const char * const argv[]);
@@ -84,6 +86,8 @@ struct W2C_INIT
       W2C_Object_Name_p = W2C_Object_Name;
       W2C_Outfile_Fini_p = W2C_Outfile_Fini;
       W2C_Outfile_Init_p = W2C_Outfile_Init;
+      W2C_Outfile_Fini_OpenACC_p = W2C_Outfile_Fini_OpenACC;
+      W2C_Outfile_Init_OpenACC_p = W2C_Outfile_Init_OpenACC;
       W2C_Outfile_Translate_Pu_p = W2C_Outfile_Translate_Pu;
       W2C_Pop_PU_p = W2C_Pop_PU;
       W2C_Process_Command_Line_p = W2C_Process_Command_Line;

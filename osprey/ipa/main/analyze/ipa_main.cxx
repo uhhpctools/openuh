@@ -1056,6 +1056,8 @@ Perform_Interprocedural_Analysis ()
       MEM_Trace ();
     }
 
+	IPA_Call_Graph->Print_Debug_Info();
+
 #ifdef DRAGON
     if(Dragon_Flag)
     {

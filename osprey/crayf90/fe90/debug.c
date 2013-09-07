@@ -3956,6 +3956,102 @@ static void  print_open_mp_dir_opr(FILE    *out_file,
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
+|*      prints list texts and what they point to that are from a              *|
+|*      open acc directive opr.                                                *|
+|*      called by dump_ir_ntry                                                *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+static void  print_open_acc_dir_opr(FILE    *out_file,
+                                   int      idx,
+                                   int      indent,
+                                   int      cnt)
+
+{
+   char shift[80];
+   char n_shift[INDENT_SIZE + 1];
+   char str[80];
+   int  i;
+
+
+   for (i = 0; i < INDENT_SIZE * indent; i++) {
+      shift[i] = ' ';
+      if (i == 79)
+         break;
+   }
+   shift[i] = '\0';
+   for (i = 0; i < INDENT_SIZE; i++) {
+      n_shift[i] = ' ';
+   }
+   n_shift[i] = '\0';
+
+   for (i = 0; i < cnt; i++) {
+
+      if (idx == NULL_IDX) {
+         break;
+      }
+
+      strcpy(str, open_acc_dir_opr_str[i]);
+
+      fprintf(out_file,"%s%-15s, idx = %d, %s",shift, str, idx,
+                                         field_str[IL_FLD(idx)]);
+
+      switch (IL_FLD(idx)) {
+         case CN_Tbl_Idx :
+         case AT_Tbl_Idx   :
+                 fprintf(out_file," line = %d col = %d\n",IL_LINE_NUM(idx),
+                                 IL_COL_NUM(idx));
+                 break;
+         case IL_Tbl_Idx  :
+                 fprintf(out_file," list cnt = %d\n", IL_LIST_CNT(idx));
+                 break;
+         default         :
+                 fprintf(out_file,"\n");
+                 break;
+      }
+
+
+      switch (IL_FLD(idx)) {
+         case NO_Tbl_Idx  :
+                 break;
+         case CN_Tbl_Idx :
+                 print_const_entry(out_file, IL_IDX(idx), indent + 1);
+                 break;
+         case AT_Tbl_Idx   :
+                 print_attr_name(out_file, IL_IDX(idx), indent + 1);
+                 break;
+         case IR_Tbl_Idx  :
+                 dump_ir_ntry(out_file, IL_IDX(idx), indent + 1);
+                 break;
+         case IL_Tbl_Idx  :
+                 print_list(out_file, IL_IDX(idx),
+                            indent + 1, IL_LIST_CNT(idx), FALSE);
+                 break;
+         case SH_Tbl_Idx  :
+                 fprintf(out_file, "%s%sstmt header idx = %d\n",shift,n_shift,
+                         IL_IDX(idx));
+                 break;
+      }
+      idx = IL_NEXT_LIST_IDX(idx);
+   }
+
+   return;
+
+} /* print_open_acc_dir_opr */
+
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
 |*      prints attr name and index.                                           *|
 |*      Used by dump_ir_ntry                                                  *|
 |*                                                                            *|
@@ -7353,6 +7449,45 @@ static void dump_ir_ntry(FILE 	*out_file,
       }
 
       print_open_mp_dir_opr(out_file, IR_IDX_L(idx),
+                            indent + 1, IR_LIST_CNT_L(idx));
+   }
+   else if (IR_OPR(idx) == Wait_Open_Acc_Opr ||
+            IR_OPR(idx) == Update_Open_Acc_Opr ||
+            IR_OPR(idx) == Declare_Open_Acc_Opr ||
+            IR_OPR(idx) == Cache_Open_Acc_Opr ||
+            IR_OPR(idx) == Atomic_Open_Acc_Opr ||
+            IR_OPR(idx) == Endatomic_Open_Acc_Opr ||
+            IR_OPR(idx) == Data_Open_Acc_Opr ||
+            IR_OPR(idx) == Enddata_Open_Acc_Opr ||
+            IR_OPR(idx) == Host_Data_Open_Acc_Opr ||
+            IR_OPR(idx) == Endhost_Data_Open_Acc_Opr ||
+            IR_OPR(idx) == Kernels_Open_Acc_Opr ||
+            IR_OPR(idx) == Endkernels_Open_Acc_Opr ||
+            IR_OPR(idx) == Parallel_Open_Acc_Opr ||
+            IR_OPR(idx) == Endparallel_Open_Acc_Opr ||
+            IR_OPR(idx) == Loop_Open_Acc_Opr ||
+            IR_OPR(idx) == Endloop_Open_Acc_Opr ||
+            IR_OPR(idx) == Enter_Data_Open_Acc_Opr ||
+            IR_OPR(idx) == Exit_Data_Open_Acc_Opr ||
+            IR_OPR(idx) == Routine_Open_Acc_Opr) {
+
+      fprintf(out_file, "%sLeft opnd is %s;", shift, field_str[IR_FLD_L(idx)]);
+
+      switch (IR_FLD_L(idx)) {
+         case CN_Tbl_Idx :
+         case AT_Tbl_Idx   :
+                 fprintf(out_file,"  line = %d, col = %d\n",IR_LINE_NUM_L(idx),
+                                 IR_COL_NUM_L(idx));
+                 break;
+         case IL_Tbl_Idx  :
+                 fprintf(out_file,"  list cnt = %d\n", IR_LIST_CNT_L(idx));
+                 break;
+         default         :
+                 fprintf(out_file,"\n");
+                 break;
+      }
+
+      print_open_acc_dir_opr(out_file, IR_IDX_L(idx),
                             indent + 1, IR_LIST_CNT_L(idx));
    }
    else {

@@ -181,6 +181,28 @@ static char Dash [] = "-";
 static BOOL Echo_Flag =	FALSE;	/* Echo command	lines */
 static BOOL Delete_IR_File = FALSE;	/* Delete SGIR file when done */
 
+BOOL g_bOpenACCS2S_flag = FALSE; //When S2S is used, some whirl generation is going to change for whirl2c/whirl2cuda
+BOOL g_bOpenACC_flag = FALSE;
+
+static void Set_OpenACCS2S_Flags(int argc, char**argv)
+{
+  for (int i = 0; i < argc; i++) 
+  {
+    char* arg = argv[i];
+	if (strcmp(arg, "-fopenacc") == 0)
+	{
+      g_bOpenACC_flag = TRUE;
+    } 
+       else if (strcmp(arg, "-acc") == 0)
+	{
+      g_bOpenACC_flag = TRUE;
+    } 
+	else if (strcmp(arg, "-s2s") == 0)
+	{
+      g_bOpenACCS2S_flag = TRUE;
+    } 
+  }
+}
 
 /* ====================================================================
  *
@@ -398,6 +420,9 @@ WGEN_Init (INT argc, char **argv, char **envp )
   Argc = argc;
   Argv = argv;
   Configure ();
+  //by daniel, for OpenACC
+  Set_OpenACCS2S_Flags(argc, argv);
+  
   IR_reader_init();
   Initialize_Symbol_Tables (TRUE);
   WGEN_Stmt_Stack_Init (); 

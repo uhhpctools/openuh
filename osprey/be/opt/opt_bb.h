@@ -635,9 +635,14 @@ enum LOOP_FLAGS {
   LOOP_HAS_MV_ALIAS    = 0x200,   // Memory references in this loop are
                                   // associated with loop multi-version
                                   // alias groups
+  LOOP_IS_ACC_LOOP    = 0x400
 };
 
 enum MP_TY { MP_REGION, MP_DOACROSS = 0x40, MP_PDO = 0x80};
+//DREGION: acc data region
+//ACCLOOP region, acc loop
+//offload region: parallel/kernels region
+enum ACC_TY { ACC_REGION, ACC_LOOP = 0x400, ACC_OFFREGION=0x800, ACC_DATAREGION=0x1000};
 
 #if defined(TARG_SL) //PARA_EXTENSION
 enum SL2_PARA_TY { SL2_PARA_REGION};
@@ -981,6 +986,8 @@ enum BB_FLAG {
   BB_SL2_PARA_REGION = 0x2000, // block is inside a SL2 parallel region
 #endif
   BB_EH_REGION = 0x4000,
+  BB_ACC_REGION = 0x8000, // block is inside a ACC region, may not offload region
+  BB_ACC_OFFLOAD_REGION = 0x10000, // block is inside a ACC region
 };
 
 #define BB_VISIT    (BB_DFORDER)
@@ -1266,6 +1273,13 @@ public:
   BOOL         MP_region(void)   const  { return (_flags & BB_MP_REGION);}
   void         Set_MP_region(void)      { _flags=(BB_FLAG)(_flags|BB_MP_REGION);}
   void         Reset_MP_region(void)    { _flags=(BB_FLAG)(_flags&~BB_MP_REGION);}
+  //By Daniel Tian, for OpenACC compiler
+  BOOL         ACC_region(void)   const  { return (_flags & BB_ACC_REGION);}
+  void         Set_ACC_region(void)      { _flags=(BB_FLAG)(_flags|BB_ACC_REGION);}
+  void         Reset_ACC_region(void)    { _flags=(BB_FLAG)(_flags&~BB_ACC_REGION);}
+  BOOL         ACC_offload_region(void)   const  { return (_flags & BB_ACC_OFFLOAD_REGION);}
+  void         Set_ACC_offload_region(void)      { _flags=(BB_FLAG)(_flags|BB_ACC_OFFLOAD_REGION);}
+  void         Reset_ACC_offload_region(void)    { _flags=(BB_FLAG)(_flags&~BB_ACC_OFFLOAD_REGION);}
 
   BOOL         EH_region(void)   const  { return (_flags & BB_EH_REGION);}
   void         Set_EH_region(void)      { _flags=(BB_FLAG)(_flags|BB_EH_REGION);}

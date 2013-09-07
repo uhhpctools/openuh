@@ -3948,6 +3948,16 @@ extern BOOL Is_Mp_Region(WN *wn)
   return FALSE;
 }
 
+extern BOOL Is_ACC_Region(WN *wn)
+{
+  if (WN_opcode(wn) == OPC_REGION) {
+    RID *rid = REGION_get_rid(wn);
+    FmtAssert(rid != NULL, ("Is_ACC_Region(): Missing rid")); 
+    if (RID_TYPE_acc(rid)) return TRUE;
+  }
+  return FALSE;
+}
+
 #ifdef KEY
 extern BOOL Is_Eh_Or_Try_Region(WN *wn)
 {
@@ -3984,6 +3994,96 @@ extern BOOL Do_Loop_Is_Mp(WN *wn)
     return TRUE; 
   return FALSE; 
 }
+
+
+static WN * Get_Enclosing_Region_node(WN *wn)
+{
+  Is_True(wn!=NULL,("Get_Enclosing_Region_ID: Null wn pointer"));
+  WN *pwn = LWN_Get_Parent(wn);
+  while (pwn && WN_operator(pwn) != OPR_REGION &&
+         WN_operator(pwn) != OPR_FUNC_ENTRY)
+    pwn = LWN_Get_Parent(pwn);
+  return pwn;
+}
+
+
+extern BOOL Is_ACC_Offloaded_Region(WN *wn)
+{
+	WN* wn_region = Get_Enclosing_Region_node(wn);
+	if(wn_region)
+	{
+	  if (!Is_ACC_Region(wn_region))
+	    return FALSE; 
+	  WN* wn_pragma = WN_first(WN_region_pragmas(wn_region));  
+	  if (wn_pragma == NULL)
+	    return FALSE;
+	  if (LWN_Get_Parent(wn) == NULL)
+	    return FALSE;
+	  if (WN_opcode(wn_pragma) == OPC_PRAGMA 
+	    && (WN_pragma(wn_pragma) != WN_PRAGMA_ACC_DATA_BEGIN))
+	    return TRUE; 
+	}
+  return FALSE; 
+}
+
+extern BOOL Do_Loop_Is_ACC(WN *wn)
+{
+  if (LWN_Get_Parent(wn) == NULL)
+    return FALSE;
+  WN* wn_region = LWN_Get_Parent(LWN_Get_Parent(wn));
+#ifdef KEY
+  if (PU_cxx_lang(Get_Current_PU()) && Is_Eh_Or_Try_Region(wn_region))
+    wn_region = LWN_Get_Parent(LWN_Get_Parent(wn_region));
+#endif
+  if (!Is_ACC_Region(wn_region))
+    return FALSE; 
+  WN* wn_pragma = WN_first(WN_region_pragmas(wn_region));  
+  if (wn_pragma == NULL)
+    return FALSE;
+  if (WN_opcode(wn_pragma) == OPC_PRAGMA 
+    && (WN_pragma(wn_pragma) == WN_PRAGMA_ACC_LOOP_BEGIN))
+    return TRUE; 
+  //DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn); 
+  //if (dli != NULL && dli->Mp_Info != NULL) 
+  //  return TRUE; 
+  return FALSE; 
+}
+
+extern BOOL Do_Loop_Is_ACC_Seq(WN *wn)
+{
+  if (LWN_Get_Parent(wn) == NULL)
+    return FALSE;
+  WN* wn_region = LWN_Get_Parent(LWN_Get_Parent(wn));
+#ifdef KEY
+  if (PU_cxx_lang(Get_Current_PU()) && Is_Eh_Or_Try_Region(wn_region))
+    wn_region = LWN_Get_Parent(LWN_Get_Parent(wn_region));
+#endif
+  if (!Is_ACC_Region(wn_region))
+    return FALSE; 
+  WN* wn_pragma = WN_first(WN_region_pragmas(wn_region));  
+  if (wn_pragma == NULL)
+    return FALSE;
+  if (WN_opcode(wn_pragma) == OPC_PRAGMA 
+    && (WN_pragma(wn_pragma) == WN_PRAGMA_ACC_LOOP_BEGIN))
+  	{
+  		wn_pragma = WN_next(wn_pragma);
+		while(wn_pragma)
+		{
+			if (WN_opcode(wn_pragma) == OPC_PRAGMA 
+    				&& (WN_pragma(wn_pragma) == WN_PRAGMA_ACC_CLAUSE_SEQ))
+			{
+				return TRUE;
+			}
+			wn_pragma = WN_next(wn_pragma);
+		}
+  	}
+    return TRUE; 
+  //DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn); 
+  //if (dli != NULL && dli->Mp_Info != NULL) 
+  //  return TRUE; 
+  return FALSE; 
+}
+
 
 extern RID * Get_Enclosing_Region_ID(WN *wn)
 {

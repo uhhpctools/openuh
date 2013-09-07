@@ -956,6 +956,7 @@ static void init_cmd_line (void)
    cmd_line_flags.disregard_all_mips		= FALSE;        /* -x SGI     */
    cmd_line_flags.disregard_all_omps		= FALSE;        /* -x omp     */
    cmd_line_flags.disregard_conditional_omp	= FALSE;        /* -x cond_.. */
+   cmd_line_flags.disregard_all_accs		= FALSE;        /* -x acc     */
    cmd_line_flags.msg_lvl_suppressed	= (msg_lvl_type) cft90_dash_m_option;
    cmd_line_flags.truncate_bits		= 0;			/* -t  0      */
    cmd_line_flags.implicit_use_idx	= NULL_IDX;
@@ -1086,6 +1087,10 @@ static void init_cmd_line (void)
    for (idx = 0; idx < (Tok_Open_Mp_Dir_End-Tok_Open_Mp_Dir_Start); idx++) {
       disregard_open_mp[idx]	= FALSE;
    }
+   /*by daniel, for OpenACC*/
+   for (idx = 0; idx < (Tok_Open_Acc_Dir_End-Tok_Open_Acc_Dir_Start); idx++) {
+      disregard_open_acc[idx]	= FALSE;
+   }
 
    /* set defaults for -u option flags */
    dump_flags.pvp_test			= 0;
@@ -1125,6 +1130,7 @@ static void init_cmd_line (void)
    dump_flags.show_cmd_line		= FALSE;
    dump_flags.mp			= FALSE;
    dump_flags.open_mp			= FALSE;
+   dump_flags.open_acc			= FALSE;
    dump_flags.dsm			= FALSE;
    dump_flags.cray_compatible		= FALSE;
    dump_flags.pack_half_word		= FALSE;
@@ -3855,6 +3861,10 @@ static void process_u_option (char *optargs)
          dump_flags.open_mp = TRUE;
          non_debug_ok		= TRUE;
       }
+      else if (EQUAL_STRS(cp, "open_acc")) {
+         dump_flags.open_acc = TRUE;
+         non_debug_ok		= TRUE;
+      }
       else if (EQUAL_STRS(cp, "dsm")) {
          dump_flags.dsm = TRUE;
          non_debug_ok		= TRUE;
@@ -4126,6 +4136,10 @@ static void process_x_option (char *optargs)
                cmd_line_flags.disregard_all_mips	= TRUE;
                cmd_line_flags.disregard_all_omps	= TRUE;
                cmd_line_flags.disregard_conditional_omp = TRUE;
+   			   cmd_line_flags.disregard_all_accs		= TRUE;        /* -x acc     */
+            }
+			else if (EQUAL_STRS(cp, "acc")) {
+               cmd_line_flags.disregard_all_accs        = TRUE;
             }
             else {
                ntr_msg_queue(0, 78, Log_Error, 0, cp, 'x', ARG_STR_ARG);
@@ -4182,7 +4196,6 @@ static void process_x_option (char *optargs)
             }
             break;
 
-
          default:
             ntr_msg_queue(0, 78, Log_Error, 0, cp, 'x', ARG_STR_ARG);
             break;
@@ -4206,6 +4219,10 @@ static void process_x_option (char *optargs)
              tok_type < Tok_Open_Mp_Dir_End) {
             disregard_open_mp[tok_type - Tok_Open_Mp_Dir_Start]	= TRUE;
          }
+         if (tok_type > Tok_Open_Acc_Dir_Start && 
+             tok_type < Tok_Open_Acc_Dir_End) {
+            disregard_open_mp[tok_type - Tok_Open_Acc_Dir_Start]	= TRUE;
+         }
 
          /* We need to handle the legal directives, vs the tokens that */
          /* are actually parameters to the directives.   We also need  */
@@ -4219,6 +4236,82 @@ static void process_x_option (char *optargs)
          switch(tok_type) {
 
          /* Handle duplicate directive names, by setting the bit for them all */
+		 case Tok_Open_Acc_Dir_Atomic :
+            disregard_open_acc[Tok_Open_Acc_Dir_Atomic - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endatomic :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endatomic - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Data :
+            disregard_open_acc[Tok_Open_Acc_Dir_Data - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Enddata :
+            disregard_open_acc[Tok_Open_Acc_Dir_Enddata - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Kernels :
+            disregard_open_acc[Tok_Open_Acc_Dir_Kernels - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endkernels :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endkernels - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Parallel :
+            disregard_open_acc[Tok_Open_Acc_Dir_Parallel - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endparallel :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endparallel - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Loop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Loop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endloop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endloop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Host_Data :
+            disregard_open_acc[Tok_Open_Acc_Dir_Host_Data - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endhost_Data :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endhost_Data - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Wait :
+            disregard_open_acc[Tok_Open_Acc_Dir_Wait - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Declare :
+            disregard_open_acc[Tok_Open_Acc_Dir_Declare - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Update :
+            disregard_open_acc[Tok_Open_Acc_Dir_Update - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Cache :
+            disregard_open_acc[Tok_Open_Acc_Dir_Cache - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Enter_Data:
+            disregard_open_acc[Tok_Open_Acc_Dir_Enter_Data - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Exit_Data :
+            disregard_open_acc[Tok_Open_Acc_Dir_Exit_Data - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Routine :
+            disregard_open_acc[Tok_Open_Acc_Dir_Routine - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
 
          case Tok_Dir_Barrier :          /* CRAFT dir - obsolete */
          case Tok_SGI_Dir_Barrier :
@@ -4995,6 +5088,7 @@ static	void	dump_help_screen(void)
              "no_dim_pad       Do not pad out missing dimensions.",
              "no_mod_output    Do not do module output.",
              "open_mp          Allow recognition of the open mp directives.",
+             "open_acc          Allow recognition of the open acc directives.",
              "pack_half_word   Turn on component packing for sdefault32",
              "preinline=       Create an inline template for this file.",
              "pvp_test         Used for meta development.",
@@ -5248,8 +5342,14 @@ static	void	process_a_option(char	*optargs)
           *optargs = EOS;
           *optargs++;
       }
+	  
+	  
+	  if (EQUAL_STRS(cp, "cc")) {
+	  	dump_flags.open_acc = TRUE;
+         //non_debug_ok		= TRUE;
+			}
 
-      if (EQUAL_STRS(cp, "lign32")) {
+      else if (EQUAL_STRS(cp, "lign32")) {
 
 #        if defined(_ACCEPT_CMD_align)
             cmd_line_flags.align32	= TRUE;
@@ -6925,6 +7025,7 @@ static void dump_options(void)
     "         no_dim_pad       Do not pad out missing dimensions.",
     "         no_mod_output    Do not do module output.",
     "         open_mp          Allow recognition of the open mp directives.",
+    "         open_acc          Allow recognition of the open acc directives.",
     "         pack_half_word   Turn on component packing for sdefault32",
     "         preinline=       Create an inline template for this file.",
     "         pvp_test         Used for meta development.",

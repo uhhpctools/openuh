@@ -416,7 +416,7 @@ typedef enum REGION_KIND {
   REGION_KIND_MASK       = 0xb,
   REGION_KIND_GUARD      = 0xc,
   REGION_KIND_NULL_CLEANUP = 0xd, /* cleanup with empty destructor */
-
+  REGION_KIND_ACC	 = 0x10,		/*For OpenACC region*/
 #if defined(TARG_SL) //fork_joint
   /* add following region kind for main thread and minor thread */ 
   REGION_KIND_MINOR = 0x11,  /* minor thread */ 
@@ -458,8 +458,8 @@ public:
                 REGION_KIND region_kind: 7;
                 mUINT32     region_id  :25;
 #else 
-                REGION_KIND region_kind: 4;
-                mUINT32     region_id  :28;
+                REGION_KIND region_kind: 8;
+                mUINT32     region_id  :24;
 #endif 
             } region;
 	 } ua;
@@ -1073,12 +1073,17 @@ inline char * WN_asm_input_constraint(const WN *wn) { return ST_name(WN_st(wn));
 
 #define WN_PRAGMA_COMPILER_GENERATED 0x01
 #define WN_PRAGMA_OMP                0x02
+#define WN_PRAGMA_ACC                0x04
 
 #define WN_pragma_compiler_generated(x) ((WN_pragma_flags(x))&WN_PRAGMA_COMPILER_GENERATED)
 #define WN_set_pragma_compiler_generated(x) ((WN_pragma_flags(x))|=WN_PRAGMA_COMPILER_GENERATED)
 #define WN_pragma_omp(x) ((WN_pragma_flags(x)) & WN_PRAGMA_OMP)
 #define WN_set_pragma_omp(x) ((WN_pragma_flags(x)) |= WN_PRAGMA_OMP)
 #define WN_reset_pragma_omp(x) ((WN_pragma_flags(x)) &= ~(WN_PRAGMA_OMP))
+
+#define WN_pragma_acc(x) ((WN_pragma_flags(x)) & WN_PRAGMA_ACC)
+#define WN_set_pragma_acc(x) ((WN_pragma_flags(x)) |= WN_PRAGMA_ACC)
+#define WN_reset_pragma_acc(x) ((WN_pragma_flags(x)) &= ~(WN_PRAGMA_ACC))
 
 /* for FUNC_ENTRY: */
 #define WN_entry_name(x)    WN_st_idx(x)
@@ -1562,6 +1567,8 @@ inline INT64 WN_Get_Linenum(const WN *wn)
 					      relationships */
 #define WN_CALL_REPLACE_BY_JUMP 0x1000	/* replace call by jump in thunks */
 #define WN_CALL_IS_VIRTUAL      0x2000  /* it is a virtual function call */
+	 
+#define WN_CALL_IS_KERNEL_LAUNCH      0x4000  /* it is a virtual function call */
 
      /* Some flags make promises when they're clear, and others when
       * they're set. The following macro tells us which are
@@ -1574,6 +1581,11 @@ inline INT64 WN_Get_Linenum(const WN *wn)
 				 WN_CALL_NON_DATA_REF | \
 				 WN_CALL_NON_PARM_REF | \
 				 WN_CALL_PARM_REF)
+	
+	
+#define WN_Call_IS_KERNEL_LAUNCH(x)		(WN_call_flag(x) & WN_CALL_IS_KERNEL_LAUNCH)
+#define WN_Set_Call_IS_KERNEL_LAUNCH(x)	(WN_call_flag(x) |= WN_CALL_IS_KERNEL_LAUNCH)
+#define WN_Reset_Call_IS_KERNEL_LAUNCH(x)	(WN_call_flag(x) &= ~WN_CALL_IS_KERNEL_LAUNCH)
 
 #define WN_Call_Never_Return(x)		(WN_call_flag(x) & WN_CALL_NEVER_RETURN)
 #define WN_Set_Call_Never_Return(x)	(WN_call_flag(x) |= WN_CALL_NEVER_RETURN)

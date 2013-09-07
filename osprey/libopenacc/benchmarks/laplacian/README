@@ -1,0 +1,14 @@
+This application is sensitive to the order of floating point operations.
+So to compare the OpenACC result with serial result easily, disable FMA.
+This can be done by passing -ta=nvidia,nofma to PGI compiler. 
+
+To commpile with PGI compiler:
+> make CC=pgcc
+
+To compile with OpenUH-ACC compiler:
+> uhcc -I../../ laplacian.c -fopenacc -v
+> ./ptx_compile.sh
+> make
+
+To run the program:
+> ./run.sh

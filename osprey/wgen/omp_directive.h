@@ -97,6 +97,30 @@ extern int check_do_loop_for(gs_t init_expr, gs_t logical_expr, gs_t incr_expr);
 extern void expand_start_do_loop (gs_t, gs_t, gs_t);
 extern void expand_end_do_loop(void);
 
+extern void expand_acc_start_parallel(gs_t stmt);
+//extern void expand_acc_start_loop(gs_t stmt);
+extern void expand_acc_start_forloop (gs_t stmt);
+extern void expand_acc_start_kernel(gs_t stmt);
+extern void expand_acc_start_host_data(gs_t stmt);
+extern void expand_acc_start_data(gs_t stmt);
+extern void expand_acc_start_update(gs_t stmt);
+extern void expand_acc_start_cache(gs_t stmt);
+extern void expand_acc_start_declare(gs_t stmt);
+extern void expand_acc_start_wait(gs_t stmt);
+extern void expand_acc_end_parallel (void);
+//extern void expand_acc_end_loop (void);
+extern void expand_acc_end_forloop (void);
+extern void expand_acc_end_kernel (void);
+extern void expand_acc_end_host_data (void);
+extern void expand_acc_end_data (void);
+extern void expand_acc_end_update (void);
+extern void expand_acc_end_cache (void);
+extern void expand_acc_end_declare (void);
+extern void expand_acc_end_wait (void);
+extern void expand_acc_start_do_loop (gs_t, gs_t, gs_t);
+extern void expand_acc_end_do_loop(void);
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _LANGUAGE_C_PLUS_PLUS

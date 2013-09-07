@@ -559,6 +559,83 @@ typedef enum {
 	Context_Omp_Affinity,
         Context_Omp_Nest } CONTEXT_TYPE;
 
+	/*OpenACC part, by daniel tian, UH*/
+	typedef enum {
+		ACC_Context_None,
+		ACC_Context_DeviceType,
+		ACC_Context_Private,
+		ACC_Context_FirstPrivate,
+		ACC_Context_Copy,
+		ACC_Context_PCopy,
+		ACC_Context_Copyin,
+		ACC_Context_PCopyin,
+		ACC_Context_Copyout,
+		ACC_Context_PCopyout,
+		ACC_Context_Create,
+		ACC_Context_PCreate,
+		ACC_Context_Present,
+		ACC_Context_DevicePtr,
+		ACC_Context_Delete,
+		ACC_Context_Reduction,
+		ACC_Context_Reduction_ADD,
+		ACC_Context_Reduction_MUL,
+		ACC_Context_Reduction_MAX,
+		ACC_Context_Reduction_MIN,
+		ACC_Context_Reduction_IAND,
+		ACC_Context_Reduction_IOR,
+		ACC_Context_Reduction_IEOR,
+		ACC_Context_Reduction_AND,
+		ACC_Context_Reduction_OR,
+		ACC_Context_Reduction_EQV,
+		ACC_Context_Reduction_NEQV,
+		ACC_Context_Array_Start,
+		ACC_Context_Array_Length,
+		ACC_Context_Num_Gangs,
+		ACC_Context_Num_Workers,
+		ACC_Context_Vector_Length,
+		ACC_Context_Wait,
+		ACC_Context_Async,
+		ACC_Context_Default,
+		ACC_Context_Use_Device,
+		ACC_Context_Collapse,
+		ACC_Context_Gang,
+		ACC_Context_Worker,
+		ACC_Context_Vector,
+		ACC_Context_Seq,
+		ACC_Context_Auto,
+		ACC_Context_Tile,
+		ACC_Context_Independent,
+		ACC_Context_Read,
+		ACC_Context_Write,
+		ACC_Context_Update,
+		ACC_Context_Capture,
+		ACC_Context_Link,
+		ACC_Context_Device_Resident,
+		ACC_Context_Self,
+		ACC_Context_Host,
+		ACC_Context_Device,
+		ACC_Context_Bind,
+		ACC_Context_Nohost,
+		ACC_Context_If,
+		ACC_Context_Cache
+	} ACC_CONTEXT_TYPE;
+
+	typedef enum ACC_CONTEXT_DIR {
+		ACC_Context_Dir_None,
+		ACC_Context_Dir_Parallel,
+		ACC_Context_Dir_Kernels,
+		ACC_Context_Dir_Loop,
+		ACC_Context_Dir_Declare,
+		ACC_Context_Dir_Cache,		
+		ACC_Context_Dir_Routine,
+		ACC_Context_Dir_Data,	
+		ACC_Context_Dir_Enter_Data,	
+		ACC_Context_Dir_Exit_Data,		
+		ACC_Context_Dir_Atomic,
+		ACC_Context_Dir_Update,	
+		ACC_Context_Dir_Wait
+	}ACC_CONTEXT_DIR;
+
 typedef enum {
         Unknown_Table,
 	Basic,
@@ -1151,6 +1228,16 @@ extern void  fei_endguard       	  ( INT32 task_x,
                                  	    INT32 guard_num,
                                  	    INT32 lineno );
 extern INTPTR fei_task_var        	  ( INTPTR sym_idx, INT32 context );
+
+extern void   fei_acc_defaut_boundary_pragma( INTPTR	sym_idx);
+extern void   fei_acc_dope_pragma( INTPTR	sym_idx);
+
+extern INTPTR fei_acc_region_var	  ( INTPTR	sym_idx, INT32	context);
+extern INTPTR fei_acc_region_array_clauses( INTPTR sym_idx, INT32	context, INT32 section_num);
+extern void   fei_acc_region_array_start_calibration( INTPTR sym_idx, int idim);
+extern void   fei_acc_boundary_pragma(INT32 context);
+extern void   fei_acc_create_int_exp_pragma(INT32 context);
+
 extern INT32 fei_task_wait       	  ( INT32 point, INT32 span );
 extern INT32 fei_task_send       	  ( INT32 point, INT32 task_if_idx );
 extern INT32 fei_mpp_master      	  ( INT32 lineno );
@@ -1228,6 +1315,21 @@ extern void  fei_atomic_open_mp           ( void );
 extern void  fei_task_open_mp             ( INTPTR task_if_idx, INT32 defaultt, INT32 untied );
 extern void  fei_endtask_open_mp          ( void );
 extern void  fei_endparallelsections_open_mp( void );
+extern void  fei_parallel_kernels_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
+extern void  fei_enter_exit_data_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
+extern void  fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
+extern void  fei_data_open_acc();
+extern void  fei_host_data_open_acc();
+extern void  fei_cache_update_wait_declare_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
+extern void  fei_atomic_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) ;
+
+extern void  fei_endatomic_open_acc     ( void );
+extern void  fei_endparallel_open_acc     ( void );
+extern void  fei_endkernels_open_acc  ( void );
+extern void  fei_endloop_open_acc  ( void );
+extern void  fei_enddata_open_acc  ( void );
+extern void  fei_endhost_data_open_acc  ( void );
+
 extern void  fei_fetch_and_add            ( TYPE type );
 extern void  fei_fetch_and_sub            ( TYPE type );
 extern void  fei_fetch_and_xor            ( TYPE type );
@@ -1414,6 +1516,17 @@ extern void  fei_atand           	  ( TYPE type );
 extern void  fei_cos             	  ( TYPE type );
 extern void  fei_cosd            	  ( TYPE type );
 extern void  fei_cosh            	  ( TYPE type );
+extern void  fei_cuda_cos          ( TYPE type );
+extern void  fei_cuda_cosh         ( TYPE type );
+extern void  fei_cuda_exp             	  ( TYPE type );
+extern void  fei_cuda_log             	  ( TYPE type );
+extern void  fei_cuda_log10           	  ( TYPE type );
+extern void  fei_cuda_sin             	  ( TYPE type );
+extern void  fei_cuda_sinh              ( TYPE type ); 
+extern void  fei_cuda_tan             	  ( TYPE type );
+extern void  fei_cuda_tanh            	  ( TYPE type );
+extern void  fei_cuda_atan            	  ( TYPE type );
+extern void  fei_cuda_atan2           ( TYPE type );
 extern void  fei_exp             	  ( TYPE type );
 extern void  fei_log             	  ( TYPE type );
 extern void  fei_log10           	  ( TYPE type );

@@ -298,6 +298,10 @@ static const char *W2C_File_Extension[W2C_NUM_FILES] =
    ".w2c.h",   /* .h output file */
    ".w2c.c",   /* .c output file */
    ".w2c.loc",  /* .loc output file */
+   ".w2c.cu",  /* .cu output file */
+   ".w2c.cu.h",  /* .cu.h output file used by OpenACC */
+   ".w2c.cl",  /* .cu output file */
+   ".w2c.cl.h",  /* .cu.h output file used by OpenACC */
 #ifdef COMPILE_UPC
    ".global_data.c", /* initialization input file */
 #endif // TODO:Liao
@@ -331,12 +335,15 @@ static BOOL        W2C_Initialized = FALSE;
 static CONTEXT     Global_Context = INIT_CONTEXT;
 static const char *W2C_Progname = "";
 static const char *W2C_File_Name[W2C_NUM_FILES] = 
-                                          {NULL, NULL, NULL, NULL};
+                                          {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 static BOOL        File_Is_Created[W2C_NUM_FILES] = 
-                                          {FALSE, FALSE, FALSE, FALSE};
+                                          {FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
 //TODO                                          {FALSE, FALSE, FALSE, FALSE, FALSE};
 static MEM_POOL     W2C_Parent_Pool;
 
+static BOOL b_OpenACCS2S = FALSE;
+
+const char* current_file_name = NULL;
 /* External data set through command-line options */
 FILE *W2C_File[W2C_NUM_FILES] = {NULL, NULL, NULL, NULL};
 BOOL  W2C_Enabled = TRUE;           /* Invoke W2C */
@@ -455,10 +462,11 @@ Process_Filename_Options(const char *src_filename, const char *irb_filename)
     * appropriately.
     */
    fname = Last_Pathname_Component(filename);
+   current_file_name = filename;
    if ( W2C_File_Name[W2C_DOTH_FILE] == NULL ) {
      if ( W2C_File_Name[W2C_DOTC_FILE] == NULL ) {
        W2C_File_Name[W2C_DOTH_FILE] = 
-	 New_Extension ( fname, W2C_Extension(W2C_DOTH_FILE) );
+	 New_Extension ( filename, W2C_Extension(W2C_DOTH_FILE) );
      }
      else {
        /* create from dotc file name */
@@ -468,8 +476,23 @@ Process_Filename_Options(const char *src_filename, const char *irb_filename)
    }
    if ( W2C_File_Name[W2C_DOTC_FILE] == NULL ) {
       W2C_File_Name[W2C_DOTC_FILE] = 
-	 New_Extension ( fname, W2C_Extension(W2C_DOTC_FILE) );
+	 New_Extension ( filename, W2C_Extension(W2C_DOTC_FILE) );
    }
+   
+   if ( W2C_File_Name[W2C_GPU_FILE] == NULL ) {
+      W2C_File_Name[W2C_GPU_FILE] = 
+	 New_Extension ( filename, W2C_Extension(W2C_GPU_FILE) );
+   }
+   
+   if ( W2C_File_Name[W2C_CL_FILE] == NULL ) {
+      W2C_File_Name[W2C_CL_FILE] = 
+	 New_Extension ( filename, W2C_Extension(W2C_CL_FILE) );
+   }
+   /*if ( W2C_File_Name[W2C_GPUH_FILE] == NULL ) {
+      W2C_File_Name[W2C_GPUH_FILE] = 
+	 New_Extension ( fname, W2C_Extension(W2C_GPUH_FILE) );
+   }*/
+   
    if (W2C_File_Name[W2C_LOC_FILE] == NULL)
    {
       if (List_Cite)
@@ -555,12 +578,75 @@ Open_W2c_Output_File(W2C_FILE_KIND kind)
    {
       if (File_Is_Created[kind])
       {
-	 W2C_File[kind] = Open_Append_File(W2C_File_Name[kind]);
+	 	W2C_File[kind] = Open_Append_File(W2C_File_Name[kind]);
       }
       else
       {
-	 W2C_File[kind] = Open_Create_File(W2C_File_Name[kind]);
-	 File_Is_Created[kind] = TRUE;
+		 W2C_File[kind] = Open_Create_File(W2C_File_Name[kind]);
+		 File_Is_Created[kind] = TRUE;
+		 if(kind == W2C_GPU_FILE)//W2C_File_Name[W2C_GPUH_FILE]
+		 {						
+		 	//char szIncFilename[256];
+			//sprintf(szIncFilename, "#include<%s>\n", W2C_File_Name[W2C_GPUH_FILE]);
+		 	//Write_String(W2C_File[W2C_GPU_FILE], NULL, szIncFilename);
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockIdx_x blockIdx.x\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockIdx_y blockIdx.y\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockIdx_z blockIdx.z\n");
+			
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_threadIdx_x threadIdx.x\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_threadIdx_y threadIdx.y\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_threadIdx_z threadIdx.z\n");
+			
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockdim_x blockDim.x\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockdim_y blockDim.y\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_blockdim_z blockDim.z\n");
+			
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_griddim_x gridDim.x\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_griddim_y gridDim.y\n");
+		 	Write_String(W2C_File[kind], NULL/* No srcpos map */,
+	 							"#define __nv50_griddim_z gridDim.z\n");
+		 }
+		 else if(kind == W2C_CL_FILE)
+		 {
+			Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockIdx_x get_group_id(0)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockIdx_y get_group_id(1)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockIdx_z get_group_id(2)\n");
+
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_threadIdx_x get_local_id(0)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_threadIdx_y get_local_id(1)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_threadIdx_z get_local_id(2)\n");
+
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockdim_x get_local_size(0)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockdim_y get_local_size(1)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_blockdim_z get_local_size(2)\n");
+
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_griddim_x get_num_groups(0)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_griddim_y get_num_groups(1)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __nv50_griddim_z get_num_groups(2)\n");
+		 }
       }
    } /* if (!files_are_open) */
 } /* Open_W2c_Output_File */
@@ -792,6 +878,8 @@ W2C_Process_Command_Line (INT phase_argc, const char * const phase_argv[],
    W2C_File_Name[W2C_DOTH_FILE] = CLIST_doth_filename;
    W2C_File_Name[W2C_DOTC_FILE] = CLIST_dotc_filename;
    W2C_File_Name[W2C_LOC_FILE] = CLIST_loc_filename;
+   W2C_File_Name[W2C_GPU_FILE] = CLIST_cuda_filename;
+   W2C_File_Name[W2C_CL_FILE] = CLIST_cl_filename;
    W2C_Enabled = CLIST_enabled;
    W2C_Verbose = CLIST_verbose;
    W2C_No_Pragmas = CLIST_no_pragmas;
@@ -1187,7 +1275,7 @@ W2C_Fini(void)
  *
  * =================================================================
  */
-
+#define MAX_INCLUDE_FILENAME (256)
 void
 W2C_Outfile_Init(BOOL emit_global_decls)
 {
@@ -1200,6 +1288,10 @@ W2C_Outfile_Init(BOOL emit_global_decls)
     * interface.
     */
    time_t systime;
+   FILE *Incfile;
+   char strline[MAX_INCLUDE_FILENAME];
+   
+   Incfile = fopen(".accinclist", "rt");
 
    if (W2C_Outfile_Initialized)
       return; /* Already initialized */
@@ -1235,6 +1327,9 @@ W2C_Outfile_Init(BOOL emit_global_decls)
     */
    Begin_New_Locations_File();
    Open_W2c_Output_File(W2C_DOTC_FILE);
+   //Open_W2c_Output_File(W2C_GPUH_FILE);/
+   //if(LANG_Enable_CXX_Openacc)   	
+   //	 Open_W2c_Output_File(W2C_GPU_FILE);
 
    /* Write out a header-comment into the whirl2c generated 
     * source file.
@@ -1263,12 +1358,25 @@ W2C_Outfile_Init(BOOL emit_global_decls)
 
       /* Include the .h file in the .c file */
       Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
-		   "/* Include file-level type and variable decls */\n"
-		   "#include \"");
+		   "/* Include file-level type and variable decls */\n");
       Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
-		   W2C_File_Name[W2C_DOTH_FILE]);
-      Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
-		   "\"\n\n");
+		   "#include <alloca.h>\n");
+      //Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+	  //  "\"\n\n");
+		//This code was add by daniel for OpenACC
+		if(Incfile)
+		{
+			while(fgets(strline, MAX_INCLUDE_FILENAME, Incfile))
+			{
+				Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE]/* No srcpos map */,
+	 							strline);
+				//printf("%s\n", strline);
+			}
+		}
+		//Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE]/* No srcpos map */,
+	 	//						"#include<stdio.h>\n");
+		//Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE]/* No srcpos map */,
+	 	//						"#include<stdlib.h>\n");
 #ifdef COMPILE_UPC //TODO, Liao, for include system headers and others
       if(Compile_Upc) 
 	/* Include <whirl2c.h> in the .h file */
@@ -1335,11 +1443,51 @@ W2C_Outfile_Init(BOOL emit_global_decls)
    }
 
    if (emit_global_decls)
+   	{   	  
+      WN2C_translate_file_scope_defs(Global_Context);
       WN2C_translate_structured_types();
+   	}
 
    W2C_Outfile_Initialized = TRUE;
+   b_OpenACCS2S = TRUE;
+   //fclose(Incfile);
+   //remove(".accinclist");
 
 } /* W2C_Outfile_Init */
+
+
+void
+W2C_Outfile_Init_OpenACC(BOOL emit_global_decls)
+{
+   /* Initialize the various whirl2c subcomponents.  It is not
+    * always desirable to open a .h file for global declarations,
+    * and this can be suppressed (no global declarations will be
+    * emitted) by passing emit_global_decls=FALSE.  For even more
+    * control over the W2C translation process, use the lower-level
+    * translation routines, instead of this more abstract
+    * interface.
+    */
+   time_t systime;
+   FILE *Incfile;
+   char strline[MAX_INCLUDE_FILENAME];
+   
+   Incfile = fopen(".accinclist", "rt");
+
+   if (W2C_Outfile_Initialized)
+      return; /* Already initialized */
+
+   W2C_Outfile_Initialized = TRUE;
+   
+
+   /* Initialize the whirl2c modules!
+    */
+   if (!W2C_Initialized)
+      W2C_Init();
+
+   W2C_Outfile_Initialized = TRUE;
+   b_OpenACCS2S = FALSE;
+} /* W2C_Outfile_Init */
+
 
 void
 W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
@@ -1357,22 +1505,43 @@ W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
    Is_True(WN_opcode(pu) == OPC_FUNC_ENTRY, 
 	   ("Invalid opcode for W2C_Outfile_Translate_Pu()"));
 
-   /* Make sure all necessary output files are open.
-    */
-   Continue_Locations_File();
-   Open_W2c_Output_File(W2C_DOTC_FILE);
-   if (emit_global_decls)
-      Open_W2c_Output_File(W2C_DOTH_FILE);
-
    if (W2C_Emit_Nested_PUs && !W2C_Lower_Fortran)
-      lower_actions = LOWER_MP;
+      lower_actions = LOWER_MP | LOWER_ACC;
    else if (!W2C_Emit_Nested_PUs && W2C_Lower_Fortran)
       lower_actions = LOWER_IO_STATEMENT | LOWER_INTRINSIC;
    else if(W2C_Emit_Nested_PUs && W2C_Lower_Fortran)
-      lower_actions = LOWER_MP | LOWER_IO_STATEMENT | LOWER_INTRINSIC;
+      lower_actions = LOWER_MP | LOWER_ACC | LOWER_IO_STATEMENT | LOWER_INTRINSIC;
 
    if (lower_actions != LOWER_NULL)
       pu = WN_Lower(pu, lower_actions, NULL, "W2C Lowering");
+
+   /* Make sure all necessary output files are open.
+    */   
+   isGPUKernelFunc = PU_acc(Get_Current_PU());
+   isGPUKernelFunc = isGPUKernelFunc || PU_acc_routine(Get_Current_PU());
+   //if it is not GPU function and it is not in source2source solution, just return.
+   if(!isGPUKernelFunc&&!b_OpenACCS2S)
+   	{
+   		return;
+   	}
+   isGPUOpenCLKernelFunc = PU_acc_opencl(Get_Current_PU());
+   
+   Continue_Locations_File();
+   if(b_OpenACCS2S)
+   {
+	   Open_W2c_Output_File(W2C_DOTC_FILE);
+	   if (emit_global_decls)
+	      Open_W2c_Output_File(W2C_DOTH_FILE);
+   }
+   
+   if(isGPUKernelFunc)
+   {
+   		if(isGPUOpenCLKernelFunc)
+	   		Open_W2c_Output_File(W2C_CL_FILE);
+	   	else
+	   		Open_W2c_Output_File(W2C_GPU_FILE);
+   }
+   //Open_W2c_Output_File(W2C_GPUH_FILE);
 
    Start_Timer (T_W2C_CU);
    Set_Error_Phase ("WHIRL To C");
@@ -1431,9 +1600,21 @@ W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
  } 
 #endif
    (void)WN2C_translate(tokens, pu, Global_Context);
-   Write_And_Reclaim_Tokens(W2C_File[W2C_DOTC_FILE], 
+   if(!isGPUKernelFunc)
+   		Write_And_Reclaim_Tokens(W2C_File[W2C_DOTC_FILE], 
 			    W2C_File[W2C_LOC_FILE], 
 			    &tokens);
+   else
+   	{
+   		if(isGPUOpenCLKernelFunc)			
+   			Write_And_Reclaim_Tokens(W2C_File[W2C_CL_FILE], 
+			    W2C_File[W2C_LOC_FILE], 
+			    &tokens);
+		else
+   			Write_And_Reclaim_Tokens(W2C_File[W2C_GPU_FILE], 
+			    W2C_File[W2C_LOC_FILE], 
+			    &tokens);
+   	}
 
    if (!pu_is_pushed)
       W2C_Pop_PU();
@@ -1471,7 +1652,7 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
    {
       TOKEN_BUFFER tokens = New_Token_Buffer();
 
-      WN2C_translate_file_scope_defs(Global_Context);
+      //WN2C_translate_file_scope_defs(Global_Context);
 
       ST2C_Define_Common_Blocks(tokens, Global_Context);
 #ifndef COMPILE_UPC
@@ -1492,6 +1673,9 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
    Close_W2c_Output_File(W2C_LOC_FILE);
    Close_W2c_Output_File(W2C_DOTH_FILE);
    Close_W2c_Output_File(W2C_DOTC_FILE);
+   Close_W2c_Output_File(W2C_GPU_FILE);   
+   Close_W2c_Output_File(W2C_CL_FILE);
+   //Close_W2c_Output_File(W2C_GPUH_FILE);
 
  /*  move a nested PU back to its parent's scope, by Liao */
  // TODO: add a new sub option within CLIST to activate this 
@@ -1507,6 +1691,40 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
     */
    W2C_Outfile_Initialized = FALSE;
    W2C_Fini(); /* Sets W2C_Initialized to FALSE */
+
+} /* W2C_Outfile_Fini */
+
+
+void
+W2C_Outfile_Fini_OpenACC(BOOL emit_global_decls)
+{
+   /* This finalization must be complete enough to allow repeated
+    * invocations of whirl2c during the same process life-time.
+    */
+   const char *loc_fname = W2C_File_Name[W2C_LOC_FILE];
+
+   if (!Check_Outfile_Initialized("W2C_Outfile_Fini"))
+      return;
+   
+   Close_W2c_Output_File(W2C_GPU_FILE);
+   Close_W2c_Output_File(W2C_CL_FILE);
+   //Close_W2c_Output_File(W2C_GPUH_FILE);
+
+ /*  move a nested PU back to its parent's scope, by Liao */
+ // TODO: add a new sub option within CLIST to activate this 
+ /*
+ if (W2C_Emit_Nested_PUs) {
+    TextProcessor tproc(W2C_File_Name[W2C_DOTC_FILE]);
+    tproc.process();
+    tproc.Output (W2C_File_Name[W2C_DOTC_FILE]);
+    }
+ */
+   /* All files must be closed before doing a partial 
+    * finalization, except W2C_LOC_FILE.
+    */
+   W2C_Outfile_Initialized = FALSE;
+   W2C_Fini(); /* Sets W2C_Initialized to FALSE */
+
 } /* W2C_Outfile_Fini */
 
 

@@ -60,6 +60,9 @@ static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_directive.h $";
 #endif /* _KEEP_RCS_ID */
 
 extern int parallel_do_count;
+extern int acc_doloop_count;
+extern BOOL acc_offload_region;
+
   /* marks the next n do loop as parallel loops */
 
 extern WN *

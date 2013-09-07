@@ -202,5 +202,6 @@ public:
 
 
 extern PREOPT_PHASES Preopt_Current_Phase;
+extern BOOL OPT_Enable_OpenACC_Liveness_Analysis;
 
 #endif  // opt_main_INCLUDED

@@ -626,6 +626,7 @@ REGION_LEVEL RID_preopt_level(INT phase)
     case PREOPT_DUONLY_PHASE:	return RL_DU_PREOPT;
     case PREOPT_PHASE:		return RL_PREOPT;
     case MAINOPT_PHASE:		return RL_MAINOPT;
+    case PREOPT_OPENACC_LIVENESS:		return RL_LIVENESS_ACC;
   }
   Is_True(FALSE,("RID_preopt_level, Preopt called by unknown phase"));
   return RL_UNKNOWN; /* to satisfy compiler */
@@ -1812,6 +1813,22 @@ BOOL REGION_is_mp(WN * wn)
   return WN_region_kind(wn) == REGION_KIND_MP;
 }
 
+
+/* REGION_KIND_ACC is not a mask */
+BOOL REGION_is_acc(WN * wn)
+{
+#ifdef Is_True_On
+  if (WN_region_kind(wn) == REGION_KIND_ACC) {
+    RID *rid = REGION_get_rid(wn);
+    if (rid) 
+      Is_True(RID_TYPE_acc(rid), 
+      			("REGION_is_acc, region type kind inconsistency"));
+  }
+#endif
+  return WN_region_kind(wn) == REGION_KIND_ACC;
+}
+
+
 #if defined(TARG_SL)
 /* REGION_KIND_MP is not a mask */
 BOOL REGION_is_sl2_para(WN * wn)
@@ -1866,7 +1883,9 @@ REGION_KIND REGION_type_to_kind(RID *rid)
   if (RID_type(rid) & RID_TYPE_guard)
     return REGION_KIND_GUARD;
   if (RID_type(rid) & RID_TYPE_null_cleanup)
-    return REGION_KIND_NULL_CLEANUP;
+    return REGION_KIND_NULL_CLEANUP;  
+  if (RID_type(rid) & RID_TYPE_acc)
+    return REGION_KIND_ACC;
   Is_True(FALSE,("REGION_type_to_kind, unknown RID type"));
   return REGION_KIND_PRAGMA; /* to satisfy compiler */
 }
@@ -1900,43 +1919,48 @@ void REGION_kind_to_type(WN *wn, RID *rid)
       }
   } else { /* not EH */
     switch (WN_region_kind(wn)) {
-      case REGION_KIND_PRAGMA:
-	RID_TYPE_pragma_Set(rid);
-	break;
-      case REGION_KIND_FUNC_ENTRY:
-	RID_TYPE_pragma_Set(rid);
-	break;
-      case REGION_KIND_LOOP:
-	RID_TYPE_loop_Set(rid);
-	break;
-      case REGION_KIND_OLIMIT:
-	RID_TYPE_olimit_Set(rid);
-	break;
-      case REGION_KIND_MP:
-        Is_True(REGION_is_mp(wn), ("REGION_kind_to_type, internal error"));
-	RID_TYPE_mp_Set(rid);
-	break;
-      case REGION_KIND_RPI:
-	RID_TYPE_rpi_Set(rid);
-	break;
-      case REGION_KIND_COLD:
-	RID_TYPE_cold_Set(rid);
-	break;
-      case REGION_KIND_SWP:
-	RID_TYPE_swp_Set(rid);
-	break;
+    case REGION_KIND_PRAGMA:
+		RID_TYPE_pragma_Set(rid);
+		break;
+    case REGION_KIND_FUNC_ENTRY:
+		RID_TYPE_pragma_Set(rid);
+		break;
+    case REGION_KIND_LOOP:
+		RID_TYPE_loop_Set(rid);
+		break;
+    case REGION_KIND_OLIMIT:
+		RID_TYPE_olimit_Set(rid);
+		break;
+    case REGION_KIND_MP:
+	    Is_True(REGION_is_mp(wn), ("REGION_kind_to_type, internal error, in region mp"));
+		RID_TYPE_mp_Set(rid);
+		break;
+    case REGION_KIND_ACC:
+	    Is_True(REGION_is_acc(wn), ("REGION_kind_to_type, internal error, in region acc"));
+		RID_TYPE_acc_Set(rid);
+		ACC_FLAGS_loop_unrolled_Reset(rid);
+		break;
+    case REGION_KIND_RPI:
+		RID_TYPE_rpi_Set(rid);
+		break;
+    case REGION_KIND_COLD:
+		RID_TYPE_cold_Set(rid);
+		break;
+    case REGION_KIND_SWP:
+		RID_TYPE_swp_Set(rid);
+		break;
 #ifdef TARG_SL //fork_joint
-      case REGION_KIND_MINOR:
-	RID_TYPE_minor_Set(rid);
-	break;
+    case REGION_KIND_MINOR:
+		RID_TYPE_minor_Set(rid);
+		break;
 	case REGION_KIND_MAJOR:
-	RID_TYPE_major_Set(rid);
-	break;
+		RID_TYPE_major_Set(rid);
+		break;
 #endif 
 	
-      default:
-	Is_True(FALSE,("REGION_kind_to_type, unknown kind"));
-	break;
+    default:
+		Is_True(FALSE,("REGION_kind_to_type, unknown kind"));
+		break;
     }
   }
 }

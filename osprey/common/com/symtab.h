@@ -90,6 +90,7 @@
 //----------------------------------------------------------------------
 // ST
 //----------------------------------------------------------------------
+extern BOOL F90_ST_Has_Dope_Vector(ST *st);
 
 inline ST*
 New_ST (SYMTAB_IDX level)
@@ -125,6 +126,7 @@ ST_Init (ST* st, STR_IDX n, ST_CLASS sc, ST_SCLASS stc, ST_EXPORT exp,
     st->pad = 0;
 #endif
     st->vtable_ty_idx = 0;
+	st->src_fname_idx = 0;
 }
 
 inline void
@@ -354,6 +356,7 @@ TY_Init (TY& ty, UINT64 s, TY_KIND k, TYPE_ID t, STR_IDX n)
     ty.name_idx = n;
     ty.u2.etype = 0;
     ty.vtable = 0;
+	ty.src_fname_idx = 0;
 } // TY_Init
 
 inline UINT32

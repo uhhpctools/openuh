@@ -952,7 +952,10 @@ extern tree c_finish_omp_atomic (enum tree_code, tree, tree);
 extern void c_finish_omp_flush (void);
 extern void c_finish_omp_taskwait (void);
 extern tree c_finish_omp_for (location_t, tree, tree, tree, tree, tree, tree);
+extern tree c_finish_acc_loop (location_t, tree, tree, tree, tree, tree);
 extern void c_split_parallel_clauses (tree, tree *, tree *);
+extern void c_split_acc_parallel_loop_clauses (tree clauses, tree *par_clauses, tree *ws_clauses);
+extern void c_split_acc_kernels_loop_clauses (tree clauses, tree *par_clauses, tree *ws_clauses);
 extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
 
 /* Not in c-omp.c; provided by the front end.  */

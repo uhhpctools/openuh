@@ -181,7 +181,9 @@
 #include "isr.h"
 #endif
 #include "wn_mp.h"    // for Verify_No_MP()
+#include "wn_acc.h"    // for Verify_No_MP()
 #include "comp_decl.h"
+#include "wn_tree_util.h"
 
 // added by Liao, for possible IR manipulation at driver level
 #include "symtab.h"
@@ -455,8 +457,9 @@ load_components (INT argc, char **argv)
 #endif
       CG_Process_Command_Line (phase_argc, phase_argv, argc, argv);
     }
-
-    if (Run_wopt || Run_preopt || Run_lno || Run_autopar) {
+	//if we need do the acc offload region analysis, load opt.so
+    if (Run_wopt || Run_preopt || Run_lno || Run_autopar || 
+			(Enable_UHACCFlag&&(1<<UHACC_ENABLE_DFA_OFFLOAD_REGION))) {
       Get_Phase_Args (PHASE_WOPT, &phase_argc, &phase_argv);
 #if !defined(BUILD_FAST_BIN)
       load_so ("wopt.so", WOPT_Path, Show_Progress);
@@ -537,12 +540,17 @@ Phase_Init (void)
     if ( Opt_Level > 0 ) /* run VHO at -O1 and above */
         Vho_Init ();
     if (Run_w2c)
-	W2C_Outfile_Init (TRUE/*emit_global_decls*/);
+	{
+		if(run_ACCS2S)
+			W2C_Outfile_Init (TRUE);
+		else
+			W2C_Outfile_Init_OpenACC(TRUE);
+    }
     if (Run_w2f)
 	W2F_Outfile_Init ();
     if ((Run_lno || Run_preopt) && !Run_cg && !Run_wopt)
 	need_lno_output = TRUE;
-    if (Run_wopt && !Run_cg)
+    if (Run_wopt && !Run_cg && !run_ACCS2S)
 	need_wopt_output = TRUE;
 
     if (Run_ipl) {
@@ -604,7 +612,13 @@ Phase_Fini (void)
 
     /* Always finish w2c and w2f first */
     if (Run_w2c)
-	W2C_Outfile_Fini (TRUE/*emit_global_decls*/);
+	{
+		if(run_ACCS2S)
+			W2C_Outfile_Fini (TRUE);
+		else
+			W2C_Outfile_Fini_OpenACC(TRUE);
+    }
+	
     if (Run_w2f)
 	W2F_Outfile_Fini ();
 
@@ -956,6 +970,11 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
     
     /* Only run w2c and w2f on top-level PUs, unless otherwise requested.
      */
+     //Added by daniel tian, for OpenACC
+     	 //DONT OUTPUT external source code.
+	 if(strcmp(Src_File_Name, ST_sfname(WN_st(pu))))
+	 	return;
+
     if (Run_w2c && !Run_w2fc_early) {
       // Liao, add -CLIST:before_cg to control whirl2c before CG after wopt
       if (!W2C_Should_Before_CG()) { // the order of two IF matters here!
@@ -963,6 +982,15 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
           if (Cur_PU_Feedback)
             W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
           W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+	  //if source2source translation enabled, the offload acc rountine function 
+	  //have to be generated into two copies:CPU and Accelerator version.
+	  if(PU_acc_routine(Get_Current_PU())&&run_ACCS2S)
+	  {
+		Clear_PU_acc_routine(Get_Current_PU());
+		W2C_Outfile_Translate_Pu(pu, TRUE);
+		//set back
+		Set_PU_acc_routine(Get_Current_PU());
+	  }
         }
       }
     }
@@ -1417,6 +1445,216 @@ static void Update_EHRegion_Inito (WN *pu) {
   Update_EHRegion_Inito_Used (pu);
 }
 
+
+/*Only the Dynamic array require further transformation*/
+static BOOL WN2C_Need_ArrayNeedTranslation(const WN* wn_array)
+{
+	OPERATOR opr = WN_operator(wn_array);
+	if(opr != OPR_ARRAY)
+		return FALSE;
+	
+	int idim = WN_num_dim(wn_array);
+	if(idim <= 1)
+		return FALSE;
+	int ii = 0;
+	WN* wn_offset = NULL;
+	WN* wn_base = WN_array_base(wn_array) ;
+	if(!WN_has_sym(wn_base))
+		return FALSE;
+	ST* st_base = WN_st(wn_base);
+	TY_IDX ty = ST_type(st_base);
+	//if it is an dynamic array, usually, the ty is a pointer and it points an array
+	if(TY_kind(ty) == KIND_POINTER && TY_kind(TY_pointed(ty))==KIND_ARRAY)
+	{
+		TY_IDX ty_array = TY_pointed(ty);
+		//BOOL bconst_Lbnd = ARB_stride_var(TY_arb(ty_array));
+		BOOL bconst_ubnd = ARB_const_ubnd(TY_arb(ty_array));
+		BOOL bconst_stride = ARB_const_stride(TY_arb(ty_array));
+		//if both ubnd and stride are both const, no necessary to do transformation.
+		if(bconst_stride && bconst_ubnd)
+			return FALSE;
+		else
+			return TRUE;
+	}
+	//not an dynamic array, I don't care at this time.
+	else
+		return FALSE;
+}
+
+
+static WN* WN2C_Transform_DynamicArray2AddressAccess(WN* wn_array)
+{
+	WN* tree = wn_array;
+	
+  	OPCODE op;
+  	OPERATOR opr;
+  	op = WN_opcode(tree);
+  	opr = OPCODE_operator(op);
+	
+	if (opr == OPR_ARRAY && WN_num_dim(tree)>1) 
+    {
+		int idim = WN_num_dim(tree);
+		int ii = 0;
+		WN* wn_offset = NULL;
+		WN* wn_base = WN_array_base(tree) ;
+		//WN* wn_dimInOne = NULL;;
+		//ST* new_sym = WN_st(wn_base);
+		UINT32 esize = WN_element_size(tree);
+		//TY_IDX ty = ty_elem;
+		//if(new_sym)
+		{
+			WN* wn_ldidbase = WN_COPY_Tree(wn_base);
+			//WN_Ldid(Pointer_type, 0, new_sym, ST_type(new_sym));
+			TYPE_ID mtype_base_id = WN_rtype(wn_ldidbase);
+			for(ii=0; ii<idim-1; ii++)
+			{
+				WN* wn_index = WN_array_index(tree, ii);
+				wn_index = WN_COPY_Tree(wn_index);
+				int iii = ii;
+				while(iii<idim-1)
+				{
+					WN* wn_dim = WN_array_dim(tree, iii+1);
+					if(WN_rtype(wn_dim) != mtype_base_id)
+					{
+						wn_dim = WN_CreateExp1(OPCODE_make_op(OPR_CVT, mtype_base_id, 
+										WN_rtype(wn_dim)), WN_COPY_Tree(wn_dim));						
+					}
+					if(WN_rtype(wn_index) != mtype_base_id)
+					{
+						wn_index = WN_CreateExp1(OPCODE_make_op(OPR_CVT, mtype_base_id, 
+										WN_rtype(wn_index)), WN_COPY_Tree(wn_index));	
+					}
+					wn_index = WN_Binary(OPR_MPY, 
+									mtype_base_id, 
+									wn_index, 
+									wn_dim);
+					iii ++;
+				}
+				if(wn_offset)
+					wn_offset = WN_Binary(OPR_ADD, 
+								mtype_base_id, 
+								wn_offset, 
+								wn_index);
+				else
+					wn_offset = wn_index;
+			}
+			WN* wn_index = WN_array_index(tree, ii);
+			if(WN_rtype(wn_index) != mtype_base_id)
+			{
+				   wn_index = WN_CreateExp1(OPCODE_make_op(OPR_CVT, mtype_base_id, 
+				   					WN_rtype(wn_index)), WN_COPY_Tree(wn_index));
+			}
+
+			if(wn_offset)
+				wn_offset = WN_Binary(OPR_ADD, 
+							WN_rtype(wn_index), 
+							wn_index, 
+							wn_offset);
+			else
+				wn_offset = WN_COPY_Tree(wn_index);
+			wn_offset = WN_Binary(OPR_MPY, 
+						mtype_base_id, 
+						wn_offset, 
+						WN_Intconst(mtype_base_id, esize));
+			WN* newtree = WN_Binary(OPR_ADD, 
+						mtype_base_id, 
+						wn_offset, 
+						wn_ldidbase);
+			WN_DELETE_Tree(tree);
+			tree = (newtree);
+			return tree;
+		}
+	  }
+	return NULL;
+}
+
+
+static WN *
+ACC_Lower_MultiDynamicArray (WN * tree)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  WN *r;
+  WN *temp;
+  ST *old_sym;
+  WN_OFFSET old_offset;
+
+  /* Ignore NULL subtrees. */
+
+  if (tree == NULL)
+    return (tree);
+
+  /* Initialization. */
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+  /* Look for and replace any nodes referencing localized symbols */  
+  if (opr == OPR_ARRAY) 
+  {
+  	if(!WN2C_Need_ArrayNeedTranslation(tree))
+		return tree;
+	WN* newtree = WN2C_Transform_DynamicArray2AddressAccess(tree);
+	if(newtree)
+		tree = newtree;
+	else
+		Is_True(FALSE, ("dynamic array lower crash!"));
+  }
+  else if (opr == OPC_REGION && REGION_is_acc(tree)) 
+  {
+      
+
+    WN *wtmp = WN_first(WN_region_pragmas(tree));
+    WN_PRAGMA_ID wid = (WN_PRAGMA_ID) WN_pragma(WN_first(WN_region_pragmas(tree)));
+	//leave the kernels/parallel region to acc lower phases.
+	if((wid == WN_PRAGMA_ACC_KERNELS_BEGIN)|| (wid == WN_PRAGMA_ACC_PARALLEL_BEGIN))
+		return tree;	
+  }
+
+  /* Walk all children */
+  if (op == OPC_BLOCK) 
+  {
+    r = WN_first(tree);
+    while (r) 
+	{ // localize each node in block
+      r = ACC_Lower_MultiDynamicArray ( r);
+      if (WN_prev(r) == NULL)
+        WN_first(tree) = r;
+      if (WN_next(r) == NULL)
+        WN_last(tree) = r;
+
+      r = WN_next(r);
+      
+   }
+  }
+  else 
+  {
+    for (i=0; i < WN_kid_count(tree); i++)
+    {
+      WN_kid(tree, i) = ACC_Lower_MultiDynamicArray ( WN_kid(tree, i));
+    }
+  }
+  return (tree);
+}   
+
+
+static void dump_array(WN* pu)
+{
+	WN_TREE_ITER<POST_ORDER> tree_iter(pu);
+	while (tree_iter != LAST_POST_ORDER_ITER)
+	{
+		WN* wn = tree_iter.Wn();
+		if (WN_operator(wn) == OPR_ARRAY) 
+		{
+			if(WN2C_Need_ArrayNeedTranslation(wn))
+				fdump_tree(stdout, wn);
+		}
+		tree_iter ++;
+	}
+
+}
+
 static void
 Backend_Processing (PU_Info *current_pu, WN *pu)
 {
@@ -1433,9 +1671,28 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 	    done_first_pu = TRUE;
 	}
     }
+	//dump_array(pu);
 
+	if(run_ACCS2S)
+		ACC_Lower_MultiDynamicArray(pu);
+	//if both isOpenACCRegion and hasOpenACCRegion is true
+	//it means this function is offloaded accelerator kernel function.
+	//if only hasOpenACCRegion is true, it means this is general function which includes acc regions.
+  BOOL isOpenACCRegion = PU_acc(Get_Current_PU());
+  BOOL hasOpenACCRegion = PU_has_acc(Get_Current_PU());
+
+  if(hasOpenACCRegion)
+  	Early_MP_Processing = TRUE;
+  
 #ifdef KEY
     BOOL need_options_pop = FALSE;
+
+	//basically, this is for fortran dope processing before DFA
+	if((PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG) 
+			&& hasOpenACCRegion)
+	{
+		pu = VH_OpenACC_Lower(pu, LOWER_ACC_VH);
+	}
 
     // process any PU level options pragmas
     WN *block = WN_func_pragmas(pu); 
@@ -1461,9 +1718,13 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
         Is_True(WHIRL_Return_Val_On && WHIRL_Mldid_Mstid_On,
 	        ("-INTERNAL:return_val and -INTERNAL:mldid_mstid must be on the same time"));
 	pu = WN_Lower (pu, LOWER_RETURN_VAL, NULL,
-		       "RETURN_VAL & MLDID/MSTID lowering");
+		       "RETURN_VAL lowering");
+	if(run_ACCS2S)
+		pu = WN_Lower(pu, LOWER_MLDID_MSTID, NULL, 
+			"MLDID/MSTID lowering");
+	   
     }
-
+	
 #ifdef KEY // bug 9171
     if (Run_autopar && Early_MP_Processing) {
       Early_MP_Processing = FALSE;
@@ -1513,12 +1774,13 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
     }
     Set_Error_Phase ( "LNO Processing" );
 
-    if (Run_lno || Run_Distr_Array || Run_preopt || Run_autopar) {
+    if ((!isOpenACCRegion) && (Run_lno || Run_Distr_Array || Run_preopt || Run_autopar)) {
 #ifdef KEY // to avoid assertion in PU that represents file-scope asm statement
 	if (! (WN_operator(pu) == OPR_FUNC_ENTRY && 
 	       ST_asm_function_st(*WN_st(pu)))) 
 #endif
-	pu = LNO_Processing (current_pu, pu);/* make -O0, -O1, -O2 a bit faster*/
+	if(!isOpenACCRegion)
+		pu = LNO_Processing (current_pu, pu);/* make -O0, -O1, -O2 a bit faster*/
 #ifndef KEY 
 	// Bug 7283 - the following code cannot handle the case where multiple
 	// fields of struct are used in a region. Only the field pointed to by
@@ -1530,7 +1792,23 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 
     /* First round output (.N file, w2c, w2f, etc.) */
     Set_Error_Phase ( "Post LNO Processing" );
+	/*********************************************/
+	/*If there is OpenACC offload region, liveness analysis have to be done before lower.*/
+	/*if this is the kernel function, there is no necessary to call liveness analysis*/
+	if(!isOpenACCRegion && hasOpenACCRegion && 
+			(Enable_UHACCFlag&&(1<<UHACC_ENABLE_DFA_OFFLOAD_REGION)))
+	{
+		struct DU_MANAGER *du_mgr;
+	    struct ALIAS_MANAGER *al_mgr;
+
+	    MEM_POOL_Push (&MEM_local_pool);
+		du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
+		al_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr, pu);
+		pu = Pre_Optimizer(PREOPT_OPENACC_LIVENESS, pu, du_mgr, al_mgr);
+	    MEM_POOL_Pop (&MEM_local_pool);
+	}
     Post_LNO_Processing (current_pu, pu);
+	if(isOpenACCRegion) return;
     if (!Run_wopt && !Run_cg) return;
 
     /* TODO: Can we push this to a later back-end stage? */
@@ -1585,6 +1863,14 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
         extern void Post_MP_Processing (WN *);
         Post_MP_Processing (PU_Info_tree_ptr(Current_PU_Info));
 #endif
+        WB_LWR_Terminate();
+    }
+	
+    BOOL has_acc = PU_has_acc (Get_Current_PU ());
+    if (has_acc) {
+		Set_Error_Phase ( "ACC Lowering" );
+        WB_LWR_Initialize(pu, NULL);
+		pu = WN_Lower (pu, LOWER_ACC, NULL, "Before ACC Lowering");
         WB_LWR_Terminate();
     }
 
@@ -1864,6 +2150,7 @@ Preprocess_PU (PU_Info *current_pu)
     Current_pu = &PU_Info_pu(current_pu);
     CURRENT_SYMTAB = PU_lexical_level(*Current_pu);
     if ((PU_is_nested_func(*Current_pu) && PU_mp(*Current_pu)) ||
+        (PU_is_nested_func(*Current_pu) && PU_acc(*Current_pu)) || 
         Is_Set_PU_Info_flags(current_pu, PU_IS_DRA_CLONE)) {
       is_mp_nested_pu = TRUE;
       // hack to restore nested PU's symtab
@@ -2120,7 +2407,8 @@ Preorder_Process_PUs (PU_Info *current_pu)
   BOOL orig_run_preopt = Run_preopt;
   BOOL orig_run_wopt = Run_wopt;
   BOOL orig_olimit_opt = Olimit_opt;
-
+  BOOL isOpenACCRegion;
+  BOOL backup_run_cg;
   WN *pu;
 #ifdef TARG_X8664
   if (!Force_Frame_Pointer_Set)
@@ -2143,6 +2431,12 @@ Preorder_Process_PUs (PU_Info *current_pu)
   Start_Timer(T_BE_PU_CU);
 
   pu = Preprocess_PU(current_pu);
+  isOpenACCRegion = PU_acc(Get_Current_PU());
+  backup_run_cg = Run_cg;
+  if(isOpenACCRegion == TRUE)
+  {
+  	Run_cg = FALSE;
+  }
 
   // Quick! Before anyone risks creating any PREGs in the back end,
   // register the back end's PREG table with the main PREG table so
@@ -2218,6 +2512,11 @@ Preorder_Process_PUs (PU_Info *current_pu)
   }
 
   Postprocess_PU (current_pu);
+  
+  if(isOpenACCRegion == TRUE)
+  {
+  	Run_cg = backup_run_cg;
+  }
 } /* Preorder_Process_PUs */
 
 static void Print_Tlog_Header(INT argc, char **argv)
@@ -2338,7 +2637,10 @@ main (INT argc, char **argv)
 
   Preconfigure ();
   Process_Command_Line (argc, argv);
-
+  //added by daniel, if OpenACC source2source is adopted, disable CG.
+  if(run_ACCS2S&&Enable_UHACC)
+  	Run_cg = FALSE;
+  
   if (Inhibit_EH_opt && Opt_Level > 1) Opt_Level = 1;
   Reset_Timers ();
   Start_Timer(T_BE_Comp);

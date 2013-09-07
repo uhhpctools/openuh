@@ -265,7 +265,7 @@ BOOL WN_has_chi(const WN *wn, const REGION_LEVEL region_level)
 	    ("WN_has_chi, region_level out of bounds"));
     RID *rid = REGION_get_rid(wn);
     Is_True(rid != NULL, ("WN_has_chi, NULL RID"));
-    if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid) ||
+    if (RID_TYPE_acc(rid) || RID_TYPE_mp(rid) || RID_TYPE_eh(rid) ||
 	// kludge for 7.2, see PV 457243
 	region_level == RL_LNO_PREOPT || region_level == RL_PREOPT ||
 	region_level == RL_IPA_PREOPT)
@@ -338,7 +338,7 @@ BOOL WN_has_mu( const WN *wn, const REGION_LEVEL region_level )
 	      ("WN_has_mu, region_level out of bounds"));
       RID *rid = REGION_get_rid(wn);
       Is_True(rid != NULL, ("WN_has_mu(), NULL rid"));
-      if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid) ||
+      if (RID_TYPE_acc(rid) || RID_TYPE_mp(rid) || RID_TYPE_eh(rid) ||
 	  // kludge for 7.2, see PV 457243
 	  region_level == RL_LNO_PREOPT || region_level == RL_PREOPT ||
 	  region_level == RL_IPA_PREOPT)

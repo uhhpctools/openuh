@@ -240,7 +240,8 @@ BE_OPT_CXX_SRCS = \
   opt_lmv_helper.cxx   \
   wssa_emitter.cxx     \
   opt_peel_unroll.cxx  \
-  opt_zdl.cxx
+  opt_zdl.cxx		   \
+  opt_dfa_openacc.cxx
 
 ifeq ($(ENABLE_OSA), YES)
 BE_OPT_CXX_SRCS += opt_OSA.cxx

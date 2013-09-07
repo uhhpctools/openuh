@@ -107,6 +107,9 @@ static size_t deferred_count;
 /* Number of deferred options scanned for -include.  */
 static size_t include_cursor;
 
+//used for OpenACC source2source translation, by daniel tian
+static FILE* fopenacc_inclist = NULL;
+
 static void set_Wimplicit (int);
 static void handle_OPT_d (const char *);
 static void set_std_cxx98 (int);
@@ -118,6 +121,8 @@ static void sanitize_cpp_opts (void);
 static void add_prefixed_path (const char *, size_t);
 static void push_command_line_include (void);
 static void cb_file_change (cpp_reader *, const struct line_map *);
+static void cb_file_include(cpp_reader *pfile, unsigned int directive_line, const unsigned char *name,
+		   const char *fname, int angle_brackets, int idepth, const cpp_token **buf);
 static void cb_dir_change (cpp_reader *, const char *);
 static void finish_options (void);
 
@@ -1107,6 +1112,7 @@ c_common_post_options (const char **pfilename)
   cb = cpp_get_callbacks (parse_in);
   cb->file_change = cb_file_change;
   cb->dir_change = cb_dir_change;
+  cb->include = cb_file_include;
   cpp_post_options (parse_in);
 
   input_location = UNKNOWN_LOCATION;
@@ -1153,6 +1159,7 @@ c_common_init (void)
 
   if (flag_preprocess_only)
     {
+      fopenacc_inclist = fopen(".accinclist", "wb");
       finish_options ();
       preprocess_file (parse_in);
       return false;
@@ -1237,6 +1244,11 @@ c_common_finish (void)
 
   if (out_stream && (ferror (out_stream) || fclose (out_stream)))
     fatal_error ("when writing output to %s: %m", out_fname);
+  
+  //for generating including file list, which will be used for OpenACC, by daniel tian
+  if(flag_preprocess_only&&fopenacc_inclist)
+  	fclose(fopenacc_inclist);
+  	
 }
 
 /* Either of two environment variables can specify output of
@@ -1482,6 +1494,25 @@ cb_file_change (cpp_reader * ARG_UNUSED (pfile),
   if (new_map == 0 || (new_map->reason == LC_LEAVE && MAIN_FILE_P (new_map)))
     push_command_line_include ();
 }
+
+
+static void
+cb_file_include(cpp_reader *pfile, unsigned int directive_line, const unsigned char *name,
+		   const char *fname, int angle_brackets, int idepth, const cpp_token **buf)
+{	
+	//int idepth = pfile->line_table->depth;
+	if(idepth == 1 && flag_preprocess_only)
+	{
+		char strOut[256];
+		if(angle_brackets)
+			sprintf(strOut, "#include<%s>\n", fname);
+		else
+			sprintf(strOut, "#include\"%s\"\n", fname);
+		fwrite(strOut, sizeof(char), strlen(strOut), fopenacc_inclist);
+		//printf("included: %s\n", fname);
+	}
+}
+
 
 void
 cb_dir_change (cpp_reader * ARG_UNUSED (pfile), const char *dir)

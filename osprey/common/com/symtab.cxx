@@ -93,6 +93,28 @@ ST_ATTR_TABLE	St_Attr_Table;
 SYMTAB_IDX Current_scope;		// index to current scope
 PU *Current_pu;				// ptr to current PU
 
+
+static const char * const f90_dope_str_prefix = ".dope." ;
+static const INT f90_dope_str_prefix_len = 6;
+BOOL F90_ST_Has_Dope_Vector(ST *st)
+{
+  if (ST_class(st) != CLASS_VAR)
+    return FALSE;
+
+  if ( TY_is_f90_pointer(Ty_Table[ST_type(*st)]) )
+    return TRUE;
+
+  TY_IDX ty = ST_type(st);
+  while (TY_kind(ty) == KIND_POINTER)
+    ty = TY_pointed(ty);
+
+  if (TY_kind(ty) == KIND_STRUCT &&
+      strncmp(TY_name(ty), f90_dope_str_prefix, f90_dope_str_prefix_len) == 0)
+    return TRUE;
+
+  return FALSE;
+}
+
 //----------------------------------------------------------------------
 // ST-related utilities
 //----------------------------------------------------------------------

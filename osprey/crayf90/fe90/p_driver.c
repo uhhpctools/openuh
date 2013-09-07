@@ -1411,7 +1411,13 @@ void parse_prog_unit (void)
              stmt_type != Open_MP_End_Parallel_Do_Stmt &&
              stmt_type != Open_MP_End_Master_Stmt &&
              stmt_type != Open_MP_End_Critical_Stmt &&
-             stmt_type != Open_MP_End_Ordered_Stmt &&
+             stmt_type != Open_MP_End_Ordered_Stmt &&             
+             stmt_type != Open_ACC_End_Loop_Stmt &&           
+             stmt_type != Open_ACC_End_Host_Data_Stmt &&           
+             stmt_type != Open_ACC_End_Data_Stmt &&           
+             stmt_type != Open_ACC_End_Parallel_Stmt &&           
+             stmt_type != Open_ACC_End_Kernels_Stmt &&           
+             stmt_type != Open_ACC_End_Atomic_Stmt &&
              stmt_type != SGI_Section_Stmt &&
              stmt_type != SGI_End_Psection_Stmt &&
              stmt_type != SGI_End_Pdo_Stmt &&
@@ -1519,7 +1525,13 @@ void parse_prog_unit (void)
           stmt_type != Open_MP_End_Parallel_Do_Stmt &&
           stmt_type != Open_MP_End_Master_Stmt &&
           stmt_type != Open_MP_End_Critical_Stmt &&
-          stmt_type != Open_MP_End_Ordered_Stmt &&
+          stmt_type != Open_MP_End_Ordered_Stmt &&             
+			stmt_type != Open_ACC_End_Loop_Stmt &&           
+			stmt_type != Open_ACC_End_Host_Data_Stmt &&           
+			stmt_type != Open_ACC_End_Data_Stmt &&           
+			stmt_type != Open_ACC_End_Parallel_Stmt &&           
+			stmt_type != Open_ACC_End_Kernels_Stmt &&           
+			stmt_type != Open_ACC_End_Atomic_Stmt &&
           stmt_type != SGI_Section_Stmt &&
           stmt_type != SGI_End_Psection_Stmt &&
           stmt_type != SGI_End_Pdo_Stmt &&
@@ -2256,7 +2268,13 @@ void determine_stmt_type(void)
             stmt_type != Open_MP_End_Parallel_Do_Stmt &&
             stmt_type != Open_MP_End_Master_Stmt &&
             stmt_type != Open_MP_End_Critical_Stmt &&
-            stmt_type != Open_MP_End_Ordered_Stmt &&
+            stmt_type != Open_MP_End_Ordered_Stmt &&             
+             stmt_type != Open_ACC_End_Loop_Stmt &&           
+             stmt_type != Open_ACC_End_Host_Data_Stmt &&           
+             stmt_type != Open_ACC_End_Data_Stmt &&           
+             stmt_type != Open_ACC_End_Parallel_Stmt &&           
+             stmt_type != Open_ACC_End_Kernels_Stmt &&           
+             stmt_type != Open_ACC_End_Atomic_Stmt &&
             stmt_type != SGI_Section_Stmt &&
             stmt_type != SGI_End_Psection_Stmt &&
             stmt_type != SGI_End_Pdo_Stmt &&
@@ -3096,7 +3114,13 @@ static void stmt_level_semantics(void)
       case Open_MP_End_Critical_Stmt:
       case Open_MP_End_Ordered_Stmt:
       case Open_MP_End_Parallel_Workshare_Stmt:
-      case Open_MP_End_Workshare_Stmt:
+      case Open_MP_End_Workshare_Stmt:             
+     case Open_ACC_End_Loop_Stmt:           
+     case Open_ACC_End_Host_Data_Stmt:           
+     case Open_ACC_End_Data_Stmt:           
+     case Open_ACC_End_Parallel_Stmt:           
+     case Open_ACC_End_Kernels_Stmt:           
+     case Open_ACC_End_Atomic_Stmt:
       case SGI_Section_Stmt:
       case SGI_End_Psection_Stmt:
       case SGI_End_Pdo_Stmt:
@@ -3512,7 +3536,13 @@ static void stmt_level_semantics(void)
          case Open_MP_End_Critical_Stmt:
          case Open_MP_End_Ordered_Stmt:
 	 case Open_MP_End_Parallel_Workshare_Stmt:
-	 case Open_MP_End_Workshare_Stmt:
+	 case Open_MP_End_Workshare_Stmt:            
+	     case Open_ACC_End_Loop_Stmt:           
+	     case Open_ACC_End_Host_Data_Stmt:           
+	     case Open_ACC_End_Data_Stmt:           
+	     case Open_ACC_End_Parallel_Stmt:           
+	     case Open_ACC_End_Kernels_Stmt:           
+	     case Open_ACC_End_Atomic_Stmt:
 
             /* Check to see if this label is within a parallel region and */
             /* save the statement header that begins the region if it is. */

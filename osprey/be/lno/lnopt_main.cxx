@@ -813,6 +813,130 @@ BOOL Peel_2D_Triangle_Loops(WN* outer_loop)
 
 // returns true if any inner loop in wn is fully unrolled.
 // 'is_seq_iter' indicates whether caller site is iterating the WHIRLs sequentially.
+//This function only works for OpenACC loop region
+BOOL
+ACC_Fully_Unroll_Short_Loops(WN* wn, BOOL is_seq_iter = FALSE, BOOL is_inside_acc_loop = FALSE)
+{
+  WN* first;
+  WN* last;
+  WN* next;
+  BOOL unrolled = FALSE;
+  OPERATOR oper = WN_operator(wn);
+  // This routine can be destructive to 'wn', verify that 'wn' was not deleted.
+  Is_True(oper != OPERATOR_UNKNOWN, ("invalid operator"));
+
+  if (oper == OPR_BLOCK) {
+    wn = WN_first(wn); 
+    while (wn) {
+      next = WN_next(wn);
+      unrolled  |=  ACC_Fully_Unroll_Short_Loops(wn, TRUE, is_inside_acc_loop);
+      wn = next;
+    }
+    return unrolled;
+  }
+  else if (oper == OPR_DO_LOOP    &&
+           ((!Do_Loop_Is_ACC(wn) || Do_Loop_Is_ACC_Seq(wn)) && is_inside_acc_loop)  &&
+           Num_Inner_Loops(wn) < MAX_INNER_LOOPS)
+  {
+		//unrolling the sequential loops here, only for acc loop seq or non-acc loop inside the acc region. 
+		INT64 trip_count = Num_Iters(wn);
+		WN* wn_region;
+		RID *rid = NULL;
+		//used to remove the seq acc loop region
+		if(Do_Loop_Is_ACC_Seq(wn))
+		{
+			wn_region = LWN_Get_Parent(LWN_Get_Parent(wn));
+			rid = REGION_get_rid(wn_region);
+		}
+		
+	    if (trip_count >= 1 && trip_count <= LNO_Full_Unrolling_Limit) 
+		{
+		    if (trip_count > 1) 
+			{
+				WN * wn_prev = WN_prev(wn);
+				WN * wn_next = WN_next(wn);
+				DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+				WN * wn_body = WN_do_body(wn);
+				WN * wn_kid = (wn_body && (WN_operator(wn_body) == OPR_BLOCK)) ? WN_first(wn_body) : NULL;
+
+				if(Num_Inner_Loops(wn) > 0)
+				{			
+				    unrolled |= ACC_Fully_Unroll_Short_Loops(WN_do_body(wn), FALSE, TRUE);
+				}
+
+		        Unroll_Loop_By_Trip_Count(wn, trip_count);
+		        unrolled = TRUE;
+		    }
+			WN * next_wn = WN_next(wn);
+			Remove_Unity_Trip_Loop(wn, TRUE, &first, &last, NULL, Du_Mgr);
+			// Du_Sanity_Check(Current_Func_Node);
+			// If caller is sequentially visiting the WHIRLs, the 'next_wn'
+			// will be visited in the caller site.  if the 'next_wn' is the
+			// same as 'first', we should not recursively invoke the routine
+			// 'Fully_Unroll_Short_Loops', otherwise if 'first' is deleted,
+			// the caller site will visit the deleted wn.
+			if (!is_seq_iter || (first != next_wn)) 
+			{
+				wn = first; 
+
+				while (wn) 
+				{
+					next = WN_next(wn);
+					unrolled |= ACC_Fully_Unroll_Short_Loops(wn, TRUE, TRUE);
+					if (wn == last) 
+					{
+						break;
+					}
+					wn = next;
+				}
+			}
+
+		  if(rid)
+		  {	  		  
+			  ACC_FLAGS_loop_unrolled_Set(rid);
+		  }
+	      return unrolled;
+	    }  	
+  }
+  else if (oper == OPR_DO_LOOP    &&
+           Do_Loop_Is_ACC(wn) ) 
+  {
+        is_inside_acc_loop = TRUE;   
+  }
+  if (OPERATOR_is_scf(oper)) 
+  {
+		for (INT kidno = 0; kidno < WN_kid_count(wn); kidno++) 
+		{
+		  unrolled |= ACC_Fully_Unroll_Short_Loops(WN_kid(wn, kidno), FALSE, is_inside_acc_loop);
+		}
+		//remove the seq acc pragma region if unrolled is true
+		if(Is_ACC_Region(wn))
+		{
+			RID *rid = REGION_get_rid(wn);
+			if(ACC_FLAGS_is_loop_unrolled(rid) != 0)
+			{
+				WN* wn_region_body = WN_region_body(wn);
+				WN* wn_kid = NULL;				
+  				WN* wn_parent = LWN_Get_Parent(wn); 
+				while ((wn_kid = WN_last(wn_region_body)) != NULL) 
+				{
+				   WN* exkid = LWN_Extract_From_Block(wn_kid);
+				   LWN_Insert_Block_After(wn_parent, wn, exkid);
+				}
+				// Delete loop. 
+				LWN_Delete_Tree(wn);
+				//LWN_Insert_Block_Before(LWN_Get_Parent(wn), wn, wn_region_body);
+  				//LWN_Delete_Tree(wn);
+			}
+		}
+  }
+
+  return unrolled;
+}
+
+
+// returns true if any inner loop in wn is fully unrolled.
+// 'is_seq_iter' indicates whether caller site is iterating the WHIRLs sequentially.
 BOOL
 Fully_Unroll_Short_Loops(WN* wn, BOOL is_seq_iter = FALSE)
 {
@@ -845,6 +969,7 @@ Fully_Unroll_Short_Loops(WN* wn, BOOL is_seq_iter = FALSE)
 #endif
            !Do_Loop_Has_Gotos(wn) &&
            !Do_Loop_Is_Mp(wn)     &&
+           !Do_Loop_Is_ACC(wn)     &&
            !Is_Nested_Doacross(wn) &&
 #ifdef KEY
            Num_Inner_Loops(wn) <= MAX_INNER_LOOPS) {
@@ -1305,6 +1430,14 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
     }
 
     if (LNO_Full_Unrolling_Limit != 0) {
+	  //if there is acc region, then check the acc fully unrolling loops
+	  if(PU_has_acc(Get_Current_PU()) && 
+	  	((Enable_UHACCFlag & (1 << UHACC_ENABLE_LOOP_UNROLLING_OFFLOAD)) 
+	  			>> UHACC_ENABLE_LOOP_UNROLLING_OFFLOAD))
+	  	{
+	  		ACC_Fully_Unroll_Short_Loops(func_nd, FALSE, FALSE);
+			Mark_Code(func_nd, FALSE, TRUE);  
+	  	}
       Fully_Unroll_Short_Loops(func_nd);
     }
 

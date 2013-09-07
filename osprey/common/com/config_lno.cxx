@@ -320,6 +320,7 @@ static LNO_FLAGS Default_LNO = {
 #else
   8,            /* Full_unrolling */
 #endif
+  5,            /* Acc_Full_unrolling */
 #ifdef KEY
   TRUE,         /* Peel_2D_triangle_loop */
   2500,         /* Full_unrolling_loop_size_limit */
@@ -546,6 +547,7 @@ LNO_FLAGS Initial_LNO = {
 #else
   8,            /* Full_unrolling */
 #endif
+  5,            /* Acc_Full_unrolling */
 #ifdef KEY
   TRUE,         /* Peel_2D_triangle_loop */
   2500,         /* Full_unrolling_loop_size_limit */
@@ -935,6 +937,7 @@ static OPTION_DESC Options_LNO[] = {
 #endif
   LNOPT_U32  ( "local_pad_size", 	NULL,   0,0,1000,Local_pad_size),
   LNOPT_U32  ( "full_unroll", 	        "fu",   0,0,100,Full_unrolling),
+  LNOPT_U32  ( "acc_full_unroll", 	    "afu",  0,0,100,Acc_Full_unrolling),
 #ifdef KEY
   LNOPT_BOOL ( "peel_triangle_loop",   NULL,	Peel_2D_triangle_loop ),
   LNOPT_U32  ( "full_unroll_size", 	NULL,   

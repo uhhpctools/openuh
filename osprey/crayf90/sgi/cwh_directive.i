@@ -37,6 +37,7 @@
 */
 
 int parallel_do_count;
+int acc_doloop_count;
 
 /* table to map asserts to whirl nodes */
 /* the MIPS_ASSERT_* are defined in fe90/i_cvrt.h, this table must be sync-ed */
@@ -88,6 +89,7 @@ static void cwh_directive_set_PU_flags(BOOL nested);
 #endif
 static void cwh_directive_set_LNO_flags(void);
 static void cwh_directive_pop_and_nowait( BOOL nowait, BOOL is_omp);
+static void cwh_directive_pop_acc();
 static void cwh_directive_add_pragma_to_loop(WN * wn, BOOL is_omp);
 static void cwh_directive_work_dist(INT32 work_dist, INTPTR work_dist_opnd) ;
 static void cwh_directive_load_value_pragma(INTPTR item, WN_PRAGMA_ID pragma, BOOL is_omp = FALSE);

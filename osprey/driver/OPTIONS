@@ -140,6 +140,7 @@
 #define anyfe	f
 #define ipl	i
 #define be	b
+#define wgen w
 #define	as	a
 #define ld	l
 #define ipap	j
@@ -980,9 +981,27 @@ I-xall		;	FTN	ffe	self
         "enable the multiprocessing directives (same as -mp)"
 -fopenmp			;		FTN,Cc	ffe	-mp
         "enable the multiprocessing directives (same as -mp)"
+-acc     toggle(&acckind,NORMAL_ACC100);      FTN,Cc,CPP  ffe,cfe,CPP,wgen,be     self
+        "enable the accelerator directives"
+-fopenacc           ;      FTN,Cc,CPP ffe -acc
+        "enable the accelerator directives (same as -acc)"
+-s2s    toggle(&acckind,NORMAL_ACC100);      ALL wgen,be   "-s2s"
+        "enable OpenACC source-to-source translation strategy."
+-rdglobal    toggle(&acckind,NORMAL_ACC100);      ALL be   "-rdglobal"
+        "enable OpenACC reduction using global memory, default is shared memory."
+-rdrolling    toggle(&acckind,NORMAL_ACC100);      ALL be   "-rdrolling"
+        "enable OpenACC reduction using rolling strategy, default is unrolling"
+-accdfa    toggle(&acckind,NORMAL_ACC100);      ALL wgen,be   "-accdfa"
+        "enable OpenACC data flow analysis for offload region"
+-accscalar toggle(&acckind,NORMAL_ACC100);      ALL wgen,be   "-accscalar"
+	"enable OpenACC scalarization for offload region"
+-accunrolling toggle(&acckind,NORMAL_ACC100);      ALL wgen,be   "-accunrolling"
+	"enable combining OpenACC loop unrolling for offload region"
+-accfeedback toggle(&acckind,NORMAL_ACC100);       ALL wgen,be   "-accfeedback"
+    "enable openacc feedback optimization"
 -memsim			;		ALL	N	"-LNO:mem_sim=TRUE -lmemsim"
 	""
-
+ 
 -memctr			;		ALL	be	"-memctr"
 	""
 

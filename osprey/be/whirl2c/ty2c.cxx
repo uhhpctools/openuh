@@ -116,6 +116,10 @@ const char TY2C_Aligned_Block_Name[] = "__block";
 #endif /* TARG_X8664 */
 
 static char Name_Unknown_Type[] = "__UNKNOWN_TYPE";
+
+#define OPENACC
+
+#ifndef OPENACC
 static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
    {{"void",               Name_Unknown_Type},  /* MTYPE_UNKNOWN 0 */
     {"char",               "_BOOLEAN"},         /* MTYPE_B = 1 */
@@ -214,7 +218,105 @@ static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
 #endif /* TARG_X8664 */
    }; /* Scalar_C_Names */
 
-
+#else //#define OpenACC
+static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
+   {{"void",               Name_Unknown_Type},  /* MTYPE_UNKNOWN 0 */
+    {"char",               "char"},         /* MTYPE_B = 1 */
+    {"signed char",        "char"},            /* MTYPE_I1 = 2 */
+    //TODO Liao, {"signed char",        "char"},  // We use "char" to represnet I1, since the translator frequently uses 
+                                     // a pointer to the predefined I1 whenever it wants to generate a cast to (char *).
+                                     // explicit use of "signed char" should be handled by the front end
+                                     // and should not use the predefined I1.
+    {"signed short",       "short"},           /* MTYPE_I2 = 3 */
+    {"signed int",         "int"},           /* MTYPE_I4 = 4 */
+    {"signed long long",   "long long"},           /* MTYPE_I8 = 5 */
+    {"unsigned char",      "unsigned char"},           /* MTYPE_U1 = 6 */
+    {"unsigned short",     "unsigned short"},          /* MTYPE_U2 = 7 */
+    {"unsigned int",       "unsigned int"},          /* MTYPE_U4 = 8 */
+    {"unsigned long long", "unsigned long long"},          /* MTYPE_U8 = 9 */
+    {"float",              "float"},          /* MTYPE_F4 = 10 */
+    {"double",             "double"},          /* MTYPE_F8 = 11 */
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"long double",        "long double"},          /* MTYPE_F10 = 12 */
+#else
+    {Name_Unknown_Type,    "_IEEE80"},          /* MTYPE_F10 = 12 */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"__float128",         "_IEEE128"},         /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#else
+    {Name_Unknown_Type,    "_IEEE128"},         /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#endif
+    {Name_Unknown_Type,        ""},             /* MTYPE_STRING = 14 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_FQ = 15 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M = 16 */
+    {"_Complex float",     "_COMPLEX32"},       /* MTYPE_C4 = 17 */
+    {"_Complex double",    "_COMPLEX64"},       /* MTYPE_C8 = 18 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_CQ = 19 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V = 20 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_BS = 21 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_A4 = 22 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_A8 = 23 */
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"_Complex long double", "_COMPLEX80"},       /* MTYPE_C10 = 24 */
+#else
+    {Name_Unknown_Type, "_COMPLEX80"},          /* MTYPE_C10 = 24 */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"_Complex __float128",  "_IEEE128"},       /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#else
+    {Name_Unknown_Type,        ""},             /* MTYPE_C16 = 25 */
+#endif
+    {Name_Unknown_Type,        ""},             /* MTYPE_I16 = 26 */
+    {Name_Unknown_Type,        ""},              /* MTYPE_U16 = 27 */
+#ifdef TARG_X8664
+    {Name_Unknown_Type,        "_CMPLX8[2]"},   /* MTYPE_V16C4 = 28 */
+    {Name_Unknown_Type,        "_CMPLX16[1]"},  /* MTYPE_V16C8 = 29 */
+    {Name_Unknown_Type,        "V16I1"},        /* MTYPE_V16I1 = 30 */
+    {Name_Unknown_Type,        "V16I2"},        /* MTYPE_V16I2 = 31 */
+    {Name_Unknown_Type,        "V16I4"},        /* MTYPE_V16I4 = 32 */
+    {Name_Unknown_Type,        "V16I8"},        /* MTYPE_V16I8 = 33 */
+    {Name_Unknown_Type,        "V16F4"},        /* MTYPE_V16F4 = 34 */
+    {Name_Unknown_Type,        "V16F8"},        /* MTYPE_V16F8 = 35 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I1 = 36 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I2 = 37 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I4 = 38 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I8 = 39 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8F4 = 40 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I1 = 41 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I2 = 42 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I4 = 43 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8F4 = 44 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32C4 = 45 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32C8 = 46 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I1 = 47 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I2 = 48 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I4 = 49 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I8 = 50 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32F4 = 51 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32F8 = 52 */
+#elif defined(TARG_SL)
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB1 = 28 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB2 = 29 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB4 = 30 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB8 = 31 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU1 = 32 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU2 = 33 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU4 = 34 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU8 = 35 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD1 = 36 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD2 = 37 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD4 = 38 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD8 = 39 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU1 = 40 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU2 = 41 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU4 = 42 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU8 = 43 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF1 = 44 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF2 = 45 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF4 = 46 */
+#endif /* TARG_X8664 */
+   }; /* Scalar_C_Names */
+#endif
 /* The following is a mapping from some special types to their
  * names.  This allows us to predefine them and give them a
  * name of our choice (by means of a typedef).  These variables 
@@ -352,7 +454,10 @@ TY2C_prepend_qualifiers(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
       if (TY_is_volatile(ty))
 	Prepend_Token_String(decl_tokens, "volatile");
       if (TY_is_restrict(ty)) {
-	Prepend_Token_String(decl_tokens, "restrict");
+	  	if(isGPUKernelFunc)
+			Prepend_Token_String(decl_tokens, "__restrict__");
+		else
+			Prepend_Token_String(decl_tokens, "restrict");
       }
     }
   /*
@@ -913,8 +1018,54 @@ static void TY2C_Output_Struct_Type(TY_IDX ty,
     TY2C_complete_struct(tmp_tokens, ty, context);
     Append_Token_Special(tmp_tokens, ';'); 
     Append_Indented_Newline(tmp_tokens, lines_between_decls);
-    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+
+	if(W2C_File[W2C_DOTH_FILE])
+    	Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
 			     NULL,
+			     &tmp_tokens);
+   // CONTEXT_set_incomplete_ty2c(context); //Liao
+    //}
+}
+
+
+static hash_set<TY_IDX> cuda_struct_ty;
+//If the given type is a user-defined struct, 
+//This function outputs it complete declaration to the w2c.h file
+static void TY2CUDA_Output_Struct_Type(TY_IDX ty,
+			     INT lines_between_decls,
+			     CONTEXT context) {
+
+  // this was commented out before in OpenUH */
+  if (cuda_struct_ty.find(ty) != cuda_struct_ty.end()) {
+    //don't output duplicate struct definitions
+    return;
+  }
+
+  //it seems that the intention here is to avoid writing duplicate declarations
+  //for structs that appear as both local and shared types.
+  //However - if  they appear only as shared we do not get any types printed - we
+  //need them for debug. The above test should be strong enough ...
+  //if (!TY_is_shared(ty)) {
+    Set_TY_is_translated_to_cuda(ty);  //need to force all later struct type decl to be incomplete
+    cuda_struct_ty.insert(ty);
+ 
+
+    TOKEN_BUFFER tmp_tokens = New_Token_Buffer(); 
+    CONTEXT_reset_incomplete_ty2c(context); 
+    TY2C_complete_struct(tmp_tokens, ty, context);
+    Append_Token_Special(tmp_tokens, ';'); 
+    Append_Indented_Newline(tmp_tokens, lines_between_decls);
+	
+    //Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+	//		     NULL,
+	//		     &tmp_tokens);
+	if(isGPUOpenCLKernelFunc == FALSE)
+    	Write_And_Reclaim_Tokens(W2C_File[W2C_GPU_FILE], 
+			     NULL, /* No srcpos map */
+			     &tmp_tokens);
+	else		
+    	Write_And_Reclaim_Tokens(W2C_File[W2C_CL_FILE], 
+			     NULL, /* No srcpos map */
 			     &tmp_tokens);
    // CONTEXT_set_incomplete_ty2c(context); //Liao
     //}
@@ -930,10 +1081,17 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
   BOOL    declare_incomplete ; 
   declare_incomplete = CONTEXT_incomplete_ty2c(context) ;
-  if (( !declare_incomplete) && (!TY_is_translated_to_c(ty)) ) {
+  char* src_fname = TY_sfname(ty);
+  //if (( !declare_incomplete) && (!TY_is_translated_to_c(ty)) ) {
+  if ((!TY_is_translated_to_c(ty)) && !strcmp(src_fname, current_file_name)) {
     //Add this struct type to the global w2c.h
     CONTEXT_reset_incomplete_ty2c (context);
     TY2C_Output_Struct_Type(ty, 1, context);
+  } 
+  if ((isGPUKernelFunc && !TY_is_translated_to_cuda(ty)) ) {
+    //Add this struct type to the global w2c.h
+    CONTEXT_reset_incomplete_ty2c (context);
+    TY2CUDA_Output_Struct_Type(ty, 1, context);
   } 
 #ifdef COMPILE_UPC  
   //if (Compile_Upc) {

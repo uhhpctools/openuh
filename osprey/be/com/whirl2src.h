@@ -123,7 +123,9 @@ extern "C" {
 extern void W2C_Cleanup(void);
 extern void W2C_Init(void);
 extern void W2C_Outfile_Fini(BOOL emit_global_decls);
+extern void W2C_Outfile_Fini_OpenACC(BOOL emit_global_decls);
 extern void W2C_Outfile_Init(BOOL emit_global_decls);
+extern void W2C_Outfile_Init_OpenACC(BOOL emit_global_decls);
 extern void W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls);
 extern void W2C_Pop_PU(void);
 extern void W2C_Process_Command_Line(INT phase_argc, 

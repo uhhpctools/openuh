@@ -193,6 +193,8 @@ static const CALLSITE   *WN2C_Prev_CallSite = NULL;
 
 static char last_ret_tmp[64]; //Liao
 
+BOOL isGPUKernelFunc = false;
+BOOL isGPUOpenCLKernelFunc = false;
 
 #ifdef COMPILE_UPC
 extern char upc_debug_line[1024];
@@ -443,22 +445,38 @@ static const OPR2HANDLER WN2C_Opr_Handler_Map[] =
 /*---------------------------------------------------------------------*/
 
 
+static BOOL WN2C_IsFunCall_OP(char p)
+{
+	if(isalpha(p))
+	{
+		return TRUE;
+	}
+	else if(p == '_')
+	{
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /* Assume the C name for a WHIRL arithmetic/logical operation
  * begins with an underscore ('_') when it is implemented as
  * a function;  otherwise assume we have a builtin infix C
  * operator for the operation.
  */
-#define WN2C_IS_INFIX_OP(opc) \
-   ((WN2C_Opc2cname[opc]!=NULL)? (WN2C_Opc2cname[opc][0]!='_') : FALSE)
+#define WN2C_IS_INFIX_OP(opc) \	
+   ((WN2C_Opc2cname[opc]!=NULL)? (!WN2C_IsFunCall_OP(WN2C_Opc2cname[opc][0])) : FALSE)
+   //((WN2C_Opc2cname[opc]!=NULL)? (WN2C_Opc2cname[opc][0]!='_') : FALSE)
 
 #ifdef TARG_NVISA
 // allow system calls that don't begin with _
 #define WN2C_IS_FUNCALL_OP(opc) \
    (WN2C_Opc2cname[opc]!=NULL)
 #else
-#define WN2C_IS_FUNCALL_OP(opc) \
-   ((WN2C_Opc2cname[opc]!=NULL)? (WN2C_Opc2cname[opc][0]=='_') : FALSE)
+#define WN2C_IS_FUNCALL_OP(opc) \   
+   ((WN2C_Opc2cname[opc]!=NULL)? (WN2C_IsFunCall_OP(WN2C_Opc2cname[opc][0])) : FALSE)
+   //((WN2C_Opc2cname[opc]!=NULL)? (WN2C_Opc2cname[opc][0]=='_') : FALSE)
 #endif
+
 
 
 /* Mapping from opcodes to C names for arithmetic/logical operations.
@@ -492,8 +510,8 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_I4NEG, "-"},
   {OPC_F4NEG, "-"},
   {OPC_C4NEG, "_C4NEG"},
-  {OPC_I4ABS, "_I4ABS"},
-  {OPC_F4ABS, "_F4ABS"},
+  {OPC_I4ABS, "abs"},
+  {OPC_F4ABS, "fabsf"},
 #ifdef TARG_IA64
   {OPC_F10ABS, "_F10ABS"},
 #elif defined (TARG_X8664)
@@ -501,14 +519,14 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_V16F8ABS, "_V16F8ABS"},
 #endif
   {OPC_FQABS, "_FQABS"},
-  {OPC_I8ABS, "_I8ABS"},
-  {OPC_F8ABS, "_F8ABS"},
-  {OPC_F4SQRT, "_F4SQRT"},
+  {OPC_I8ABS, "abs"},
+  {OPC_F8ABS, "fabs"},
+  {OPC_F4SQRT, "sqrtf"},
   {OPC_C4SQRT, "_C4SQRT"},
   {OPC_F10SQRT, "_F10SQRT"},
   {OPC_FQSQRT, "_FQSQRT"},
   {OPC_CQSQRT, "_CQSQRT"},
-  {OPC_F8SQRT, "_F8SQRT"},
+  {OPC_F8SQRT, "sqrt"},
   {OPC_C8SQRT, "_C8SQRT"},
   {OPC_I4F4RND, "_I4F4RND"},
   {OPC_I4F10RND, "_I4F10RND"},
@@ -526,26 +544,26 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_U8F10RND, "_U8F10RND"},
   {OPC_U8FQRND, "_U8FQRND"},
   {OPC_U8F8RND, "_U8F8RND"},
-  {OPC_I4F4TRUNC, "_I4F4TRUNC"},
+  {OPC_I4F4TRUNC, "truncf"},
   {OPC_I4F10TRUNC, "_I4F10TRUNC"},
   {OPC_I4FQTRUNC, "_I4FQTRUNC"},
-  {OPC_I4F8TRUNC, "_I4F8TRUNC"},
-  {OPC_U4F4TRUNC, "_U4F8TRUNC"},
+  {OPC_I4F8TRUNC, "trunc"},
+  {OPC_U4F4TRUNC, "truncf"},
   {OPC_U4F10TRUNC, "_U4F10TRUNC"},
   {OPC_U4FQTRUNC, "_U4FQTRUNC"},
-  {OPC_U4F8TRUNC, "_U4F8TRUNC"},
+  {OPC_U4F8TRUNC, "trunc"},
   {OPC_I8F4TRUNC, "_I8F4TRUNC"},
   {OPC_I8F10TRUNC, "_I8F10TRUNC"},
   {OPC_I8FQTRUNC, "_I8FQTRUNC"},
-  {OPC_I8F8TRUNC, "_I8F8TRUNC"},
-  {OPC_U8F4TRUNC, "_U8F8TRUNC"},
+  {OPC_I8F8TRUNC, "truncl"},
+  {OPC_U8F4TRUNC, "truncf"},
 #ifdef TARG_NVISA
   {OPC_F4F4TRUNC, "truncf"},
   {OPC_F8F8TRUNC, "trunc"},
 #endif
   {OPC_U8F10TRUNC, "_U8F10TRUNC"},
   {OPC_U8FQTRUNC, "_U8FQTRUNC"},
-  {OPC_U8F8TRUNC, "_U8F8TRUNC"},
+  {OPC_U8F8TRUNC, "truncl"},
   {OPC_I4F4CEIL, "_I4F4CEIL"},
   {OPC_I4F10CEIL, "_I4F10CEIL"},
   {OPC_I4FQCEIL, "_I4FQCEIL"},
@@ -650,14 +668,14 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_U8REM, "%"},
   {OPC_I8REM, "%"},
   {OPC_U4REM, "%"},
-  {OPC_I4MAX, "_I4MAX"},
-  {OPC_U8MAX, "_U8MAX"},
-  {OPC_F4MAX, "_F4MAX"},
-  {OPC_F10MAX, "_F10MAX"},
-  {OPC_FQMAX, "_FQMAX"},
-  {OPC_I8MAX, "_I8MAX"},
-  {OPC_U4MAX, "_U4MAX"},
-  {OPC_F8MAX, "_F8MAX"},
+  {OPC_I4MAX, "max"},
+  {OPC_U8MAX, "max"},
+  {OPC_F4MAX, "max"},
+  {OPC_F10MAX, "max"},
+  {OPC_FQMAX, "max"},
+  {OPC_I8MAX, "max"},
+  {OPC_U4MAX, "max"},
+  {OPC_F8MAX, "max"},
 #ifdef TARG_X8664
   {OPC_V16F4MAX, "_V16F4MAX"},
   {OPC_V16F8MAX, "_V16F8MAX"},
@@ -672,14 +690,14 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_V32I4MAX, "_V32I4MAX"},
   {OPC_V32I8MAX, "_V32I8MAX"},
 #endif
-  {OPC_I4MIN, "_I4MIN"},
-  {OPC_U8MIN, "_U8MIN"},
-  {OPC_F4MIN, "_F4MIN"},
-  {OPC_F10MIN, "_F10MIN"},
-  {OPC_FQMIN, "_FQMIN"},
-  {OPC_I8MIN, "_I8MIN"},
-  {OPC_U4MIN, "_U4MIN"},
-  {OPC_F8MIN, "_F8MIN"},
+  {OPC_I4MIN, "min"},
+  {OPC_U8MIN, "min"},
+  {OPC_F4MIN, "min"},
+  {OPC_F10MIN, "min"},
+  {OPC_FQMIN, "min"},
+  {OPC_I8MIN, "min"},
+  {OPC_U4MIN, "min"},
+  {OPC_F8MIN, "min"},
 #ifdef TARG_X8664
   {OPC_V16F4MIN, "_V16F4MIN"},
   {OPC_V16F8MIN, "_V16F8MIN"},
@@ -717,14 +735,14 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_BCIOR, "||"},
   {OPC_I4CIOR, "||"},
 // << WHIRL 0.30: replaced OPC_LAND, OPC_LIOR, OPC_CAND, OPC_CIOR by OPC_B and OP_I4 variants
-  {OPC_I4SHL, "_I4SHL"},
-  {OPC_U8SHL, "_U8SHL"},
-  {OPC_I8SHL, "_I8SHL"},
-  {OPC_U4SHL, "_U4SHL"},
-  {OPC_I4ASHR, "_I4ASHR"},
-  {OPC_U8ASHR, "_U8ASHR"},
-  {OPC_I8ASHR, "_I8ASHR"},
-  {OPC_U4ASHR, "_U4ASHR"},
+  {OPC_I4SHL, "<<"},
+  {OPC_U8SHL, "<<"},
+  {OPC_I8SHL, "<<"},
+  {OPC_U4SHL, "<<"},
+  {OPC_I4ASHR, ">>"},
+  {OPC_U8ASHR, ">>"},
+  {OPC_I8ASHR, ">>"},
+  {OPC_U4ASHR, ">>"},
   {OPC_I4LSHR, "_I4LSHR"},
   {OPC_U8LSHR, "_U8LSHR"},
   {OPC_I8LSHR, "_I8LSHR"},
@@ -1165,6 +1183,1427 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
 #endif /* TARG_X8664 */
 // << WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
 }; /* WN2C_Opc2Cname_Map */
+
+static BOOL WN2CUDAIsFunCall_OP(char p)
+{
+	if(isalpha(p))
+	{
+		return TRUE;
+	}
+	else if(p == '_')
+	{
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static const char *WN2CUDA_Opc2cname[NUMBER_OF_OPCODES];
+
+static BOOL WN2CUDA_IS_FUNCALL_OP(OPCODE opc) 
+{
+   BOOL rvalue = FALSE;
+   if(WN2CUDA_Opc2cname[opc]!=NULL)
+	rvalue = WN2CUDAIsFunCall_OP(WN2CUDA_Opc2cname[opc][0]);
+   else
+	rvalue = FALSE;
+   return rvalue;
+   //((WN2CUDA_Opc2cname[opc]!=NULL)? WN2CUDAIsFunCall_OP(WN2CUDA_Opc2cname[opc][0]) : FALSE)
+}
+
+static const OPC2CNAME_MAP WN2CUDA_Opc2cname_Map[] =
+{
+  {OPC_U8NEG, "-"},
+  {OPC_F10NEG, "-"},
+  {OPC_FQNEG, "-"},
+  {OPC_I8NEG, "-"},
+  {OPC_U4NEG, "-"},
+  {OPC_CQNEG, "_CQNEG"},
+  {OPC_F8NEG, "-"},
+  {OPC_C8NEG, "_C8NEG"},
+  {OPC_I4NEG, "-"},
+  {OPC_F4NEG, "-"},
+  {OPC_C4NEG, "_C4NEG"},
+  {OPC_I4ABS, "fabsf"},
+  {OPC_F4ABS, "fabsf"},
+#ifdef TARG_IA64
+  {OPC_F10ABS, "_F10ABS"},
+#elif defined (TARG_X8664)
+  {OPC_V16F4ABS, "_V16F4ABS"},
+  {OPC_V16F8ABS, "_V16F8ABS"},
+#endif
+  {OPC_FQABS, "_FQABS"},
+  {OPC_I8ABS, "fabs"},
+  {OPC_F8ABS, "fabs"},
+  {OPC_F4SQRT, "sqrtf"},
+  {OPC_C4SQRT, "_C4SQRT"},
+  {OPC_F10SQRT, "_F10SQRT"},
+  {OPC_FQSQRT, "_FQSQRT"},
+  {OPC_CQSQRT, "_CQSQRT"},
+  {OPC_F8SQRT, "sqrt"},
+  {OPC_C8SQRT, "_C8SQRT"},
+  {OPC_I4F4RND, "_I4F4RND"},
+  {OPC_I4F10RND, "_I4F10RND"},
+  {OPC_I4FQRND, "_I4FQRND"},
+  {OPC_I4F8RND, "_I4F8RND"},
+  {OPC_U4F4RND, "_U4F4RND"},
+  {OPC_U4F10RND, "_U4F10RND"},
+  {OPC_U4FQRND, "_U4FQRND"},
+  {OPC_U4F8RND, "_U4F8RND"},
+  {OPC_I8F4RND, "_I8F4RND"},
+  {OPC_I8F10RND, "_I8F10RND"},
+  {OPC_I8FQRND, "_I8FQRND"},
+  {OPC_I8F8RND, "_I8F8RND"},
+  {OPC_U8F4RND, "_U8F4RND"},
+  {OPC_U8F10RND, "_U8F10RND"},
+  {OPC_U8FQRND, "_U8FQRND"},
+  {OPC_U8F8RND, "_U8F8RND"},
+  {OPC_I4F4TRUNC, "truncf"},
+  {OPC_I4F10TRUNC, "_I4F10TRUNC"},
+  {OPC_I4FQTRUNC, "_I4FQTRUNC"},
+  {OPC_I4F8TRUNC, "trunc"},
+  {OPC_U4F4TRUNC, "truncf"},
+  {OPC_U4F10TRUNC, "_U4F10TRUNC"},
+  {OPC_U4FQTRUNC, "_U4FQTRUNC"},
+  {OPC_U4F8TRUNC, "trunc"},
+  {OPC_I8F4TRUNC, "truncf"},
+  {OPC_I8F10TRUNC, "_I8F10TRUNC"},
+  {OPC_I8FQTRUNC, "_I8FQTRUNC"},
+  {OPC_I8F8TRUNC, "trunc"},
+  {OPC_U8F4TRUNC, "truncf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4TRUNC, "truncf"},
+  {OPC_F8F8TRUNC, "trunc"},
+#endif
+  {OPC_U8F10TRUNC, "_U8F10TRUNC"},
+  {OPC_U8FQTRUNC, "_U8FQTRUNC"},
+  {OPC_U8F8TRUNC, "trunc"},
+  {OPC_I4F4CEIL, "ceilf"},
+  {OPC_I4F10CEIL, "_I4F10CEIL"},
+  {OPC_I4FQCEIL, "_I4FQCEIL"},
+  {OPC_I4F8CEIL, "ceil"},
+  {OPC_U4F4CEIL, "ceilf"},
+  {OPC_U4F10CEIL, "_U4F10CEIL"}, 
+  {OPC_U4FQCEIL, "_U4FQCEIL"},
+  {OPC_U4F8CEIL, "ceil"},
+  {OPC_I8F4CEIL, "ceilf"},
+  {OPC_I8F10CEIL, "_I8F10CEIL"},
+  {OPC_I8FQCEIL, "_I8FQCEIL"},
+  {OPC_I8F8CEIL, "ceil"},
+  {OPC_U8F4CEIL, "ceilf"},
+  {OPC_U8F10CEIL, "_U8F10CEIL"},
+  {OPC_U8FQCEIL, "_U8FQCEIL"},
+  {OPC_U8F8CEIL, "ceil"},
+  {OPC_I4F4FLOOR, "floorf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4CEIL, "ceilf"},
+  {OPC_F8F8CEIL, "ceil"},
+#endif
+  {OPC_I4F10FLOOR, "_I4F10FLOOR"},
+  {OPC_I4FQFLOOR, "_I4FQFLOOR"},
+  {OPC_I4F8FLOOR, "floor"},
+  {OPC_U4F4FLOOR, "floorf"},
+  {OPC_U4F10FLOOR, "_U4F10FLOOR"},
+  {OPC_U4FQFLOOR, "_U4FQFLOOR"},
+  {OPC_U4F8FLOOR, "floor"},
+  {OPC_I8F4FLOOR, "floorf"},
+  {OPC_I8F10FLOOR, "_I8F10FLOOR"},
+  {OPC_I8FQFLOOR, "_I8FQFLOOR"},
+  {OPC_I8F8FLOOR, "floor"},
+  {OPC_U8F4FLOOR, "floorf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4FLOOR, "floorf"},
+  {OPC_F8F8FLOOR, "floor"},
+#endif
+  {OPC_U8F10FLOOR, "_U8F10FLOOR"},
+  {OPC_U8FQFLOOR, "_U8FQFLOOR"},
+  {OPC_U8F8FLOOR, "floor"},
+#ifdef KEY
+  {OPC_F4F4FLOOR, "floorf"},
+#endif
+  {OPC_I4BNOT, "~"},
+  {OPC_U8BNOT, "~"},
+  {OPC_I8BNOT, "~"},
+  {OPC_U4BNOT, "~"},
+// >> WHIRL 0.30: replaced OPC_LNOT by OPC_B and OP_I4 variants
+// TODO WHIRL 0.30: get rid of OPC_I4 variants
+  {OPC_BLNOT, "!"},
+  {OPC_I4LNOT, "!"},
+// << WHIRL 0.30: replaced OPC_LNOT by OPC_B and OP_I4 variants
+  {OPC_U8ADD, "+"},
+  {OPC_F10ADD, "+"},
+  {OPC_FQADD, "+"},
+  {OPC_I8ADD, "+"},
+  {OPC_U4ADD, "+"},
+  {OPC_CQADD, "_CQADD"},
+  {OPC_F8ADD, "+"},
+  {OPC_C8ADD, "_C8ADD"},
+  {OPC_I4ADD, "+"},
+  {OPC_F4ADD, "+"},
+  {OPC_C4ADD, "_C4ADD"},
+  {OPC_U8SUB, "-"},
+  {OPC_F10SUB, "-"},
+  {OPC_FQSUB, "-"},
+  {OPC_I8SUB, "-"},
+  {OPC_U4SUB, "-"},
+  {OPC_CQSUB, "_CQSUB"},
+  {OPC_F8SUB, "-"},
+  {OPC_C8SUB, "_C8SUB"},
+  {OPC_I4SUB, "-"},
+  {OPC_F4SUB, "-"},
+  {OPC_C4SUB, "_C4SUB"},
+  {OPC_U8MPY, "*"},
+  {OPC_F10MPY, "*"},
+  {OPC_FQMPY, "*"},
+  {OPC_I8MPY, "*"},
+  {OPC_U4MPY, "*"},
+  {OPC_CQMPY, "_CQMPY"},
+  {OPC_F8MPY, "*"},
+  {OPC_C8MPY, "_C8MPY"},
+  {OPC_I4MPY, "*"},
+  {OPC_F4MPY, "*"},
+  {OPC_C4MPY, "_C4MPY"},
+  {OPC_U8DIV, "/"},
+  {OPC_F10DIV, "/"},
+  {OPC_FQDIV, "/"},
+  {OPC_I8DIV, "/"},
+  {OPC_U4DIV, "/"},
+  {OPC_CQDIV, "_CQDIV"},
+  {OPC_F8DIV, "/"},
+  {OPC_C8DIV, "_C8DIV"},
+  {OPC_I4DIV, "/"},
+  {OPC_F4DIV, "/"},
+  {OPC_C4DIV, "_C4DIV"},
+  {OPC_I4MOD, "_I4MOD"},
+  {OPC_U8MOD, "%"},
+  {OPC_I8MOD, "_I8MOD"},
+  {OPC_U4MOD, "%"},
+  {OPC_I4REM, "%"},
+  {OPC_U8REM, "%"},
+  {OPC_I8REM, "%"},
+  {OPC_U4REM, "%"},
+  {OPC_I4MAX, "fmaxf"},
+  {OPC_U8MAX, "_U8MAX"},
+  {OPC_F4MAX, "fmaxf"},
+  {OPC_F10MAX, "_F10MAX"},
+  {OPC_FQMAX, "_FQMAX"},
+  {OPC_I8MAX, "fmax"},
+  {OPC_U4MAX, "_U4MAX"},
+  {OPC_F8MAX, "fmax"},
+#ifdef TARG_X8664
+  {OPC_V16F4MAX, "_V16F4MAX"},
+  {OPC_V16F8MAX, "_V16F8MAX"},
+  {OPC_V16I1MAX, "_V16I1MAX"}, 
+  {OPC_V16I2MAX, "_V16I2MAX"},
+  {OPC_V16I4MAX, "_V16I4MAX"}, 
+  {OPC_V16I8MAX, "_V16I8MAX"},
+  {OPC_V32F4MAX, "_V32F4MAX"},
+  {OPC_V32F8MAX, "_V32F8MAX"},
+  {OPC_V32I1MAX, "_V32I1MAX"},
+  {OPC_V32I2MAX, "_V32I2MAX"},
+  {OPC_V32I4MAX, "_V32I4MAX"},
+  {OPC_V32I8MAX, "_V32I8MAX"},
+#endif
+  {OPC_I4MIN, "fminf"},
+  {OPC_U8MIN, "_U8MIN"},
+  {OPC_F4MIN, "fminf"},
+  {OPC_F10MIN, "_F10MIN"},
+  {OPC_FQMIN, "_FQMIN"},
+  {OPC_I8MIN, "fmin"},
+  {OPC_U4MIN, "_U4MIN"},
+  {OPC_F8MIN, "fmax"},
+#ifdef TARG_X8664
+  {OPC_V16F4MIN, "_V16F4MIN"},
+  {OPC_V16F8MIN, "_V16F8MIN"},
+  {OPC_V16I1MIN, "_V16I1MIN"},
+  {OPC_V16I2MIN, "_V16I2MIN"},
+  {OPC_V16I4MIN, "_V16I4MIN"},
+  {OPC_V16I8MIN, "_V16I8MIN"},
+  {OPC_V32F4MIN, "_V32F4MIN"}, 
+  {OPC_V32F8MIN, "_V32F8MIN"},
+  {OPC_V32I1MIN, "_V32I1MIN"}, 
+  {OPC_V32I2MIN, "_V32I2MIN"}, 
+  {OPC_V32I4MIN, "_V32I4MIN"}, 
+  {OPC_V32I8MIN, "_V32I8MIN"},
+#endif /* TARG_X8664 */
+  {OPC_I4BAND, "&"},
+  {OPC_U8BAND, "&"},
+  {OPC_I8BAND, "&"},
+  {OPC_U4BAND, "&"},
+  {OPC_I4BIOR, "|"},
+  {OPC_U8BIOR, "|"},
+  {OPC_I8BIOR, "|"},
+  {OPC_U4BIOR, "|"},
+  {OPC_I4BXOR, "^"},
+  {OPC_U8BXOR, "^"},
+  {OPC_I8BXOR , "^"},
+  {OPC_U4BXOR, "^"},
+// >> WHIRL 0.30: replaced OPC_LAND, OPC_LIOR, OPC_CAND, OPC_CIOR by OPC_B and OP_I4 variants
+// TODO WHIRL 0.30: get rid of OPC_I4 variants
+  {OPC_BLAND, "&&"},
+  {OPC_I4LAND, "&&"},
+  {OPC_BLIOR, "||"},
+  {OPC_I4LIOR, "||"},
+  {OPC_BCAND, "&&"},
+  {OPC_I4CAND, "&&"},
+  {OPC_BCIOR, "||"},
+  {OPC_I4CIOR, "||"},
+// << WHIRL 0.30: replaced OPC_LAND, OPC_LIOR, OPC_CAND, OPC_CIOR by OPC_B and OP_I4 variants
+  {OPC_I4SHL, "<<"},
+  {OPC_U8SHL, "<<"},
+  {OPC_I8SHL, "<<"},
+  {OPC_U4SHL, "<<"},
+  {OPC_I4ASHR, ">>"},
+  {OPC_U8ASHR, ">>"},
+  {OPC_I8ASHR, ">>"},
+  {OPC_U4ASHR, ">>"},
+  {OPC_I4LSHR, "_I4LSHR"},
+  {OPC_U8LSHR, "_U8LSHR"},
+  {OPC_I8LSHR, "_I8LSHR"},
+  {OPC_U4LSHR, "_U4LSHR"},
+  {OPC_F4RECIP, "_F4RECIP"},
+  {OPC_C4RECIP, "_C4RECIP"},
+  {OPC_F10RECIP, "_F10RECIP"},
+  {OPC_FQRECIP, "_FQRECIP"},
+  {OPC_CQRECIP, "_CQRECIP"},
+  {OPC_F8RECIP, "_F8RECIP"},
+  {OPC_C8RECIP, "_C8RECIP"},
+  {OPC_F4RSQRT, "_F4RSQRT"},
+  {OPC_C4RSQRT, "_C4RSQRT"},
+  {OPC_F10RSQRT, "_F10RSQRT"},
+  {OPC_FQRSQRT, "_FQRSQRT"},
+  {OPC_CQRSQRT, "_CQRSQRT"},
+  {OPC_F8RSQRT, "_F8RSQRT"},
+  {OPC_C8RSQRT, "_C8RSQRT"},
+// >> WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
+// TODO WHIRL 0.30: get rid of OPC_I4T1 variants
+  {OPC_BU8EQ, "=="},
+  {OPC_BF10EQ, "=="},
+  {OPC_BFQEQ, "=="},
+  {OPC_BI8EQ, "=="},
+  {OPC_BU4EQ, "=="},
+  {OPC_BCQEQ, "=="},
+  {OPC_BF8EQ, "=="},
+  {OPC_BC8EQ, "=="},
+  {OPC_BI4EQ, "=="},
+  {OPC_BF4EQ, "=="},
+  {OPC_BC4EQ, "=="},
+  {OPC_I8I4EQ, "=="},
+  {OPC_I8I4NE, "!="},
+  {OPC_BU8NE, "!="},
+  {OPC_BF10NE, "!="},
+  {OPC_BFQNE, "!="},
+  {OPC_BI8NE, "!="},
+  {OPC_BU4NE, "!="},
+  {OPC_BCQNE, "!="},
+  {OPC_BF8NE, "!="},
+  {OPC_BC8NE, "!="},
+  {OPC_BI4NE, "!="},
+  {OPC_BF4NE, "!="},
+  {OPC_BC4NE, "!="},
+  {OPC_BI4GT, ">"},
+  {OPC_BU8GT, ">"},
+  {OPC_BF4GT, ">"},
+  {OPC_BF10GT, ">"},
+  {OPC_BFQGT, ">"},
+  {OPC_BI8GT, ">"},
+  {OPC_BU4GT, ">"},
+  {OPC_BF8GT, ">"},
+  {OPC_BI4GE, ">="},
+  {OPC_BU8GE, ">="},
+  {OPC_BF4GE, ">="},
+  {OPC_BF10GE, ">="},
+  {OPC_BFQGE, ">="},
+  {OPC_BI8GE, ">="},
+  {OPC_BU4GE, ">="},
+  {OPC_BF8GE, ">="},
+  {OPC_BI4LT, "<"},
+  {OPC_BU8LT, "<"},
+  {OPC_BF4LT, "<"},
+  {OPC_BF10LT, "<"},
+  {OPC_BFQLT, "<"},
+  {OPC_BI8LT, "<"},
+  {OPC_BU4LT, "<"},
+  {OPC_BF8LT, "<"},
+  {OPC_BI4LE, "<="},
+  {OPC_BU8LE, "<="},
+  {OPC_BF4LE, "<="},
+  {OPC_BF10LE, "<="},
+  {OPC_BFQLE, "<="},
+  {OPC_BI8LE, "<="},
+  {OPC_BU4LE, "<="},
+  {OPC_BF8LE, "<="},
+#ifdef TARG_IA64
+  {OPC_I4U8EQ, "=="},
+  {OPC_I4FQEQ, "=="},
+  {OPC_I4I8EQ, "=="},
+  {OPC_I4U4EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_I4CQEQ, "=="},
+  {OPC_I4F8EQ, "=="},
+  {OPC_I4C8EQ, "=="},
+#endif
+  {OPC_I4F10EQ, "=="},
+  {OPC_I4I4EQ, "=="},
+#ifdef TARG_X8664
+  {OPC_I4U4EQ, "=="},
+  {OPC_I4I8EQ, "=="},
+  {OPC_I4U8EQ, "=="},
+#endif
+  {OPC_I4F4EQ, "=="},
+#ifdef TARG_X8664
+  {OPC_I4F8EQ, "=="},
+  {OPC_I4FQEQ, "=="},
+#endif
+  {OPC_I4C4EQ, "=="},
+#ifndef TARG_X8664
+  {OPC_I4U8NE, "!="},
+  {OPC_I4I8NE, "!="},
+  {OPC_I4U4NE, "!="},
+  {OPC_I4CQNE, "!="},
+  {OPC_I4F8NE, "!="},
+  {OPC_I4C8NE, "!="},
+#else
+  {OPC_I4C8EQ, "=="},
+  {OPC_I4CQEQ, "=="},
+  {OPC_I8I4EQ, "=="},
+  {OPC_I8U4EQ, "=="},
+  {OPC_I8I8EQ, "=="},
+  {OPC_I8U8EQ, "=="},
+  {OPC_I8F4EQ, "=="},
+  {OPC_I8F8EQ, "=="},
+  {OPC_I8FQEQ, "=="},
+  {OPC_I8C4EQ, "=="},
+  {OPC_I8C8EQ, "=="},
+  {OPC_I8CQEQ, "=="},
+  {OPC_U4I4EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_U4I8EQ, "=="},
+  {OPC_U4U8EQ, "=="},
+  {OPC_U4F4EQ, "=="},
+  {OPC_U4F8EQ, "=="},
+  {OPC_U4FQEQ, "=="},
+  {OPC_U4C4EQ, "=="},
+  {OPC_U4C8EQ, "=="},
+  {OPC_U4CQEQ, "=="},
+  {OPC_U8I4EQ, "=="},
+  {OPC_U8U4EQ, "=="},
+  {OPC_U8I8EQ, "=="},
+  {OPC_U8U8EQ, "=="},
+  {OPC_U8F4EQ, "=="},
+  {OPC_U8F8EQ, "=="},
+  {OPC_U8FQEQ, "=="},
+  {OPC_U8C4EQ, "=="},
+  {OPC_U8C8EQ, "=="},
+  {OPC_U8CQEQ, "=="},
+#endif
+  {OPC_I4I4NE, "!="},
+#ifdef TARG_X8664
+  {OPC_I4U4NE, "!="},
+  {OPC_I4I8NE, "!="},
+  {OPC_I4U8NE, "!="},
+#endif
+  {OPC_I4F4NE, "!="},
+  {OPC_I4F10NE, "!="},
+  {OPC_I4FQNE, "!="},
+#ifdef TARG_X8664
+  {OPC_I4F8NE, "!="},
+#endif
+  {OPC_I4C4NE, "!="},
+  {OPC_I4F10GT, ">"},
+#ifndef TARG_X8664
+  {OPC_I4I4GT, ">"},
+  {OPC_I4U8GT, ">"},
+  {OPC_I4F4GT, ">"},
+  {OPC_I4FQGT, ">"},
+  {OPC_I4I8GT, ">"},
+  {OPC_I4U4GT, ">"},
+  {OPC_I4F8GT, ">"},
+#else
+  {OPC_I4C8NE, "!="},
+  {OPC_I4CQNE, "!="},
+  {OPC_I8I4NE, "!="},
+  {OPC_I8U4NE, "!="},
+  {OPC_I8I8NE, "!="},
+  {OPC_I8U8NE, "!="},
+  {OPC_I8F4NE, "!="},
+  {OPC_I8F8NE, "!="},
+  {OPC_I8FQNE, "!="},
+  {OPC_I8C4NE, "!="},
+  {OPC_I8C8NE, "!="},
+  {OPC_I8CQNE, "!="},
+  {OPC_U4I4NE, "!="},
+  {OPC_U4U4NE, "!="},
+  {OPC_U4I8NE, "!="},
+  {OPC_U4U8NE, "!="},
+  {OPC_U4F4NE, "!="},
+  {OPC_U4F8NE, "!="},
+  {OPC_U4FQNE, "!="},
+  {OPC_U4C4NE, "!="},
+  {OPC_U4C8NE, "!="},
+  {OPC_U4CQNE, "!="},
+  {OPC_U8I4NE, "!="},
+  {OPC_U8U4NE, "!="},
+  {OPC_U8I8NE, "!="},
+  {OPC_U8U8NE, "!="},
+  {OPC_U8F4NE, "!="},
+  {OPC_U8F8NE, "!="},
+  {OPC_U8FQNE, "!="},
+  {OPC_U8C4NE, "!="},
+  {OPC_U8C8NE, "!="},
+  {OPC_U8CQNE, "!="},
+#endif
+  {OPC_I4I4GE, ">="},
+#ifdef TARG_X8664
+  {OPC_I4U4GE, ">="},
+  {OPC_I4I8GE, ">="},
+#endif
+  {OPC_I4U8GE, ">="},
+  {OPC_I4F4GE, ">="},
+#ifdef TARG_IA64
+  {OPC_I4FQGE, ">="},
+  {OPC_I4I8GE, ">="},
+  {OPC_I4U4GE, ">="},
+#endif
+  {OPC_I4F10GE, ">="},
+  {OPC_I4F8GE, ">="},
+  {OPC_I4F10LT, "<"},
+#ifndef TARG_X8664
+  {OPC_I4I4LT, "<"},
+  {OPC_I4U8LT, "<"},
+  {OPC_I4F4LT, "<"},
+  {OPC_I4FQLT, "<"},
+  {OPC_I4I8LT, "<"},
+  {OPC_I4U4LT, "<"},
+  {OPC_I4F8LT, "<"},
+#else
+  {OPC_I4FQGE, ">="},
+  {OPC_I8I4GE, ">="},
+  {OPC_I8U4GE, ">="},
+  {OPC_I8I8GE, ">="},
+  {OPC_I8U8GE, ">="},
+  {OPC_I8F4GE, ">="},
+  {OPC_I8F8GE, ">="},
+  {OPC_I8FQGE, ">="},
+  {OPC_U4I4GE, ">="},
+  {OPC_U4U4GE, ">="},
+  {OPC_U4I8GE, ">="},
+  {OPC_U4U8GE, ">="},
+  {OPC_U4F4GE, ">="},
+  {OPC_U4F8GE, ">="},
+  {OPC_U4FQGE, ">="},
+  {OPC_U8I4GE, ">="},
+  {OPC_U8U4GE, ">="},
+  {OPC_U8I8GE, ">="},
+  {OPC_U8U8GE, ">="},
+  {OPC_U8F4GE, ">="},
+  {OPC_U8F8GE, ">="},
+  {OPC_U8FQGE, ">="},
+#endif
+  {OPC_I4I4LE, "<="},
+  {OPC_I4U4LE, "<="},
+  {OPC_I4I8LE, "<="},
+  {OPC_I4U8LE, "<="},
+  {OPC_I4F4LE, "<="},
+  {OPC_I4F10LE, "<="},
+  {OPC_I4F8LE, "<="},
+  {OPC_I4FQLE, "<="},
+#ifndef TARG_X8664
+#ifdef KEY
+  {OPC_U8U8EQ, "=="},
+#endif
+#else
+  {OPC_I8I4LE, "<="},
+  {OPC_I8U4LE, "<="},
+  {OPC_I8I8LE, "<="},
+  {OPC_I8U8LE, "<="},
+  {OPC_I8F4LE, "<="},
+  {OPC_I8F8LE, "<="},
+  {OPC_I8FQLE, "<="},
+  {OPC_U4I4LE, "<="},
+  {OPC_U4U4LE, "<="},
+  {OPC_U4I8LE, "<="},
+  {OPC_U4U8LE, "<="},
+  {OPC_U4F4LE, "<="},
+  {OPC_U4F8LE, "<="},
+  {OPC_U4FQLE, "<="},
+  {OPC_U8I4LE, "<="},
+  {OPC_U8U4LE, "<="},
+  {OPC_U8I8LE, "<="},
+  {OPC_U8U8LE, "<="},
+  {OPC_U8F4LE, "<="},
+  {OPC_U8F8LE, "<="},
+  {OPC_U8FQLE, "<="},
+  {OPC_I4I4GT, ">"},
+  {OPC_I4U4GT, ">"},
+  {OPC_I4I8GT, ">"},
+  {OPC_I4U8GT, ">"},
+  {OPC_I4F4GT, ">"},
+  {OPC_I4F8GT, ">"},
+  {OPC_I4FQGT, ">"},
+  {OPC_I8I4GT, ">"},
+  {OPC_I8U4GT, ">"},
+  {OPC_I8I8GT, ">"},
+  {OPC_I8U8GT, ">"},
+  {OPC_I8F4GT, ">"},
+  {OPC_I8F8GT, ">"},
+  {OPC_I8FQGT, ">"},
+  {OPC_U4I4GT, ">"},
+  {OPC_U4U4GT, ">"},
+  {OPC_U4I8GT, ">"},
+  {OPC_U4U8GT, ">"},
+  {OPC_U4F4GT, ">"},
+  {OPC_U4F8GT, ">"},
+  {OPC_U4FQGT, ">"},
+  {OPC_U8I4GT, ">"},
+  {OPC_U8U4GT, ">"},
+  {OPC_U8I8GT, ">"},
+  {OPC_U8U8GT, ">"},
+  {OPC_U8F4GT, ">"},
+  {OPC_U8F8GT, ">"},
+  {OPC_U8FQGT, ">"},
+  {OPC_I4I4LT, "<"},
+  {OPC_I4U4LT, "<"},
+  {OPC_I4I8LT, "<"},
+  {OPC_I4U8LT, "<"},
+  {OPC_I4F4LT, "<"},
+  {OPC_I4F8LT, "<"},
+  {OPC_I4FQLT, "<"},
+  {OPC_I8I4LT, "<"},
+  {OPC_I8U4LT, "<"},
+  {OPC_I8I8LT, "<"},
+  {OPC_I8U8LT, "<"},
+  {OPC_I8F4LT, "<"},
+  {OPC_I8F8LT, "<"},
+  {OPC_I8FQLT, "<"},
+  {OPC_U4I4LT, "<"},
+  {OPC_U4U4LT, "<"},
+  {OPC_U4I8LT, "<"},
+  {OPC_U4U8LT, "<"},
+  {OPC_U4F4LT, "<"},
+  {OPC_U4F8LT, "<"},
+  {OPC_U4FQLT, "<"},
+  {OPC_U8I4LT, "<"},
+  {OPC_U8U4LT, "<"},
+  {OPC_U8I8LT, "<"},
+  {OPC_U8U8LT, "<"},
+  {OPC_U8F4LT, "<"},
+  {OPC_U8F8LT, "<"},
+  {OPC_U8FQLT, "<"},
+#ifdef KEY
+  {OPC_I4EXTRACT_BITS, "_I4EXTRACT_BITS"},
+  {OPC_I8EXTRACT_BITS, "_I8EXTRACT_BITS"},
+  {OPC_U4EXTRACT_BITS, "_U4EXTRACT_BITS"},
+  {OPC_U8EXTRACT_BITS, "_U8EXTRACT_BITS"},
+  {OPC_I4COMPOSE_BITS, "_I4COMPOSE_BITS"},
+  {OPC_I8COMPOSE_BITS, "_I8COMPOSE_BITS"},
+  {OPC_U4COMPOSE_BITS, "_U4COMPOSE_BITS"},
+  {OPC_U8COMPOSE_BITS, "_U8COMPOSE_BITS"},
+#endif
+
+#endif
+#ifdef TARG_X8664
+  {OPC_F4ATOMIC_RSQRT, "_F4ATOMIC_RSQRT"},
+  {OPC_V16F4ATOMIC_RSQRT, "_V16F4ATOMIC_RSQRT"},
+  {OPC_V16F4RECIP, "_V16F4RECIP"},
+  {OPC_V16F8RECIP, "_V16F8RECIP"},
+  {OPC_F8F8FLOOR, "_F8F8FLOOR"},
+  {OPC_U8U8LT, "<"},
+  {OPC_I8I8EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_U4I4EQ, "=="},
+  {OPC_U4U8EQ, "=="},
+  {OPC_U8I4EQ, "=="},
+  {OPC_U8I8EQ, "=="},
+  {OPC_U4U4LE, "<="},
+  {OPC_U8U8LE, "<="},
+  {OPC_I4F8NE, "!="},
+  {OPC_U4F8NE, "!="},
+  {OPC_U4U4NE, "!="},
+  {OPC_U4U8NE, "!="},
+  {OPC_U8U8NE, "!="},
+  {OPC_U8I4NE, "!="},
+  {OPC_U4U4GE, ">="},
+  {OPC_V16I1ADD, "+"},
+  {OPC_V16I2ADD, "+"},
+  {OPC_V16I4ADD, "+"},
+  {OPC_V16I8ADD, "+"},
+  {OPC_V16F4ADD, "+"},
+  {OPC_V16F8ADD, "+"},
+  {OPC_V16C4ADD, "+"},
+  {OPC_V16C8ADD, "+"},
+  {OPC_M8I1ADD, "+"},
+  {OPC_M8I2ADD, "+"},
+  {OPC_M8I4ADD, "+"},
+  {OPC_M8F4ADD, "+"},
+  {OPC_V8I1ADD, "+"},
+  {OPC_V8I2ADD, "+"},
+  {OPC_V8I4ADD, "+"},
+  {OPC_V8F4ADD, "+"},
+  {OPC_V16I1SUB, "-"},
+  {OPC_V16I2SUB, "-"},
+  {OPC_V16I4SUB, "-"},
+  {OPC_V16I8SUB, "-"},
+  {OPC_V16F4SUB, "-"},
+  {OPC_V16F8SUB, "-"},
+  {OPC_V16C4SUB, "-"},
+  {OPC_V16C8SUB, "-"},
+  {OPC_M8I1SUB, "-"},
+  {OPC_M8I2SUB, "-"},
+  {OPC_M8I4SUB, "-"},
+  {OPC_M8F4SUB, "-"},
+  {OPC_V8I1SUB, "-"},
+  {OPC_V8I2SUB, "-"},
+  {OPC_V8I4SUB, "-"},
+  {OPC_V8F4SUB, "-"},
+  {OPC_V16I1BAND,"&"},
+  {OPC_V16I2BAND,"&"},
+  {OPC_V16I4BAND,"&"},
+  {OPC_V16I8BAND,"&"},
+  {OPC_V16F4BAND,"&"},
+  {OPC_V16F8BAND,"&"},
+  {OPC_V16I1BIOR,"|"},
+  {OPC_V16I2BIOR,"|"},
+  {OPC_V16I4BIOR,"|"},
+  {OPC_V16I8BIOR,"|"},
+  {OPC_V16F4BIOR,"|"},
+  {OPC_V16F8BIOR,"|"},
+  {OPC_V16I1BXOR,"^"},
+  {OPC_V16I2BXOR,"^"},
+  {OPC_V16I4BXOR,"^"},
+  {OPC_V16I8BXOR,"^"},
+  {OPC_V16F4BXOR,"^"},
+  {OPC_V16F8BXOR,"^"},
+  {OPC_V16F4MAX,"_V16F4MAX"},
+  {OPC_V16F8MAX,"_V16F8MAX"},
+  {OPC_V16F4MIN,"_V16F4MIN"},
+  {OPC_V16F8MIN,"_V16F8MIN"},
+  {OPC_V16F4DIV,"/"},
+  {OPC_V16F8DIV,"/"},
+  {OPC_V16F4MPY,"*"},
+  {OPC_V16F8MPY,"*"},
+  {OPC_V16C4DIV,"/"},
+  {OPC_V16C8DIV,"/"},
+  {OPC_V16C4MPY,"*"},
+  {OPC_V16C8MPY,"*"},
+  {OPC_V16F4SQRT, "SQRT"},
+  {OPC_V16F8SQRT, "SQRT"},
+  {OPC_V16I1NEG, "-"},
+  {OPC_V16I2NEG, "-"},
+  {OPC_V16I4NEG, "-"},
+  {OPC_V16I8NEG, "-"},
+  {OPC_V16F4NEG, "-"},
+  {OPC_V16F8NEG, "-"},
+#endif /* TARG_X8664 */
+// << WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
+}; /* WN2C_Opc2Cname_Map */
+
+
+static BOOL WN2OpenCL_IsFunCall_OP(char p)
+{
+	if(isalpha(p))
+	{
+		return TRUE;
+	}
+	else if(p == '_')
+	{
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static const char *WN2OpenCL_Opc2cname[NUMBER_OF_OPCODES];
+
+#define WN2OpenCL_IS_FUNCALL_OP(opc) \
+   ((WN2OpenCL_Opc2cname[opc]!=NULL)? WN2OpenCL_IsFunCall_OP(WN2OpenCL_Opc2cname[opc][0]) : FALSE)
+
+
+static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
+{
+  {OPC_U8NEG, "-"},
+  {OPC_F10NEG, "-"},
+  {OPC_FQNEG, "-"},
+  {OPC_I8NEG, "-"},
+  {OPC_U4NEG, "-"},
+  {OPC_CQNEG, "_CQNEG"},
+  {OPC_F8NEG, "-"},
+  {OPC_C8NEG, "_C8NEG"},
+  {OPC_I4NEG, "-"},
+  {OPC_F4NEG, "-"},
+  {OPC_C4NEG, "_C4NEG"},
+  {OPC_I4ABS, "fabsf"},
+  {OPC_F4ABS, "fabsf"},
+#ifdef TARG_IA64
+  {OPC_F10ABS, "_F10ABS"},
+#elif defined (TARG_X8664)
+  {OPC_V16F4ABS, "_V16F4ABS"},
+  {OPC_V16F8ABS, "_V16F8ABS"},
+#endif
+  {OPC_FQABS, "_FQABS"},
+  {OPC_I8ABS, "fabs"},
+  {OPC_F8ABS, "fabs"},
+  {OPC_F4SQRT, "sqrtf"},
+  {OPC_C4SQRT, "_C4SQRT"},
+  {OPC_F10SQRT, "_F10SQRT"},
+  {OPC_FQSQRT, "_FQSQRT"},
+  {OPC_CQSQRT, "_CQSQRT"},
+  {OPC_F8SQRT, "sqrt"},
+  {OPC_C8SQRT, "_C8SQRT"},
+  {OPC_I4F4RND, "_I4F4RND"},
+  {OPC_I4F10RND, "_I4F10RND"},
+  {OPC_I4FQRND, "_I4FQRND"},
+  {OPC_I4F8RND, "_I4F8RND"},
+  {OPC_U4F4RND, "_U4F4RND"},
+  {OPC_U4F10RND, "_U4F10RND"},
+  {OPC_U4FQRND, "_U4FQRND"},
+  {OPC_U4F8RND, "_U4F8RND"},
+  {OPC_I8F4RND, "_I8F4RND"},
+  {OPC_I8F10RND, "_I8F10RND"},
+  {OPC_I8FQRND, "_I8FQRND"},
+  {OPC_I8F8RND, "_I8F8RND"},
+  {OPC_U8F4RND, "_U8F4RND"},
+  {OPC_U8F10RND, "_U8F10RND"},
+  {OPC_U8FQRND, "_U8FQRND"},
+  {OPC_U8F8RND, "_U8F8RND"},
+  {OPC_I4F4TRUNC, "truncf"},
+  {OPC_I4F10TRUNC, "_I4F10TRUNC"},
+  {OPC_I4FQTRUNC, "_I4FQTRUNC"},
+  {OPC_I4F8TRUNC, "trunc"},
+  {OPC_U4F4TRUNC, "truncf"},
+  {OPC_U4F10TRUNC, "_U4F10TRUNC"},
+  {OPC_U4FQTRUNC, "_U4FQTRUNC"},
+  {OPC_U4F8TRUNC, "trunc"},
+  {OPC_I8F4TRUNC, "truncf"},
+  {OPC_I8F10TRUNC, "_I8F10TRUNC"},
+  {OPC_I8FQTRUNC, "_I8FQTRUNC"},
+  {OPC_I8F8TRUNC, "trunc"},
+  {OPC_U8F4TRUNC, "truncf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4TRUNC, "truncf"},
+  {OPC_F8F8TRUNC, "trunc"},
+#endif
+  {OPC_U8F10TRUNC, "_U8F10TRUNC"},
+  {OPC_U8FQTRUNC, "_U8FQTRUNC"},
+  {OPC_U8F8TRUNC, "trunc"},
+  {OPC_I4F4CEIL, "ceilf"},
+  {OPC_I4F10CEIL, "_I4F10CEIL"},
+  {OPC_I4FQCEIL, "_I4FQCEIL"},
+  {OPC_I4F8CEIL, "ceil"},
+  {OPC_U4F4CEIL, "ceilf"},
+  {OPC_U4F10CEIL, "_U4F10CEIL"}, 
+  {OPC_U4FQCEIL, "_U4FQCEIL"},
+  {OPC_U4F8CEIL, "ceil"},
+  {OPC_I8F4CEIL, "ceilf"},
+  {OPC_I8F10CEIL, "_I8F10CEIL"},
+  {OPC_I8FQCEIL, "_I8FQCEIL"},
+  {OPC_I8F8CEIL, "ceil"},
+  {OPC_U8F4CEIL, "ceilf"},
+  {OPC_U8F10CEIL, "_U8F10CEIL"},
+  {OPC_U8FQCEIL, "_U8FQCEIL"},
+  {OPC_U8F8CEIL, "ceil"},
+  {OPC_I4F4FLOOR, "floorf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4CEIL, "ceilf"},
+  {OPC_F8F8CEIL, "ceil"},
+#endif
+  {OPC_I4F10FLOOR, "_I4F10FLOOR"},
+  {OPC_I4FQFLOOR, "_I4FQFLOOR"},
+  {OPC_I4F8FLOOR, "floor"},
+  {OPC_U4F4FLOOR, "floorf"},
+  {OPC_U4F10FLOOR, "_U4F10FLOOR"},
+  {OPC_U4FQFLOOR, "_U4FQFLOOR"},
+  {OPC_U4F8FLOOR, "floor"},
+  {OPC_I8F4FLOOR, "floorf"},
+  {OPC_I8F10FLOOR, "_I8F10FLOOR"},
+  {OPC_I8FQFLOOR, "_I8FQFLOOR"},
+  {OPC_I8F8FLOOR, "floor"},
+  {OPC_U8F4FLOOR, "floorf"},
+#ifdef TARG_NVISA
+  {OPC_F4F4FLOOR, "floorf"},
+  {OPC_F8F8FLOOR, "floor"},
+#endif
+  {OPC_U8F10FLOOR, "_U8F10FLOOR"},
+  {OPC_U8FQFLOOR, "_U8FQFLOOR"},
+  {OPC_U8F8FLOOR, "floor"},
+#ifdef KEY
+  {OPC_F4F4FLOOR, "floorf"},
+#endif
+  {OPC_I4BNOT, "~"},
+  {OPC_U8BNOT, "~"},
+  {OPC_I8BNOT, "~"},
+  {OPC_U4BNOT, "~"},
+// >> WHIRL 0.30: replaced OPC_LNOT by OPC_B and OP_I4 variants
+// TODO WHIRL 0.30: get rid of OPC_I4 variants
+  {OPC_BLNOT, "!"},
+  {OPC_I4LNOT, "!"},
+// << WHIRL 0.30: replaced OPC_LNOT by OPC_B and OP_I4 variants
+  {OPC_U8ADD, "+"},
+  {OPC_F10ADD, "+"},
+  {OPC_FQADD, "+"},
+  {OPC_I8ADD, "+"},
+  {OPC_U4ADD, "+"},
+  {OPC_CQADD, "_CQADD"},
+  {OPC_F8ADD, "+"},
+  {OPC_C8ADD, "_C8ADD"},
+  {OPC_I4ADD, "+"},
+  {OPC_F4ADD, "+"},
+  {OPC_C4ADD, "_C4ADD"},
+  {OPC_U8SUB, "-"},
+  {OPC_F10SUB, "-"},
+  {OPC_FQSUB, "-"},
+  {OPC_I8SUB, "-"},
+  {OPC_U4SUB, "-"},
+  {OPC_CQSUB, "_CQSUB"},
+  {OPC_F8SUB, "-"},
+  {OPC_C8SUB, "_C8SUB"},
+  {OPC_I4SUB, "-"},
+  {OPC_F4SUB, "-"},
+  {OPC_C4SUB, "_C4SUB"},
+  {OPC_U8MPY, "*"},
+  {OPC_F10MPY, "*"},
+  {OPC_FQMPY, "*"},
+  {OPC_I8MPY, "*"},
+  {OPC_U4MPY, "*"},
+  {OPC_CQMPY, "_CQMPY"},
+  {OPC_F8MPY, "*"},
+  {OPC_C8MPY, "_C8MPY"},
+  {OPC_I4MPY, "*"},
+  {OPC_F4MPY, "*"},
+  {OPC_C4MPY, "_C4MPY"},
+  {OPC_U8DIV, "/"},
+  {OPC_F10DIV, "/"},
+  {OPC_FQDIV, "/"},
+  {OPC_I8DIV, "/"},
+  {OPC_U4DIV, "/"},
+  {OPC_CQDIV, "_CQDIV"},
+  {OPC_F8DIV, "/"},
+  {OPC_C8DIV, "_C8DIV"},
+  {OPC_I4DIV, "/"},
+  {OPC_F4DIV, "/"},
+  {OPC_C4DIV, "_C4DIV"},
+  {OPC_I4MOD, "_I4MOD"},
+  {OPC_U8MOD, "%"},
+  {OPC_I8MOD, "_I8MOD"},
+  {OPC_U4MOD, "%"},
+  {OPC_I4REM, "%"},
+  {OPC_U8REM, "%"},
+  {OPC_I8REM, "%"},
+  {OPC_U4REM, "%"},
+  {OPC_I4MAX, "fmaxf"},
+  {OPC_U8MAX, "_U8MAX"},
+  {OPC_F4MAX, "fmaxf"},
+  {OPC_F10MAX, "_F10MAX"},
+  {OPC_FQMAX, "_FQMAX"},
+  {OPC_I8MAX, "fmax"},
+  {OPC_U4MAX, "_U4MAX"},
+  {OPC_F8MAX, "fmax"},
+#ifdef TARG_X8664
+  {OPC_V16F4MAX, "_V16F4MAX"},
+  {OPC_V16F8MAX, "_V16F8MAX"},
+  {OPC_V16I1MAX, "_V16I1MAX"}, 
+  {OPC_V16I2MAX, "_V16I2MAX"},
+  {OPC_V16I4MAX, "_V16I4MAX"}, 
+  {OPC_V16I8MAX, "_V16I8MAX"},
+  {OPC_V32F4MAX, "_V32F4MAX"},
+  {OPC_V32F8MAX, "_V32F8MAX"},
+  {OPC_V32I1MAX, "_V32I1MAX"},
+  {OPC_V32I2MAX, "_V32I2MAX"},
+  {OPC_V32I4MAX, "_V32I4MAX"},
+  {OPC_V32I8MAX, "_V32I8MAX"},
+#endif
+  {OPC_I4MIN, "fminf"},
+  {OPC_U8MIN, "_U8MIN"},
+  {OPC_F4MIN, "fminf"},
+  {OPC_F10MIN, "_F10MIN"},
+  {OPC_FQMIN, "_FQMIN"},
+  {OPC_I8MIN, "fmin"},
+  {OPC_U4MIN, "_U4MIN"},
+  {OPC_F8MIN, "fmax"},
+#ifdef TARG_X8664
+  {OPC_V16F4MIN, "_V16F4MIN"},
+  {OPC_V16F8MIN, "_V16F8MIN"},
+  {OPC_V16I1MIN, "_V16I1MIN"},
+  {OPC_V16I2MIN, "_V16I2MIN"},
+  {OPC_V16I4MIN, "_V16I4MIN"},
+  {OPC_V16I8MIN, "_V16I8MIN"},
+  {OPC_V32F4MIN, "_V32F4MIN"}, 
+  {OPC_V32F8MIN, "_V32F8MIN"},
+  {OPC_V32I1MIN, "_V32I1MIN"}, 
+  {OPC_V32I2MIN, "_V32I2MIN"}, 
+  {OPC_V32I4MIN, "_V32I4MIN"}, 
+  {OPC_V32I8MIN, "_V32I8MIN"},
+#endif /* TARG_X8664 */
+  {OPC_I4BAND, "&"},
+  {OPC_U8BAND, "&"},
+  {OPC_I8BAND, "&"},
+  {OPC_U4BAND, "&"},
+  {OPC_I4BIOR, "|"},
+  {OPC_U8BIOR, "|"},
+  {OPC_I8BIOR, "|"},
+  {OPC_U4BIOR, "|"},
+  {OPC_I4BXOR, "^"},
+  {OPC_U8BXOR, "^"},
+  {OPC_I8BXOR , "^"},
+  {OPC_U4BXOR, "^"},
+// >> WHIRL 0.30: replaced OPC_LAND, OPC_LIOR, OPC_CAND, OPC_CIOR by OPC_B and OP_I4 variants
+// TODO WHIRL 0.30: get rid of OPC_I4 variants
+  {OPC_BLAND, "&&"},
+  {OPC_I4LAND, "&&"},
+  {OPC_BLIOR, "||"},
+  {OPC_I4LIOR, "||"},
+  {OPC_BCAND, "&&"},
+  {OPC_I4CAND, "&&"},
+  {OPC_BCIOR, "||"},
+  {OPC_I4CIOR, "||"},
+// << WHIRL 0.30: replaced OPC_LAND, OPC_LIOR, OPC_CAND, OPC_CIOR by OPC_B and OP_I4 variants
+  {OPC_I4SHL, "<<"},
+  {OPC_U8SHL, "<<"},
+  {OPC_I8SHL, "<<"},
+  {OPC_U4SHL, "<<"},
+  {OPC_I4ASHR, ">>"},
+  {OPC_U8ASHR, ">>"},
+  {OPC_I8ASHR, ">>"},
+  {OPC_U4ASHR, ">>"},
+  {OPC_I4LSHR, "_I4LSHR"},
+  {OPC_U8LSHR, "_U8LSHR"},
+  {OPC_I8LSHR, "_I8LSHR"},
+  {OPC_U4LSHR, "_U4LSHR"},
+  {OPC_F4RECIP, "_F4RECIP"},
+  {OPC_C4RECIP, "_C4RECIP"},
+  {OPC_F10RECIP, "_F10RECIP"},
+  {OPC_FQRECIP, "_FQRECIP"},
+  {OPC_CQRECIP, "_CQRECIP"},
+  {OPC_F8RECIP, "_F8RECIP"},
+  {OPC_C8RECIP, "_C8RECIP"},
+  {OPC_F4RSQRT, "_F4RSQRT"},
+  {OPC_C4RSQRT, "_C4RSQRT"},
+  {OPC_F10RSQRT, "_F10RSQRT"},
+  {OPC_FQRSQRT, "_FQRSQRT"},
+  {OPC_CQRSQRT, "_CQRSQRT"},
+  {OPC_F8RSQRT, "_F8RSQRT"},
+  {OPC_C8RSQRT, "_C8RSQRT"},
+// >> WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
+// TODO WHIRL 0.30: get rid of OPC_I4T1 variants
+  {OPC_BU8EQ, "=="},
+  {OPC_BF10EQ, "=="},
+  {OPC_BFQEQ, "=="},
+  {OPC_BI8EQ, "=="},
+  {OPC_BU4EQ, "=="},
+  {OPC_BCQEQ, "=="},
+  {OPC_BF8EQ, "=="},
+  {OPC_BC8EQ, "=="},
+  {OPC_BI4EQ, "=="},
+  {OPC_BF4EQ, "=="},
+  {OPC_BC4EQ, "=="},
+  {OPC_I8I4EQ, "=="},
+  {OPC_I8I4NE, "!="},
+  {OPC_BU8NE, "!="},
+  {OPC_BF10NE, "!="},
+  {OPC_BFQNE, "!="},
+  {OPC_BI8NE, "!="},
+  {OPC_BU4NE, "!="},
+  {OPC_BCQNE, "!="},
+  {OPC_BF8NE, "!="},
+  {OPC_BC8NE, "!="},
+  {OPC_BI4NE, "!="},
+  {OPC_BF4NE, "!="},
+  {OPC_BC4NE, "!="},
+  {OPC_BI4GT, ">"},
+  {OPC_BU8GT, ">"},
+  {OPC_BF4GT, ">"},
+  {OPC_BF10GT, ">"},
+  {OPC_BFQGT, ">"},
+  {OPC_BI8GT, ">"},
+  {OPC_BU4GT, ">"},
+  {OPC_BF8GT, ">"},
+  {OPC_BI4GE, ">="},
+  {OPC_BU8GE, ">="},
+  {OPC_BF4GE, ">="},
+  {OPC_BF10GE, ">="},
+  {OPC_BFQGE, ">="},
+  {OPC_BI8GE, ">="},
+  {OPC_BU4GE, ">="},
+  {OPC_BF8GE, ">="},
+  {OPC_BI4LT, "<"},
+  {OPC_BU8LT, "<"},
+  {OPC_BF4LT, "<"},
+  {OPC_BF10LT, "<"},
+  {OPC_BFQLT, "<"},
+  {OPC_BI8LT, "<"},
+  {OPC_BU4LT, "<"},
+  {OPC_BF8LT, "<"},
+  {OPC_BI4LE, "<="},
+  {OPC_BU8LE, "<="},
+  {OPC_BF4LE, "<="},
+  {OPC_BF10LE, "<="},
+  {OPC_BFQLE, "<="},
+  {OPC_BI8LE, "<="},
+  {OPC_BU4LE, "<="},
+  {OPC_BF8LE, "<="},
+#ifdef TARG_IA64
+  {OPC_I4U8EQ, "=="},
+  {OPC_I4FQEQ, "=="},
+  {OPC_I4I8EQ, "=="},
+  {OPC_I4U4EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_I4CQEQ, "=="},
+  {OPC_I4F8EQ, "=="},
+  {OPC_I4C8EQ, "=="},
+#endif
+  {OPC_I4F10EQ, "=="},
+  {OPC_I4I4EQ, "=="},
+#ifdef TARG_X8664
+  {OPC_I4U4EQ, "=="},
+  {OPC_I4I8EQ, "=="},
+  {OPC_I4U8EQ, "=="},
+#endif
+  {OPC_I4F4EQ, "=="},
+#ifdef TARG_X8664
+  {OPC_I4F8EQ, "=="},
+  {OPC_I4FQEQ, "=="},
+#endif
+  {OPC_I4C4EQ, "=="},
+#ifndef TARG_X8664
+  {OPC_I4U8NE, "!="},
+  {OPC_I4I8NE, "!="},
+  {OPC_I4U4NE, "!="},
+  {OPC_I4CQNE, "!="},
+  {OPC_I4F8NE, "!="},
+  {OPC_I4C8NE, "!="},
+#else
+  {OPC_I4C8EQ, "=="},
+  {OPC_I4CQEQ, "=="},
+  {OPC_I8I4EQ, "=="},
+  {OPC_I8U4EQ, "=="},
+  {OPC_I8I8EQ, "=="},
+  {OPC_I8U8EQ, "=="},
+  {OPC_I8F4EQ, "=="},
+  {OPC_I8F8EQ, "=="},
+  {OPC_I8FQEQ, "=="},
+  {OPC_I8C4EQ, "=="},
+  {OPC_I8C8EQ, "=="},
+  {OPC_I8CQEQ, "=="},
+  {OPC_U4I4EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_U4I8EQ, "=="},
+  {OPC_U4U8EQ, "=="},
+  {OPC_U4F4EQ, "=="},
+  {OPC_U4F8EQ, "=="},
+  {OPC_U4FQEQ, "=="},
+  {OPC_U4C4EQ, "=="},
+  {OPC_U4C8EQ, "=="},
+  {OPC_U4CQEQ, "=="},
+  {OPC_U8I4EQ, "=="},
+  {OPC_U8U4EQ, "=="},
+  {OPC_U8I8EQ, "=="},
+  {OPC_U8U8EQ, "=="},
+  {OPC_U8F4EQ, "=="},
+  {OPC_U8F8EQ, "=="},
+  {OPC_U8FQEQ, "=="},
+  {OPC_U8C4EQ, "=="},
+  {OPC_U8C8EQ, "=="},
+  {OPC_U8CQEQ, "=="},
+#endif
+  {OPC_I4I4NE, "!="},
+#ifdef TARG_X8664
+  {OPC_I4U4NE, "!="},
+  {OPC_I4I8NE, "!="},
+  {OPC_I4U8NE, "!="},
+#endif
+  {OPC_I4F4NE, "!="},
+  {OPC_I4F10NE, "!="},
+  {OPC_I4FQNE, "!="},
+#ifdef TARG_X8664
+  {OPC_I4F8NE, "!="},
+#endif
+  {OPC_I4C4NE, "!="},
+  {OPC_I4F10GT, ">"},
+#ifndef TARG_X8664
+  {OPC_I4I4GT, ">"},
+  {OPC_I4U8GT, ">"},
+  {OPC_I4F4GT, ">"},
+  {OPC_I4FQGT, ">"},
+  {OPC_I4I8GT, ">"},
+  {OPC_I4U4GT, ">"},
+  {OPC_I4F8GT, ">"},
+#else
+  {OPC_I4C8NE, "!="},
+  {OPC_I4CQNE, "!="},
+  {OPC_I8I4NE, "!="},
+  {OPC_I8U4NE, "!="},
+  {OPC_I8I8NE, "!="},
+  {OPC_I8U8NE, "!="},
+  {OPC_I8F4NE, "!="},
+  {OPC_I8F8NE, "!="},
+  {OPC_I8FQNE, "!="},
+  {OPC_I8C4NE, "!="},
+  {OPC_I8C8NE, "!="},
+  {OPC_I8CQNE, "!="},
+  {OPC_U4I4NE, "!="},
+  {OPC_U4U4NE, "!="},
+  {OPC_U4I8NE, "!="},
+  {OPC_U4U8NE, "!="},
+  {OPC_U4F4NE, "!="},
+  {OPC_U4F8NE, "!="},
+  {OPC_U4FQNE, "!="},
+  {OPC_U4C4NE, "!="},
+  {OPC_U4C8NE, "!="},
+  {OPC_U4CQNE, "!="},
+  {OPC_U8I4NE, "!="},
+  {OPC_U8U4NE, "!="},
+  {OPC_U8I8NE, "!="},
+  {OPC_U8U8NE, "!="},
+  {OPC_U8F4NE, "!="},
+  {OPC_U8F8NE, "!="},
+  {OPC_U8FQNE, "!="},
+  {OPC_U8C4NE, "!="},
+  {OPC_U8C8NE, "!="},
+  {OPC_U8CQNE, "!="},
+#endif
+  {OPC_I4I4GE, ">="},
+#ifdef TARG_X8664
+  {OPC_I4U4GE, ">="},
+  {OPC_I4I8GE, ">="},
+#endif
+  {OPC_I4U8GE, ">="},
+  {OPC_I4F4GE, ">="},
+#ifdef TARG_IA64
+  {OPC_I4FQGE, ">="},
+  {OPC_I4I8GE, ">="},
+  {OPC_I4U4GE, ">="},
+#endif
+  {OPC_I4F10GE, ">="},
+  {OPC_I4F8GE, ">="},
+  {OPC_I4F10LT, "<"},
+#ifndef TARG_X8664
+  {OPC_I4I4LT, "<"},
+  {OPC_I4U8LT, "<"},
+  {OPC_I4F4LT, "<"},
+  {OPC_I4FQLT, "<"},
+  {OPC_I4I8LT, "<"},
+  {OPC_I4U4LT, "<"},
+  {OPC_I4F8LT, "<"},
+#else
+  {OPC_I4FQGE, ">="},
+  {OPC_I8I4GE, ">="},
+  {OPC_I8U4GE, ">="},
+  {OPC_I8I8GE, ">="},
+  {OPC_I8U8GE, ">="},
+  {OPC_I8F4GE, ">="},
+  {OPC_I8F8GE, ">="},
+  {OPC_I8FQGE, ">="},
+  {OPC_U4I4GE, ">="},
+  {OPC_U4U4GE, ">="},
+  {OPC_U4I8GE, ">="},
+  {OPC_U4U8GE, ">="},
+  {OPC_U4F4GE, ">="},
+  {OPC_U4F8GE, ">="},
+  {OPC_U4FQGE, ">="},
+  {OPC_U8I4GE, ">="},
+  {OPC_U8U4GE, ">="},
+  {OPC_U8I8GE, ">="},
+  {OPC_U8U8GE, ">="},
+  {OPC_U8F4GE, ">="},
+  {OPC_U8F8GE, ">="},
+  {OPC_U8FQGE, ">="},
+#endif
+  {OPC_I4I4LE, "<="},
+  {OPC_I4U4LE, "<="},
+  {OPC_I4I8LE, "<="},
+  {OPC_I4U8LE, "<="},
+  {OPC_I4F4LE, "<="},
+  {OPC_I4F10LE, "<="},
+  {OPC_I4F8LE, "<="},
+  {OPC_I4FQLE, "<="},
+#ifndef TARG_X8664
+#ifdef KEY
+  {OPC_U8U8EQ, "=="},
+#endif
+#else
+  {OPC_I8I4LE, "<="},
+  {OPC_I8U4LE, "<="},
+  {OPC_I8I8LE, "<="},
+  {OPC_I8U8LE, "<="},
+  {OPC_I8F4LE, "<="},
+  {OPC_I8F8LE, "<="},
+  {OPC_I8FQLE, "<="},
+  {OPC_U4I4LE, "<="},
+  {OPC_U4U4LE, "<="},
+  {OPC_U4I8LE, "<="},
+  {OPC_U4U8LE, "<="},
+  {OPC_U4F4LE, "<="},
+  {OPC_U4F8LE, "<="},
+  {OPC_U4FQLE, "<="},
+  {OPC_U8I4LE, "<="},
+  {OPC_U8U4LE, "<="},
+  {OPC_U8I8LE, "<="},
+  {OPC_U8U8LE, "<="},
+  {OPC_U8F4LE, "<="},
+  {OPC_U8F8LE, "<="},
+  {OPC_U8FQLE, "<="},
+  {OPC_I4I4GT, ">"},
+  {OPC_I4U4GT, ">"},
+  {OPC_I4I8GT, ">"},
+  {OPC_I4U8GT, ">"},
+  {OPC_I4F4GT, ">"},
+  {OPC_I4F8GT, ">"},
+  {OPC_I4FQGT, ">"},
+  {OPC_I8I4GT, ">"},
+  {OPC_I8U4GT, ">"},
+  {OPC_I8I8GT, ">"},
+  {OPC_I8U8GT, ">"},
+  {OPC_I8F4GT, ">"},
+  {OPC_I8F8GT, ">"},
+  {OPC_I8FQGT, ">"},
+  {OPC_U4I4GT, ">"},
+  {OPC_U4U4GT, ">"},
+  {OPC_U4I8GT, ">"},
+  {OPC_U4U8GT, ">"},
+  {OPC_U4F4GT, ">"},
+  {OPC_U4F8GT, ">"},
+  {OPC_U4FQGT, ">"},
+  {OPC_U8I4GT, ">"},
+  {OPC_U8U4GT, ">"},
+  {OPC_U8I8GT, ">"},
+  {OPC_U8U8GT, ">"},
+  {OPC_U8F4GT, ">"},
+  {OPC_U8F8GT, ">"},
+  {OPC_U8FQGT, ">"},
+  {OPC_I4I4LT, "<"},
+  {OPC_I4U4LT, "<"},
+  {OPC_I4I8LT, "<"},
+  {OPC_I4U8LT, "<"},
+  {OPC_I4F4LT, "<"},
+  {OPC_I4F8LT, "<"},
+  {OPC_I4FQLT, "<"},
+  {OPC_I8I4LT, "<"},
+  {OPC_I8U4LT, "<"},
+  {OPC_I8I8LT, "<"},
+  {OPC_I8U8LT, "<"},
+  {OPC_I8F4LT, "<"},
+  {OPC_I8F8LT, "<"},
+  {OPC_I8FQLT, "<"},
+  {OPC_U4I4LT, "<"},
+  {OPC_U4U4LT, "<"},
+  {OPC_U4I8LT, "<"},
+  {OPC_U4U8LT, "<"},
+  {OPC_U4F4LT, "<"},
+  {OPC_U4F8LT, "<"},
+  {OPC_U4FQLT, "<"},
+  {OPC_U8I4LT, "<"},
+  {OPC_U8U4LT, "<"},
+  {OPC_U8I8LT, "<"},
+  {OPC_U8U8LT, "<"},
+  {OPC_U8F4LT, "<"},
+  {OPC_U8F8LT, "<"},
+  {OPC_U8FQLT, "<"},
+#ifdef KEY
+  {OPC_I4EXTRACT_BITS, "_I4EXTRACT_BITS"},
+  {OPC_I8EXTRACT_BITS, "_I8EXTRACT_BITS"},
+  {OPC_U4EXTRACT_BITS, "_U4EXTRACT_BITS"},
+  {OPC_U8EXTRACT_BITS, "_U8EXTRACT_BITS"},
+  {OPC_I4COMPOSE_BITS, "_I4COMPOSE_BITS"},
+  {OPC_I8COMPOSE_BITS, "_I8COMPOSE_BITS"},
+  {OPC_U4COMPOSE_BITS, "_U4COMPOSE_BITS"},
+  {OPC_U8COMPOSE_BITS, "_U8COMPOSE_BITS"},
+#endif
+
+#endif
+#ifdef TARG_X8664
+  {OPC_F4ATOMIC_RSQRT, "_F4ATOMIC_RSQRT"},
+  {OPC_V16F4ATOMIC_RSQRT, "_V16F4ATOMIC_RSQRT"},
+  {OPC_V16F4RECIP, "_V16F4RECIP"},
+  {OPC_V16F8RECIP, "_V16F8RECIP"},
+  {OPC_F8F8FLOOR, "_F8F8FLOOR"},
+  {OPC_U8U8LT, "<"},
+  {OPC_I8I8EQ, "=="},
+  {OPC_U4U4EQ, "=="},
+  {OPC_U4I4EQ, "=="},
+  {OPC_U4U8EQ, "=="},
+  {OPC_U8I4EQ, "=="},
+  {OPC_U8I8EQ, "=="},
+  {OPC_U4U4LE, "<="},
+  {OPC_U8U8LE, "<="},
+  {OPC_I4F8NE, "!="},
+  {OPC_U4F8NE, "!="},
+  {OPC_U4U4NE, "!="},
+  {OPC_U4U8NE, "!="},
+  {OPC_U8U8NE, "!="},
+  {OPC_U8I4NE, "!="},
+  {OPC_U4U4GE, ">="},
+  {OPC_V16I1ADD, "+"},
+  {OPC_V16I2ADD, "+"},
+  {OPC_V16I4ADD, "+"},
+  {OPC_V16I8ADD, "+"},
+  {OPC_V16F4ADD, "+"},
+  {OPC_V16F8ADD, "+"},
+  {OPC_V16C4ADD, "+"},
+  {OPC_V16C8ADD, "+"},
+  {OPC_M8I1ADD, "+"},
+  {OPC_M8I2ADD, "+"},
+  {OPC_M8I4ADD, "+"},
+  {OPC_M8F4ADD, "+"},
+  {OPC_V8I1ADD, "+"},
+  {OPC_V8I2ADD, "+"},
+  {OPC_V8I4ADD, "+"},
+  {OPC_V8F4ADD, "+"},
+  {OPC_V16I1SUB, "-"},
+  {OPC_V16I2SUB, "-"},
+  {OPC_V16I4SUB, "-"},
+  {OPC_V16I8SUB, "-"},
+  {OPC_V16F4SUB, "-"},
+  {OPC_V16F8SUB, "-"},
+  {OPC_V16C4SUB, "-"},
+  {OPC_V16C8SUB, "-"},
+  {OPC_M8I1SUB, "-"},
+  {OPC_M8I2SUB, "-"},
+  {OPC_M8I4SUB, "-"},
+  {OPC_M8F4SUB, "-"},
+  {OPC_V8I1SUB, "-"},
+  {OPC_V8I2SUB, "-"},
+  {OPC_V8I4SUB, "-"},
+  {OPC_V8F4SUB, "-"},
+  {OPC_V16I1BAND,"&"},
+  {OPC_V16I2BAND,"&"},
+  {OPC_V16I4BAND,"&"},
+  {OPC_V16I8BAND,"&"},
+  {OPC_V16F4BAND,"&"},
+  {OPC_V16F8BAND,"&"},
+  {OPC_V16I1BIOR,"|"},
+  {OPC_V16I2BIOR,"|"},
+  {OPC_V16I4BIOR,"|"},
+  {OPC_V16I8BIOR,"|"},
+  {OPC_V16F4BIOR,"|"},
+  {OPC_V16F8BIOR,"|"},
+  {OPC_V16I1BXOR,"^"},
+  {OPC_V16I2BXOR,"^"},
+  {OPC_V16I4BXOR,"^"},
+  {OPC_V16I8BXOR,"^"},
+  {OPC_V16F4BXOR,"^"},
+  {OPC_V16F8BXOR,"^"},
+  {OPC_V16F4MAX,"_V16F4MAX"},
+  {OPC_V16F8MAX,"_V16F8MAX"},
+  {OPC_V16F4MIN,"_V16F4MIN"},
+  {OPC_V16F8MIN,"_V16F8MIN"},
+  {OPC_V16F4DIV,"/"},
+  {OPC_V16F8DIV,"/"},
+  {OPC_V16F4MPY,"*"},
+  {OPC_V16F8MPY,"*"},
+  {OPC_V16C4DIV,"/"},
+  {OPC_V16C8DIV,"/"},
+  {OPC_V16C4MPY,"*"},
+  {OPC_V16C8MPY,"*"},
+  {OPC_V16F4SQRT, "SQRT"},
+  {OPC_V16F8SQRT, "SQRT"},
+  {OPC_V16I1NEG, "-"},
+  {OPC_V16I2NEG, "-"},
+  {OPC_V16I4NEG, "-"},
+  {OPC_V16I8NEG, "-"},
+  {OPC_V16F4NEG, "-"},
+  {OPC_V16F8NEG, "-"},
+#endif /* TARG_X8664 */
+// << WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
+}; /* WN2C_Opc2Cname_Map */
+
 
 static bool 
 WN2C_is_void_ptr (TY_IDX idx) {
@@ -1722,7 +3161,15 @@ WN2C_funcall_op(TOKEN_BUFFER tokens,
       descriptor_ty = result_ty;
    
    /* Operator */
-   Append_Token_String(tokens, WN2C_Opc2cname[opcode]);
+   if(isGPUKernelFunc)
+   {
+    if(isGPUOpenCLKernelFunc)
+		Append_Token_String(tokens, WN2OpenCL_Opc2cname[opcode]);
+	else
+   		Append_Token_String(tokens, WN2CUDA_Opc2cname[opcode]);
+   }
+   else
+   	Append_Token_String(tokens, WN2C_Opc2cname[opcode]);
 
    CONTEXT_set_top_level_expr(context);
    Append_Token_Special(tokens, '(');
@@ -3018,10 +4465,20 @@ WN2C_Append_Symtab_Types(TOKEN_BUFFER tokens, UINT lines_between_decls)
 	 if (tokens != NULL)
 	    Append_And_Reclaim_Token_List(tokens, &tmp_tokens);
 	 else
+	 {
+	 	TOKEN_BUFFER tmp_tokens2 = New_Token_Buffer();
+		Append_And_Copy_Token_List(tmp_tokens2, tmp_tokens);
 	    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
 				     NULL, /* No srcpos map */
 				     &tmp_tokens);
-      }
+	    //Write_And_Reclaim_Tokens(W2C_File[W2C_GPUH_FILE], 
+		//		     NULL, /* No srcpos map */
+		//		     &tmp_tokens2);
+	    //Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+		//		     NULL, /* No srcpos map */
+		//		     &tmp_tokens);
+	 }
+    }
    }
 }  /* WN2C_Append_Symtab_Types */
 
@@ -3306,6 +4763,7 @@ static TY_IDX WN2C_get_base_type(TY_IDX idx) {
   }
 }
 
+
 static void
 WN2C_Append_Symtab_Vars(TOKEN_BUFFER tokens, 
 			INT          lines_between_decls,
@@ -3327,44 +4785,132 @@ WN2C_Append_Symtab_Vars(TOKEN_BUFFER tokens,
     * global definition or that have been referenced in this 
     * compilation unit.
     */
-   FOREACH_SYMBOL(CURRENT_SYMTAB, st, st_idx)
-   {
-      TY_IDX st_ty  = ST_class(st) == CLASS_VAR ? ST_type(st) :
-      ST_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
-      if (!ST_is_not_used(st)                         &&
-	  ST_sclass(st) != SCLASS_FORMAL              && 
-	  ST_sclass(st) != SCLASS_FORMAL_REF          &&
-	  ((ST_sym_class(st) == CLASS_VAR && !ST_is_const_var(st)) || 
-	   ST_sym_class(st) == CLASS_FUNC)            &&
-	  !Stab_Reserved_St(st)                       &&
-	  !Stab_Is_Based_At_Common_Or_Equivalence(st) &&
+    
+   if(CURRENT_SYMTAB != GLOBAL_SYMTAB)
+   	{
+	   FOREACH_SYMBOL(CURRENT_SYMTAB, st, st_idx)
+	   {
+	      TY_IDX st_ty  = ST_class(st) == CLASS_VAR ? ST_type(st) :
+	      ST_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+	      if (!ST_is_not_used(st)                         &&
+		  ST_sclass(st) != SCLASS_FORMAL              && 
+		  ST_sclass(st) != SCLASS_FORMAL_REF          &&
+		  ((ST_sym_class(st) == CLASS_VAR && !ST_is_const_var(st)) || 
+		   ST_sym_class(st) == CLASS_FUNC)            &&
+		  !Stab_Reserved_St(st)                       &&
+		  !Stab_Is_Based_At_Common_Or_Equivalence(st) &&
 #ifndef TARG_NVISA // emit common blocks like threadIdx
-	  !Stab_Is_Common_Block(st)                   &&
+		  !Stab_Is_Common_Block(st)                   &&
 #endif
-	  !Stab_Is_Equivalence_Block(st)              &&
-	  (Stab_External_Def_Linkage(st)                        || 
-	   (ST_sym_class(st) == CLASS_VAR && ST_sclass(st) == SCLASS_CPLINIT) ||
-	   BE_ST_w2fc_referenced(st)))
-      {
-	 tmp_tokens = New_Token_Buffer();
-	 if (ST_is_weak_symbol(st))
-	 {
-	    ST2C_weakext_translate(tmp_tokens, st, context);
-	 }
-	 else
-	 {
-	    ST2C_decl_translate(tmp_tokens, st, context);
-	    Append_Token_Special(tmp_tokens, ';');
-	 }
-	 Append_Indented_Newline(tmp_tokens, lines_between_decls);
-	 if (tokens != NULL)
-	    Append_And_Reclaim_Token_List(tokens, &tmp_tokens);
-	 else
-	    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
-				     NULL, /* No srcpos map */
-				     &tmp_tokens);
-      }
-   }
+		  !Stab_Is_Equivalence_Block(st)              &&
+		  (Stab_External_Def_Linkage(st)                        || 
+		   (ST_sym_class(st) == CLASS_VAR && ST_sclass(st) == SCLASS_CPLINIT) ||
+		   BE_ST_w2fc_referenced(st)))
+	      {
+			 tmp_tokens = New_Token_Buffer();
+			 if (ST_is_weak_symbol(st))
+			 {
+			    ST2C_weakext_translate(tmp_tokens, st, context);
+			 }
+			 else
+			 {
+			    ST2C_decl_translate(tmp_tokens, st, context);
+			    Append_Token_Special(tmp_tokens, ';');
+			 }
+			 Append_Indented_Newline(tmp_tokens, lines_between_decls);
+			 if (tokens != NULL)
+			    Append_And_Reclaim_Token_List(tokens, &tmp_tokens);
+			 else
+			 {
+			 	//TOKEN_BUFFER tmp_tokens2 = New_Token_Buffer();
+				//Append_And_Copy_Token_List(tmp_tokens2, tmp_tokens);
+			    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTC_FILE], 
+						     NULL, /* No srcpos map */
+						     &tmp_tokens);
+			    //Write_And_Reclaim_Tokens(W2C_File[W2C_GPUH_FILE], 
+				//		     NULL, /* No srcpos map */
+				//		     &tmp_tokens2);
+			 }		  
+	     }
+	   }
+   	}
+   else
+   	{
+   		//Src_File_Name
+   		//W2C_File_Name[W2C_ORIG_FILE]
+   		//char* sfname = Last_Pathname_Component(Src_File_Name);
+		FOREACH_SYMBOL(CURRENT_SYMTAB, st, st_idx)
+	   {
+	      TY_IDX st_ty  = ST_class(st) == CLASS_VAR ? ST_type(st) :
+	      ST_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+	      if (!ST_is_not_used(st)                         &&
+		  ST_sclass(st) != SCLASS_FORMAL              && 
+		  ST_sclass(st) != SCLASS_FORMAL_REF          &&
+		  ((ST_sym_class(st) == CLASS_VAR && !ST_is_const_var(st)) || 
+		   ST_sym_class(st) == CLASS_FUNC)            &&
+		  !Stab_Reserved_St(st)                       &&
+		  !Stab_Is_Based_At_Common_Or_Equivalence(st) &&
+#ifndef TARG_NVISA // emit common blocks like threadIdx
+		  !Stab_Is_Common_Block(st)                   &&
+#endif
+		  !Stab_Is_Equivalence_Block(st)              &&
+		  (Stab_External_Def_Linkage(st)                        || 
+		  (ST_sym_class(st) == CLASS_VAR && ST_sclass(st) == SCLASS_FSTATIC) ||
+		  (ST_sym_class(st) == CLASS_VAR && ST_sclass(st) == SCLASS_EXTERN) ||
+		   (ST_sym_class(st) == CLASS_VAR && ST_sclass(st) == SCLASS_CPLINIT) ||
+		   BE_ST_w2fc_referenced(st)))
+	      {
+		      //it is not necessary to generate the accr runtime declaration in the header files. 
+		      //Because there is runtime header has to be included in the generated source code. by daniel tian
+		      if(strncmp(ST_name(st), "__accr_", 7) == 0)
+			  	continue;
+			  if(strncmp(ST_name(st), "__accrg_", 8) == 0)
+			  	continue;
+			  if(strcmp(ST_name(st), "main") == 0)
+			  	continue;
+			  if(ST_is_ACC_device_func(st))
+					//Write_And_Reclaim_Tokens(W2C_File[W2C_GPU_FILE], 
+					//	     NULL, /* No srcpos map */
+					//	     &tmp_tokens);
+					continue;
+			  char* st_fname = ST_sfname(st);
+			  //the ST is not from current source code. WHIRL2C is not going to generate this ST. by Daniel Tian, for OpenACC
+			 if(strcmp(current_file_name, st_fname))
+			 		continue;
+			 
+			 tmp_tokens = New_Token_Buffer();
+			 if (ST_is_weak_symbol(st))
+			 {
+			    ST2C_weakext_translate(tmp_tokens, st, context);
+			 }
+			 else
+			 {
+			    ST2C_decl_translate(tmp_tokens, st, context);
+			    Append_Token_Special(tmp_tokens, ';');
+			 }
+			 Append_Indented_Newline(tmp_tokens, lines_between_decls);
+			 //if (tokens != NULL)
+			 //   Append_And_Reclaim_Token_List(tokens, &tmp_tokens);
+			 //else
+			 {
+			 	//TOKEN_BUFFER tmp_tokens2 = New_Token_Buffer();
+				//Append_And_Copy_Token_List(tmp_tokens2, tmp_tokens);
+				if(ST_is_ACC_device_func(st))
+					//Write_And_Reclaim_Tokens(W2C_File[W2C_GPU_FILE], 
+					//	     NULL, /* No srcpos map */
+					//	     &tmp_tokens);
+					continue;
+				else
+					Write_And_Reclaim_Tokens(W2C_File[W2C_DOTC_FILE], 
+						     NULL, /* No srcpos map */
+						     &tmp_tokens);
+			    //Write_And_Reclaim_Tokens(W2C_File[W2C_GPUH_FILE], 
+				//		     NULL, /* No srcpos map */
+				//		     &tmp_tokens2);
+			 }		  
+	     }
+	   }
+   	}
 } /* WN2C_Append_Symtab_Vars */
 
 
@@ -4136,7 +5682,6 @@ WN2C_binaryop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    
    Is_True(WN_kid_count(wn) == 2, 
      ("Expected 2 kids in WN2C_binaryop for op %s",WN_opc_name(wn)));
-
    if (WN2C_IS_INFIX_OP(WN_opcode(wn)))
       status = WN2C_infix_op(tokens,
 			     WN_opcode(wn),
@@ -4144,7 +5689,19 @@ WN2C_binaryop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 			     WN_kid0(wn), 
 			     WN_kid1(wn), 
 			     context);
-   else if (WN2C_IS_FUNCALL_OP(WN_opcode(wn)))
+   else if (!isGPUKernelFunc && WN2C_IS_FUNCALL_OP(WN_opcode(wn)))
+      status = WN2C_funcall_op(tokens, 
+			       WN_opcode(wn), 
+			       WN_kid0(wn), 
+			       WN_kid1(wn), 
+			       context);
+   else if (isGPUKernelFunc && isGPUOpenCLKernelFunc==FALSE && WN2CUDA_IS_FUNCALL_OP(WN_opcode(wn)))
+      status = WN2C_funcall_op(tokens, 
+			       WN_opcode(wn), 
+			       WN_kid0(wn), 
+			       WN_kid1(wn), 
+			       context);
+   else if (isGPUKernelFunc && isGPUOpenCLKernelFunc && WN2OpenCL_IS_FUNCALL_OP(WN_opcode(wn)))
       status = WN2C_funcall_op(tokens, 
 			       WN_opcode(wn), 
 			       WN_kid0(wn), 
@@ -4200,7 +5757,8 @@ WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
     */
    ST **param_st;
    INT  param;
-   
+   isGPUKernelFunc = PU_acc(Get_Current_PU());
+   isGPUKernelFunc = isGPUKernelFunc || PU_acc_routine(Get_Current_PU());
    Is_True(WN_operator(wn) == OPR_FUNC_ENTRY, 
 	   ("Invalid opcode for WN2C_func_entry()"));
 
@@ -5289,7 +6847,8 @@ WN2C_mstore(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       else
       {
 	 /* Need to copy byte by byte, from kid0 to kid1 */
-	 Append_Token_String(tokens, "__MSTORE");
+	 //Append_Token_String(tokens, "__MSTORE");
+	 Append_Token_String(tokens, "_w2c_mstore");
 	 Append_Token_Special(tokens, '(');
 	 (void)WN2C_translate(tokens, WN_kid0(WN_kid0(wn)), context);
 	 Append_Token_Special(tokens, ',');
@@ -5989,7 +7548,7 @@ WN2C_array(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 
    Is_True(WN_operator(wn) == OPR_ARRAY,
 	   ("Invalid operator for WN2C_array()"));
-
+   UINT32 idim = WN_num_dim(wn);
    vector<WN*> array_dims;
    
    bool has_ptr_arith = false;
@@ -6172,7 +7731,9 @@ WN2C_array(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       if (set_ptr_as_array)
 	 Clear_TY_ptr_as_array(Ty_Table[base_ty]);  /* Reset w2c side-effect! */
       ety = TY_pointed(base_ty);
-      WHIRL2C_parenthesize(tmp_tokens);
+	  //In the kernel function, we don't need the parenthesize symbol., by daniel tian
+	  //if(!isGPUKernelFunc)
+      //WHIRL2C_parenthesize(tmp_tokens);
    }
    else if (!TY_Is_Pointer(base_ty))
    {
@@ -6218,8 +7779,8 @@ WN2C_array(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    CONTEXT_reset_needs_lvalue(context);
 
    /* Append the index expressions */
-   if (treat_ptr_as_array || 
-       Stab_Array_Has_Dynamic_Bounds(TY_pointed(base_ty)))
+   if ((treat_ptr_as_array || 
+       Stab_Array_Has_Dynamic_Bounds(TY_pointed(base_ty))) && idim<2)
    {
       /* The array has been declared as a pointer to the element types,
        * so use calculated offsets based on the element-type.
@@ -7319,6 +8880,13 @@ WN2C_initialize(void)
       WN2C_Opc2cname[WN2C_Opc2cname_Map[map].opc] = 
 	 WN2C_Opc2cname_Map[map].cname;
    
+   
+   for (map = 0; map < NUMBER_OF_OPC2CNAME_MAPS; map++)
+      WN2CUDA_Opc2cname[WN2CUDA_Opc2cname_Map[map].opc] = 
+	 WN2CUDA_Opc2cname_Map[map].cname;
+
+   
+   
 } /* WN2C_initialize */
 
 
@@ -7389,7 +8957,7 @@ WN2C_translate_file_scope_defs(CONTEXT context)
 #if 0
    //WEI: don't see why this needs to be called
 #endif
-   Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
+   Write_String(W2C_File[W2C_DOTC_FILE], NULL/* No srcpos map */,
 		"/* File-level vars and routines */\n");
    WN2C_Append_Symtab_Vars(NULL, /* token_buffer */
 			   2,    /* lines between decls */

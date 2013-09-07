@@ -493,6 +493,17 @@ do_simple(atan2d,2,0)
 do_simple(cosd,1,0)
 do_simple(sind,1,0)
 do_simple(tand,1,0)
+do_simple(cuda_atan,1,0)
+do_simple(cuda_atan2,2,0)
+do_simple(cuda_cos,1,0)
+do_simple(cuda_cosh,1,0)
+do_simple(cuda_exp,1,0)
+do_simple(cuda_log,1,0)
+do_simple(cuda_log10,1,0)
+do_simple(cuda_sin,1,0)
+do_simple(cuda_sinh,1,0)
+do_simple(cuda_tan,1,0)
+do_simple(cuda_tanh,1,0)
 
 
 /********************************************************************

@@ -1,0 +1,11 @@
+This application is sensitive to the order of floating point operations.
+So to compare the OpenACC result with serial result easily, disable FMA.
+This can be done by passing -ta=nvidia,nofma to PGI compiler, or -fmad=false in NVCC compiler. 
+You can change -arch=sm_35 to the available platform you have.
+
+To compile with OpenUH compiler:
+> uhcc -fopenacc -lopenacc -o jacobi_1 jacobi_1.c
+> nvcc -arch=sm_35 -fmad=false --ptx jacobi_1.w2c.cu
+
+To run the program:
+> ./jacobi 2048 2048 20000

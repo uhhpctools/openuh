@@ -139,6 +139,9 @@ static gs_t	   *scope_stack;
 static INT32	    scope_i;
 static INT32	    scope_max;
 
+//The num of loopnest embedded, by daniel tian
+UINT32 ACCLoopNestKernelRegion = 0;
+
 typedef struct temp_cleanup_info_t {
   gs_t		    expr;
   LABEL_IDX	    label_idx;
@@ -803,7 +806,7 @@ Pop_Scope_And_Do_Cleanups (void)
       if (gs_tree_code(t) == GS_BIND_EXPR || gs_tree_code(t) == GS_HANDLER)
       {
 	// Leaving scope, so use dealloca for any alloca within the scope
-	if (scope_cleanup_stack[scope_cleanup_i].vla.has_alloca)
+	if (scope_cleanup_stack[scope_cleanup_i].vla.has_alloca && g_bOpenACCS2S_flag == FALSE)
 	  WGEN_Dealloca (scope_cleanup_stack[scope_cleanup_i].vla.alloca_st,
 	       scope_cleanup_stack[scope_cleanup_i].vla.alloca_sts_vector);
  	--scope_cleanup_i;
@@ -2006,6 +2009,10 @@ WGEN_Expand_Loop (gs_t stmt)
   TRACE_EXPAND_GS(stmt);
   WGEN_Record_Loop_Switch (gs_tree_code(stmt));
 
+  //if(ACCLoopNestKernelRegion)
+  //{
+  	//ACC loop region process
+  //}
   switch (gs_tree_code(stmt)) {
     case GS_WHILE_STMT:
       cond = gs_while_cond(stmt);
@@ -4065,6 +4072,54 @@ WGEN_Expand_Omp (gs_t stmt)
   }
 }
 
+
+static void
+WGEN_Expand_OpenACC (gs_t stmt)
+{
+  switch (gs_tree_code(stmt))
+  {
+    case GS_ACC_PARALLEL:
+      expand_acc_start_parallel (stmt);
+      break;
+
+    case GS_ACC_KERNEL:
+      expand_acc_start_kernel (stmt);
+      break;
+
+    case GS_ACC_LOOP:
+      expand_acc_start_forloop (stmt);
+      break;
+
+    case GS_ACC_HOST_DATA:
+      expand_acc_start_host_data (stmt);
+      break;
+
+    case GS_ACC_DATA:
+      expand_acc_start_data (stmt);
+      break;
+
+    case GS_ACC_UPDATE:
+      expand_acc_start_update (stmt);
+      break;
+
+    case GS_ACC_CACHE:
+      expand_acc_start_cache (stmt);
+      break;
+
+    case GS_ACC_DECLARE:
+      expand_acc_start_declare (stmt);
+      break;
+
+    case GS_ACC_WAIT:
+      expand_acc_start_wait (stmt);
+      break;
+
+    default:
+      Fail_FmtAssertion ("Unexpected acc stmt node");
+  }
+}
+
+
 void
 WGEN_Expand_DO (gs_t stmt)
 {
@@ -4119,12 +4174,71 @@ WGEN_Expand_DO (gs_t stmt)
   }
   --break_continue_info_i;
 }
+
+
+
+void
+WGEN_ACC_Expand_DO (gs_t stmt)
+{
+  Is_True (gs_tree_code(stmt) == GS_ACC_LOOP, ("Unexpected tree code"));
+  gs_t init, incr, cond, body;
+  gs_int_t nest_cnt;
+
+  WGEN_Record_Loop_Switch  (GS_DO_STMT);
+
+  init = gs_acc_loop_init (stmt);
+  incr = gs_acc_loop_incr (stmt);
+  cond = gs_acc_loop_cond (stmt);
+  body = gs_acc_loop_body (stmt);
+
+  nest_cnt = gs_tree_vec_length(init);
+  Is_True (nest_cnt == gs_tree_vec_length(incr), ("The length of incr vector and init vector should match"));
+  Is_True (nest_cnt == gs_tree_vec_length(cond), ("The length of cond vector and init vector should match"));
+
+  for (int i = nest_cnt - 1; i >= 0; i--)
+    expand_acc_start_do_loop (gs_tree_vec_elt(init, i), gs_tree_vec_elt(cond, i), gs_tree_vec_elt(incr, i));
+
+  while (body)
+  {
+    WGEN_Expand_Stmt (body);
+    body = gs_tree_chain(body);
+  }
+
+  // label for continue
+  if (break_continue_info_stack [break_continue_info_i].continue_label_idx)
+  {
+      WGEN_Stmt_Append (
+	WN_CreateLabel ((ST_IDX) 0,
+			break_continue_info_stack
+			  [break_continue_info_i].continue_label_idx,
+			0, NULL),
+	Get_Srcpos());
+  }
+
+  // loop ends
+  for (int i = 0; i < nest_cnt; i++)
+    expand_acc_end_do_loop ();
+
+  // label for break
+  if (break_continue_info_stack [break_continue_info_i].break_label_idx)
+  {
+      WGEN_Stmt_Append (
+	WN_CreateLabel ((ST_IDX) 0,
+			break_continue_info_stack
+			  [break_continue_info_i].break_label_idx,
+			0, NULL),
+	Get_Srcpos());
+  }
+  --break_continue_info_i;
+}
+
 #endif
 
 
 //*************************************************************************
 // to handle the statement
 //*************************************************************************
+extern bool ACCIsInKernelRegion;
 void
 WGEN_Expand_Stmt(gs_t stmt, WN* target_wn)
 {
@@ -4214,7 +4328,11 @@ WGEN_Expand_Stmt(gs_t stmt, WN* target_wn)
       break;
 
     case GS_DO_STMT:
+	  if(ACCIsInKernelRegion) 
+	  	ACCLoopNestKernelRegion++;
       WGEN_Expand_Loop (stmt);
+	  if(ACCIsInKernelRegion) 
+	  	ACCLoopNestKernelRegion --;
       break;
 
     case GS_EXPR_STMT:
@@ -4305,6 +4423,18 @@ WGEN_Expand_Stmt(gs_t stmt, WN* target_wn)
     case GS_OMP_ORDERED:
     case GS_OMP_ATOMIC:
       WGEN_Expand_Omp (stmt);
+      break;
+	case GS_ACC_PARALLEL:
+ 	case GS_ACC_KERNEL:
+ 	case GS_ACC_LOOP:
+ 	case GS_ACC_HOST_DATA:
+ 	case GS_ACC_DATA:
+ 	case GS_ACC_UPDATE:
+ 	case GS_ACC_CACHE:
+	case GS_ACC_DECLARE:
+ 	case GS_ACC_WAIT:
+ 	case GS_ACC_CLAUSE:
+      WGEN_Expand_OpenACC (stmt);
       break;
 #endif
 

@@ -93,6 +93,7 @@ enum	token_class_values	{Tok_Class_Label,
 				 Tok_Class_Mic_Kwd,
 				 Tok_Class_SGI_Dir_Kwd,
 				 Tok_Class_Open_Mp_Dir_Kwd,
+				 Tok_Class_Open_Acc_Dir_Kwd,
 				 Tok_Class_Dbg_Kwd,
 				 Tok_Class_Punct,
 				 Tok_Class_Int_Spec,
@@ -628,6 +629,81 @@ enum	token_values {
                 Tok_Open_Mp_Dir_Task,           /* TASK */
                 Tok_Open_Mp_Dir_Taskwait,       /* TASKWAIT */
                 Tok_Open_Mp_Dir_End,            /* End of Open Mp directives  */
+        /************************************************************************/
+		/*******************added by daniel tian, for openacc project*******************/
+		Tok_Open_Acc_Dir_Start,				/* Start of open acc directives*/
+		Tok_Open_Acc_Dir_Acc_Resident,		/* Acc_Resident			  */
+		Tok_Open_Acc_Dir_Async,				/* Async			  */
+		Tok_Open_Acc_Dir_Atomic,			/* begin of atomic operations region, ACC2.0   */
+		Tok_Open_Acc_Dir_Atomic_Read, 		/* atomic read, ACC2.0					  */
+		Tok_Open_Acc_Dir_Atomic_Write, 		/* atomic write, ACC2.0					  */
+		Tok_Open_Acc_Dir_Atomic_Update, 	/* atomic update, ACC2.0					  */
+		Tok_Open_Acc_Dir_Atomic_Capture,	/* atomic capture, ACC2.0			  */
+		Tok_Open_Acc_Dir_Bind, 				/* Bind, ACC2.0 */ 
+		Tok_Open_Acc_Dir_Cache,				/* Cache					  */
+		Tok_Open_Acc_Dir_Collapse, 			/* collapse					  */
+		Tok_Open_Acc_Dir_Copy,				/* Copy				  */
+		Tok_Open_Acc_Dir_Copyin, 			/* Copyin */ 
+		Tok_Open_Acc_Dir_Copyout,			/* Copyout */
+		Tok_Open_Acc_Dir_Create,			/* Create 			  */
+		Tok_Open_Acc_Dir_Data, 				/* Data						  */
+		Tok_Open_Acc_Dir_Declare,			/* Declare 				  */
+		Tok_Open_Acc_Dir_Default, 			/* Default, ACC2.0*/ 
+		Tok_Open_Acc_Dir_Delete,			/* SCHEDULE, ACC2.0 				  */
+		Tok_Open_Acc_Dir_Device,  			/* Device */
+		Tok_Open_Acc_Dir_Deviceptr,			/* device ptr 					  */
+		Tok_Open_Acc_Dir_Device_Resident,	/* Device_resident, ACC2.0					  */
+		Tok_Open_Acc_Dir_Device_Type,		/* Device_type, ACC2.0					  */
+		Tok_Open_Acc_Dir_DType,		/* Device_type, ACC2.0					  */
+		Tok_Open_Acc_Dir_Endatomic, 		/* end of atomic region, ACC2.0					  */
+		Tok_Open_Acc_Dir_Enddata,			/* End of Data					  */
+		Tok_Open_Acc_Dir_Endhost_Data, 		/* end of host_data				  */
+		Tok_Open_Acc_Dir_Endkernels,		/* End of kernels 					  */
+		Tok_Open_Acc_Dir_Endloop, 			/* End of loop	  */
+		Tok_Open_Acc_Dir_Endparallel, 		/* End of parallel 		 */ 
+		Tok_Open_Acc_Dir_Enter_Data,		/* Enter_data, ACC2.0			  */
+		Tok_Open_Acc_Dir_Exit_Data,			/* RUNTIME, ACC2.0					  */
+		Tok_Open_Acc_Dir_Firstprivate, 		/* First Private				  */
+		Tok_Open_Acc_Dir_Host, 				/* Host				  */
+		Tok_Open_Acc_Dir_Host_Data,			/* host_data					  */
+		Tok_Open_Acc_Dir_Gang,				/* Gang 					  */
+		Tok_Open_Acc_Dir_If,				/* If					  */
+		Tok_Open_Acc_Dir_Independent,		/* independent 				  */
+		Tok_Open_Acc_Dir_Kernels,			/* Kernels 				  */
+		Tok_Open_Acc_Dir_Link, 				/* link	  */
+		Tok_Open_Acc_Dir_Loop, 				/* Loop	  */
+		Tok_Open_Acc_Dir_None,				/* Default (none)  ACC 2.0	  */
+		Tok_Open_Acc_Dir_Nohost,			/* nohost, ACC2.0 */
+		Tok_Open_Acc_Dir_NVidia,			/* nvidia,  device type		  */
+		Tok_Open_Acc_Dir_Num_Gangs,			/* num gangs			  */
+		Tok_Open_Acc_Dir_Num_Workers, 		/* Num of workers */
+		Tok_Open_Acc_Dir_Parallel, 			/* Parallel					  */
+		Tok_Open_Acc_Dir_Pcopy,				/* Pcopy					  */
+		Tok_Open_Acc_Dir_Pcopyin,			/* Pcopyin					  */
+		Tok_Open_Acc_Dir_Pcopyout,			/* Pcopyout					  */
+		Tok_Open_Acc_Dir_Pcreate,			/* Pcreate					  */
+		Tok_Open_Acc_Dir_Present,			/* Present					  */
+		Tok_Open_Acc_Dir_Present_or_Copy, 	/* Pcopy					  */
+		Tok_Open_Acc_Dir_Present_or_Copyin, /* pcopyin						  */
+		Tok_Open_Acc_Dir_Present_or_Copyout,/* pcopyout				  */
+		Tok_Open_Acc_Dir_Present_or_Create, /* pcreate					  */
+		Tok_Open_Acc_Dir_Private,			/* Private				  */
+		Tok_Open_Acc_Dir_Radeon,			/* radeon 			  */
+		Tok_Open_Acc_Dir_Reduction,			/* Reduction 			  */		
+		Tok_Open_Acc_Dir_Routine, 			/* routine, ACC2.0  */
+		Tok_Open_Acc_Dir_Self, 				/* Seq */ 
+		Tok_Open_Acc_Dir_Seq, 				/* Seq */ 
+		Tok_Open_Acc_Dir_Tile,				/* Tile, ACC2.0		*/
+		Tok_Open_Acc_Dir_Update, 			/* Update					  */
+		Tok_Open_Acc_Dir_Use_Device,		/* use device 					  */
+		Tok_Open_Acc_Dir_Vector, 			/* Vector				  */
+		Tok_Open_Acc_Dir_Vector_Length, 	/* Vector_length */ 
+		Tok_Open_Acc_Dir_Wait,				/* Wait 				  */
+		Tok_Open_Acc_Dir_Wait_Clause,		/* Wait Clause, not directive	, ACC2.0		  */
+		Tok_Open_Acc_Dir_Worker,			/* Worker					  */
+		Tok_Open_Acc_Dir_Xeonphi,			/* Xeon Phi 			  */
+        Tok_Open_Acc_Dir_End,            	/* End of Open ACC directives, ACC2.0  */
+		/************************************************************************/
 
 		Tok_Dbg_Sytb,			/* Symbol table               */
 		Tok_Dbg_Stmt,			/* Statement                  */

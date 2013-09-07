@@ -87,6 +87,10 @@ std::stack<WN *> lastlocal_node_stack;
 // vector for storing DO-loop side-effects, to be emitted before the loop.
 std::vector<WN *> doloop_side_effects;
 
+
+// vector for storing DO-loop side-effects, to be emitted before the loop.
+std::vector<WN *> acc_doloop_side_effects;
+
 BOOL Trace_Omp = FALSE;
 
 // Put in per-file OpenMP specific initializations here.
@@ -601,6 +605,48 @@ static BOOL WGEN_handle_non_pods (gs_t var, WN * block, gs_omp_clause_code_t p)
     return TRUE;
   }
   return FALSE;
+}
+
+static OPERATOR get_acc_reduction_code (gs_t clause)
+{
+  OPERATOR opr = OPERATOR_UNKNOWN;
+  Is_True (gs_acc_clause_code(clause) == GS_ACC_CLAUSE_REDUCTION,
+           ("get_reduction_code: invalid acc clause type"));
+
+  switch (gs_acc_clause_reduction_code(clause))
+  {
+    case GS_BIT_AND_EXPR:  //'&'
+      opr = OPR_BAND;
+      break;
+    case GS_BIT_IOR_EXPR:  //"|"
+      opr = OPR_BIOR;
+      break;
+    case GS_BIT_XOR_EXPR:  //'^'
+      opr = OPR_BXOR;
+      break;
+    case GS_PLUS_EXPR:   //'+'
+      opr = OPR_ADD;
+      break;
+    case GS_MULT_EXPR:   //'*'
+      opr = OPR_MPY;
+      break;
+    case GS_MIN_EXPR:   //'min'
+      opr = OPR_MIN;
+      break;
+    case GS_MAX_EXPR:   //'max'
+      opr = OPR_MAX;
+      break;
+    case GS_TRUTH_AND_EXPR:  //ANDAND
+    case GS_TRUTH_ANDIF_EXPR:
+      opr = OPR_CAND;
+      break;
+    case GS_TRUTH_OR_EXPR:  //OROR
+    case GS_TRUTH_ORIF_EXPR:
+      opr = OPR_CIOR;
+      break;
+  }
+
+  return opr;
 }
 
 static OPERATOR get_reduction_code (gs_t clause)
@@ -1927,4 +1973,1007 @@ void WGEN_expand_end_do_loop (void)
 
   WGEN_Stmt_Pop (wgen_stmk_for_cond);
 }
+
+
+// A REGION need not be always passed. If provided, it could be an
+// EH region, or an MP parallel region.
+
+void WGEN_expand_acc_start_do_loop(WN * index, WN * start, WN * end, WN * step)
+{
+     WN *doloop;
+
+     WN * body = WN_CreateBlock ();
+
+     doloop = WN_CreateDO(index, start, end, step, body, NULL);
+     WGEN_Stmt_Append (doloop, Get_Srcpos());
+
+     WGEN_Stmt_Push (doloop, wgen_stmk_for_cond, Get_Srcpos());
+     WGEN_Stmt_Push (body, wgen_stmk_for_body, Get_Srcpos());
+}
+
+
+void WGEN_expand_acc_end_do_loop (void)
+{
+  //WGEN_generate_non_pod_lastlocal_finalization ();
+
+  WGEN_Stmt_Pop (wgen_stmk_for_body);
+
+  WGEN_Stmt_Pop (wgen_stmk_for_cond);
+}
+
+static WN* WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ID pragma_name, gs_t var,
+							gs_t start, gs_t end)
+{
+	ST * st = NULL;
+	WN * wn = NULL;
+	st = Get_ST(var);
+	TY_IDX ty =  ST_type(st);
+	WN* wnStart;		
+	WN* wnEnd;
+    //WGEN_ACC_Set_Cflag(acc_clause_copy);   //set clause flag for check
+    //For Variable Length Array cases.
+    if(TY_kind(ST_type(st)) == KIND_ARRAY
+		&& st != ST_base(st))
+		st = ST_base(st);
+
+    wn = WN_CreateXpragma(pragma_name, st, 1);
+	if(start&&end)
+	{
+		//memory pointer or array
+		OPERATOR oprStart, oprEnd;
+		wnStart = WGEN_Expand_Expr (start); //WN_kid0(wn) 
+		wnEnd = WGEN_Expand_Expr (end); //WN_kid1(wn) 
+		oprStart = WN_operator(wnStart);
+		oprEnd = WN_operator(wnEnd);
+		if((oprStart==OPR_INTCONST) && (oprStart==oprEnd)
+			&& (WN_const_val(wnStart) == 0)
+			&& (WN_const_val(wnEnd) == 0)
+			&& (TY_kind(ty) == KIND_ARRAY))
+		{
+			UINT32 isize;
+			
+			//dynamic array(multi-dimensional array is going to translated into 1D array)
+			//here we assume the lower bound the const and upper bound is variable
+			//static array region is handled by wn_acc.cxx
+			if(TY_kind(TY_etype(ty)) == KIND_SCALAR 
+				&& !ARB_const_ubnd(TY_arb(ty)))
+			{
+				ST_IDX st_idx_upper_bound = ARB_ubnd_var(TY_arb(ty));
+				ST* st_upper_bound = ST_ptr(st_idx_upper_bound);
+				wnEnd = WN_Ldid(TY_mtype(ST_type(st_upper_bound)), 
+								0, st_upper_bound, ST_type(st_upper_bound));
+				wnEnd = WN_Binary(OPR_ADD, TY_mtype(ST_type(st_upper_bound)), 
+										wnEnd, WN_Intconst(TY_mtype(ST_type(st_upper_bound)), 1));
+			}
+			
+		}
+	}
+	else
+	{
+		//which mean this is an array
+		wnStart = WN_Intconst(MTYPE_I4, 0);		
+		wnEnd = WN_Intconst(MTYPE_I4, 0);
+		if(TY_kind(ty) == KIND_ARRAY)
+		{
+			BOOL bconst_Lbnd = ARB_stride_var(TY_arb(ty));
+			BOOL bconst_ubnd = ARB_const_ubnd(TY_arb(ty));
+			BOOL bconst_stride = ARB_const_stride(TY_arb(ty));
+			ST* st_ubnd = NULL;
+			ST* st_stride = NULL;
+			UINT32 lbnd = 0;
+		        UINT32 ubnd = 0;
+			UINT32 stride = 0;
+			WN* wn_lbnd = 0;
+			WN* wn_ubnd = 0;
+			WN* wn_stride = 0;
+			TY_IDX ty_elem = TY_etype(ty);
+			UINT32 elem_size = 0;
+			while(TY_kind(ty_elem)==KIND_ARRAY)
+			{
+				ty_elem = TY_etype(ty_elem);
+			}
+			elem_size = TY_size(ty_elem);
+
+			if(!bconst_ubnd)
+			{
+				st_ubnd = ST_ptr(ARB_ubnd_var(TY_arb(ty)));
+				wn_ubnd = WN_Ldid(TY_mtype(ST_type(st_ubnd)),
+	                                      0, st_ubnd, ST_type(st_ubnd));
+				wn_ubnd = WN_Binary(OPR_ADD, TY_mtype(ST_type(st_ubnd)),
+	                                      wn_ubnd, WN_Intconst(TY_mtype(ST_type(st_ubnd)), 1));
+			}
+			else
+			{
+				ubnd = ARB_ubnd_val(TY_arb(ty));
+				ubnd = ubnd + 1;
+				wn_ubnd = WN_Intconst(MTYPE_U4, ubnd);
+			}
+			
+			if(!bconst_stride)
+			{
+				st_stride = ST_ptr(ARB_stride_var(TY_arb(ty)));
+				wn_stride = WN_Ldid(TY_mtype(ST_type(st_stride)),
+	                                      0, st_stride, ST_type(st_stride));
+				wn_stride = WN_Binary(OPR_DIV, TY_mtype(ST_type(st_stride)),
+	                                      wn_stride, WN_Intconst(TY_mtype(ST_type(st_stride)), elem_size));
+			}
+			else
+			{
+				stride = ARB_stride_val(TY_arb(ty));
+				stride = stride/elem_size;
+				wn_stride = WN_Intconst(MTYPE_U4, stride);
+			}
+			wnEnd = WN_Binary(OPR_MPY, MTYPE_U4,
+	                                      wn_ubnd, wn_stride);
+		}
+		else if(TY_kind(ty) != KIND_SCALAR)
+		{
+			Fail_FmtAssertion(("for non array/scalar type, user must specify the data region."), ST_name(st));
+		}
+	}	
+	WN* pragmaStart = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, st, 1);	
+    WN* pragmaLength = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, st, 1);
+	WN_kid0(wn) = WN_Intconst(MTYPE_U4, 1);
+	WN_kid0(pragmaStart) = wnStart;
+	WN_kid0(pragmaLength) = wnEnd;
+	WN_next(wn) = pragmaStart;	
+	WN_prev(pragmaStart) = wn;	
+	WN_next(pragmaStart) = pragmaLength;	
+	WN_prev(pragmaLength) = pragmaStart;
+    //WN* pragmaStart = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, st, 1);
+  
+	return wn;
+}
+
+static void WGEN_process_acc_clause (gs_t clauses, WN * region = 0)
+{
+  ST * st = NULL;
+  WN * wn = NULL;
+  switch (gs_acc_clause_code(clauses))
+  {
+    case GS_ACC_CLAUSE_IF:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_IF, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_if_expr(clauses));
+      break;
+	  //gs_acc_clause_data_start, gs_acc_clause_data_end
+    case GS_ACC_CLAUSE_COPY:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+
+		
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_COPY, 
+							var, start, end);
+        /*st = Get_ST(var);
+        //WGEN_ACC_Set_Cflag(acc_clause_copy);   //set clause flag for check
+        wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_COPY, st, 1);
+		if(start&&end)
+		{
+			WN* wnStart = WGEN_Expand_Expr (start); //WN_kid0(wn) 
+			WN* wnEnd = WGEN_Expand_Expr (end); //WN_kid1(wn) 
+			//remember, wnStart < wnEnd, during ACC lower, this will be parsed.
+			WN* kid0 = WN_Relational (OPR_LT, MTYPE_I4, wnStart, wnEnd);
+			WN_kid0(wn) = kid0;
+		}
+		else
+		{
+			WN_kid0(wn) = NULL;
+			//WN_kid1(wn) = NULL;
+		}		*/
+        //wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_COPY, st, 0, 0);
+      }
+      break;
+    case GS_ACC_CLAUSE_COPYIN:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_COPYIN, 
+							var, start, end);
+        /*st = Get_ST(var);
+
+		
+		wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_COPYIN, st, 1);
+		if(start&&end)
+		{
+			WN* wnStart = WGEN_Expand_Expr (start); //WN_kid0(wn) 
+			WN* wnEnd = WGEN_Expand_Expr (end); //WN_kid1(wn) 
+			//remember, wnStart < wnEnd, during ACC lower, this will be parsed.
+			WN* kid0 = WN_Relational (OPR_LT, MTYPE_I4, wnStart, wnEnd);
+			WN_kid0(wn) = kid0;
+		}
+		else
+		{
+			WN_kid0(wn) = NULL;
+			//WN_kid1(wn) = NULL;
+		}*/
+		
+        //WGEN_ACC_Set_Cflag(acc_clause_copyin);   //set clause flag for check
+        //st = Get_ST(var);
+        //wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_COPYIN, st, 0, 0);
+      }
+      break;
+
+    case GS_ACC_CLAUSE_COPYOUT:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_COPYOUT, 
+							var, start, end);
+        /*gs_t var = gs_acc_clause_decl(clauses);
+        WGEN_ACC_Set_Cflag(acc_clause_copyout); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_COPYOUT, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_CREATE:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_CREATE, 
+							var, start, end);
+        /*gs_t var = gs_acc_clause_decl(clauses);
+        WGEN_ACC_Set_Cflag(acc_clause_create); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_CREATE, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRESENT:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRESENT, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_present); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRESENT, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRESENT_OR_COPY:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPY, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_present_or_copy); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPY, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRESENT_OR_COPYIN:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYIN, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_present_or_copyin); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYIN, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRESENT_OR_COPYOUT:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYOUT, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_present_or_copyout); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_COPYOUT, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRESENT_OR_CREATE:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_CREATE, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_present_or_create); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRESENT_OR_CREATE, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PARM:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+        WGEN_ACC_Set_Cflag(acc_clause_parm); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PARM, st, 0, 0);
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_ACC_RESIDENT:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_RESIDENT, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_acc_resident); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_RESIDENT, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_PRIVATE:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_PRIVATE, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_private); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_PRIVATE, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_FIRST_PRIVATE:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_FIRST_PRIVATE, 
+							var, start, end);
+		
+        /*WGEN_ACC_Set_Cflag(acc_clause_first_private); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_FIRST_PRIVATE, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_VARLIST:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+        WGEN_ACC_Set_Cflag(acc_clause_varlist); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_VARLIST, st, 0, 0);
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_USE_DEVICE:
+      {	
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_USE_DEVICE, 
+							var, start, end);
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_DEVICEPTR:
+      {
+        gs_t var = gs_acc_clause_decl(clauses);
+        WGEN_ACC_Set_Cflag(acc_clause_deviceptr); 
+        st = Get_ST(var);
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_DEVICEPTR, st, 0, 0);
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_HOST:
+      {
+        /*gs_t var = gs_acc_clause_decl(clauses);
+	        WGEN_ACC_Set_Cflag(acc_clause_host); 
+	        st = Get_ST(var);
+	        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_HOST, st, 0, 0);*/
+		
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_HOST, 
+							var, start, end);
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_DEVICE:
+      {
+		
+        gs_t var = gs_acc_clause_decl(clauses);
+		gs_t start = gs_acc_clause_data_start(clauses);
+		gs_t end = gs_acc_clause_data_end(clauses);
+		wn = WGEN_expand_acc_data_clause_with_region(WN_PRAGMA_ACC_CLAUSE_DEVICE, 
+							var, start, end);
+		
+        /*gs_t var = gs_acc_clause_decl(clauses);
+	        WGEN_ACC_Set_Cflag(acc_clause_device); 
+	        st = Get_ST(var);
+	        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_DEVICE, st, 0, 0);*/
+      }
+      break;
+	  
+	case GS_ACC_CLAUSE_CONST:
+      {		
+        gs_t var = gs_acc_clause_decl(clauses);
+        st = Get_ST(var);	
+	    //For Variable Length Array cases.
+	    if(TY_kind(ST_type(st)) == KIND_ARRAY && st != ST_base(st))
+			st = ST_base(st);	
+      	wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_CONST, st, 0, 0);
+      }
+      break;		  
+	  
+	/*Reduction is special*/
+    case GS_ACC_CLAUSE_REDUCTION:
+      {
+        WGEN_ACC_Set_Cflag(acc_clause_reduction);
+        OPERATOR opr = get_acc_reduction_code(clauses);
+        st = Get_ST(gs_acc_clause_decl(clauses));
+        wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_REDUCTION, st, 0, opr);
+      }
+      break;
+
+	/*Integer expression*/	
+    case GS_ACC_CLAUSE_NUM_GANGS:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_GANGS, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_num_gangs_expr(clauses));
+      break;
+    case GS_ACC_CLAUSE_NUM_WORKERS:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_NUM_WORKERS, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_num_workers_expr(clauses));
+      break;
+    case GS_ACC_CLAUSE_VECTOR_LENGTH:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_LENGTH, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_vector_length_expr(clauses));
+      break;
+	  
+    case GS_ACC_CLAUSE_GANG:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_GANG, (ST_IDX) NULL, 1);
+	  if(gs_acc_clause_gang_expr(clauses))
+      	WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_gang_expr(clauses));
+	  else
+	  	WN_kid0(wn) = WN_Intconst(MTYPE_I4, 0);	
+      break;
+	  
+    case GS_ACC_CLAUSE_WORKER:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WORKER, (ST_IDX) NULL, 1);
+	  if(gs_acc_clause_worker_expr(clauses))
+      	WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_worker_expr(clauses));
+	  else
+	  	WN_kid0(wn) = WN_Intconst(MTYPE_I4, 0);	
+      break;
+	  
+    case GS_ACC_CLAUSE_VECTOR:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR, (ST_IDX) NULL, 1);
+	  if(gs_acc_clause_vector_expr(clauses))
+      	WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_vector_expr(clauses));
+	  else
+	  	WN_kid0(wn) = WN_Intconst(MTYPE_I4, 0);	
+      break;
+	  
+    case GS_ACC_CLAUSE_ASYNC:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_ASYNC, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_async_expr(clauses));
+      break;
+    case GS_ACC_CLAUSE_COLLAPSE:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_COLLAPSE, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_collapse_expr(clauses));
+      break;
+    case GS_ACC_CLAUSE_INTEXP:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_INTEXP, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_intexp_expr(clauses));
+      break;
+
+	//No Parameter for pragma clause
+    case GS_ACC_CLAUSE_SEQ:		
+      wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_SEQ, (ST_IDX)NULL, 0, 0);
+      //wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_SEQ, (ST_IDX) NULL, 0);
+      break;
+    case GS_ACC_CLAUSE_INDEPENDENT:
+      wn = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_INDEPENDENT, (ST_IDX)NULL, 0, 0);
+      //wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_INDEPENDENT, (ST_IDX) NULL, 0);
+      break;
+
+    default:
+      DevWarn ("WGEN_process_acc_clause: unhandled OpenACC clause");
+  }
+
+  WN* wn_datastart = NULL;
+  WN* wn_datalength = NULL;
+  if (wn)
+  {
+  	wn_datastart = WN_next(wn);
+    WN_set_pragma_acc(wn);  
+    // If an ACC region is provided, insert a "local" pragma on non-pod
+    // objects in the pragmas of that region.
+    WGEN_Stmt_Append (wn, Get_Srcpos());
+  }
+  if(wn_datastart)
+  {	
+  	wn_datalength = WN_next(wn_datastart);
+    WN_set_pragma_acc(wn_datastart);  
+    // If an ACC region is provided, insert a "local" pragma on non-pod
+    // objects in the pragmas of that region.
+    WGEN_Stmt_Append (wn_datastart, Get_Srcpos());
+    WN_set_pragma_acc(wn_datalength);  
+    // If an ACC region is provided, insert a "local" pragma on non-pod
+    // objects in the pragmas of that region.
+    WGEN_Stmt_Append (wn_datalength, Get_Srcpos());
+  }  
+}
+
+void WGEN_expand_acc_start_parallel(gs_t stmt)
+{
+  /* create a region on current block */
+       
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_PARALLEL_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+       
+  ///// omp check stack action ///////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_parallel, SRCPOS_linenum(srcpos),
+               SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+
+
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+
+  gs_t clauses = gs_acc_parallel_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+	
+}
+
+
+void WGEN_expand_acc_end_parallel ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop (wgen_acc_parallel);
+}
+
+
+/*void WGEN_expand_acc_start_loop(gs_t stmt)
+{
+       
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_LOOP_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+       
+  ///// omp check stack action ///////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_loop, SRCPOS_linenum(srcpos),
+               SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+
+
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  if(stmt)
+  {
+  		gs_t clauses = gs_acc_parallel_clauses (stmt);
+	  	for (; clauses; clauses = gs_acc_clause_chain(clauses))
+	    	WGEN_process_acc_clause(clauses, region);
+  }
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+	
+}
+
+
+void WGEN_expand_acc_end_loop ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop (wgen_acc_loop);
+}*/
+
+
+void WGEN_expand_acc_start_hostdata(gs_t stmt)
+{
+  /* create a region on current block */
+       
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_HOSTDATA_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+       
+  ///// omp check stack action ///////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_hostdata, SRCPOS_linenum(srcpos),
+               SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+
+
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+
+  gs_t clauses = gs_acc_parallel_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+	
+}
+
+
+void WGEN_expand_acc_end_hostdata ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop (wgen_acc_hostdata);
+}
+
+
+void WGEN_expand_acc_start_data(gs_t stmt)
+{
+  /* create a region on current block */
+       
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_DATA_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+       
+  ///// omp check stack action ///////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_data, SRCPOS_linenum(srcpos),
+               SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+
+
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+
+  gs_t clauses = gs_acc_parallel_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+	
+}
+
+
+void WGEN_expand_acc_end_data ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop (wgen_acc_data);
+}
+
+/*************************************************************/
+/*LOOPNEST Processing*/
+void WGEN_process_acc_for_collapse (gs_t stmt, WN * region)
+{
+  UINT collapse_count = gs_tree_vec_length(gs_acc_loop_init(stmt));
+  if (collapse_count > 1) {
+    WN * collapse = WN_CreatePragma(WN_PRAGMA_COLLAPSE, (ST *)NULL, collapse_count, 0);
+    WN_set_pragma_acc(collapse);
+    WN_INSERT_BlockLast(WN_region_pragmas(region), collapse);
+  }
+}
+
+
+void WGEN_expand_acc_start_forloop (gs_t stmt)
+{       
+	// For documentation, see WGEN_expand_start_sections() .
+	WN * enclosing_region = NULL;
+
+	/* create a region on current block */
+
+	WN * region = WGEN_region(REGION_KIND_ACC);
+
+	WN *wn;
+
+	wn = WN_CreatePragma(WN_PRAGMA_ACC_LOOP_BEGIN, 
+		                     (ST_IDX) NULL, 
+		                     0, 
+		                     0);
+	WN_set_pragma_acc(wn);
+	WGEN_Stmt_Append (wn, Get_Srcpos());
+	/////////  omp ///////////////////////////
+	SRCPOS srcpos = Get_Srcpos();
+	WGEN_CS_push(wgen_acc_loop,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+	WGEN_Set_Prag(WGEN_Stmt_Top());
+	WGEN_Set_Region (region);
+
+
+	/////required?///////
+	Set_PU_has_acc (Get_Current_PU ());
+	Set_FILE_INFO_has_acc (File_info);
+	Set_PU_uplevel (Get_Current_PU ());
+
+	if(stmt)
+	{
+	  WGEN_process_acc_for_collapse(stmt, region);
+
+	  gs_t clauses = gs_acc_loop_clauses (stmt);
+
+	  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+	    WGEN_process_acc_clause(clauses, region);
+	}
+
+	WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_forloop ( )
+{
+//    WGEN_check_for (wn);
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+
+    WN *wn = WGEN_Stmt_Top ();
+    WN *anchor = WN_first(wn);
+
+    // Output DO loop side-effects
+    for (INT i=0; i<doloop_side_effects.size(); i++)
+      WN_INSERT_BlockBefore(wn, anchor, doloop_side_effects[i]);
+    doloop_side_effects.clear ();
+
+    // Note the FOR is still in stack. If there is no enclosing
+    // (parallel) region, then process and pop the enclosing EH
+    // region.
+    
+    WGEN_CS_pop(wgen_acc_loop);
+}
+
+
+void WGEN_expand_acc_start_kernel (gs_t stmt)
+{
+  /* create a region on current block */
+
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_KERNELS_BEGIN, 
+                       (ST_IDX) NULL, 0, 0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+  //////////////// OPENACC CHECK STACK /////////////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_kernels,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+ 
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  
+
+  gs_t clauses = gs_acc_kernels_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_kernel ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop(wgen_acc_kernels);
+}
+
+/************************************************/
+/****************Only Clause, NO BODY*************/
+
+void WGEN_expand_acc_start_update (gs_t stmt)
+{
+  /* create a region on current block */
+
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_UPDATE, 
+                       (ST_IDX) NULL, 0, 0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+  //////////////// OPENACC CHECK STACK /////////////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_update,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+ 
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  
+
+  gs_t clauses = gs_acc_update_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_update ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop(wgen_acc_update);
+}
+
+
+void WGEN_expand_acc_start_cache (gs_t stmt)
+{
+  /* create a region on current block */
+
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_CACHE, 
+                       (ST_IDX) NULL, 0, 0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+  //////////////// OPENACC CHECK STACK /////////////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_cache,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+ 
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  
+
+  gs_t clauses = gs_acc_cache_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_cache()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop(wgen_acc_cache);
+}
+
+
+void WGEN_expand_acc_start_declare (gs_t stmt)
+{
+  /* create a region on current block */
+
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_DECLARE, 
+                       (ST_IDX) NULL, 0, 0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+  //////////////// OPENACC CHECK STACK /////////////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_declare,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+ 
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  
+
+  gs_t clauses = gs_acc_declare_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_declare ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop(wgen_acc_declare);
+}
+
+
+void WGEN_expand_acc_start_wait (gs_t stmt)
+{
+  /* create a region on current block */
+
+  WN * region = WGEN_region(REGION_KIND_ACC);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_ACC_WAIT, 
+                       (ST_IDX) NULL, 0, 0);   
+  WN_set_pragma_acc(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+  //////////////// OPENACC CHECK STACK /////////////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_acc_wait,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+ 
+  /////required?///////
+  Set_PU_has_acc (Get_Current_PU ());
+  Set_FILE_INFO_has_acc (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+  
+
+  gs_t clauses = gs_acc_wait_clauses (stmt);
+
+  for (; clauses; clauses = gs_acc_clause_chain(clauses))
+    WGEN_process_acc_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+}
+
+void WGEN_expand_acc_end_wait ()
+{
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop(wgen_acc_wait);
+}
+
 

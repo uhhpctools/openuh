@@ -187,6 +187,17 @@ UHCAF_MPI_INCLUDE           = @UHCAF_MPI_INCLUDE@
 CAFRT_ENABLE_DTRACES        = @CAFRT_ENABLE_DTRACES@
 CAFRT_ENABLE_PROFILES       = @CAFRT_ENABLE_PROFILES@
 
+ifndef CUDA_HOME
+    CUDA_HOME=@CUDA_HOME@
+endif
+
+ifndef INTEL_CL_HOME
+  	INTEL_CL_HOME=@INTEL_CL_HOME@
+endif
+
+ifndef AMD_CL_HOME
+  	AMD_CL_HOME=@AMD_CL_HOME@
+endif
 #### END OPENUH CONFIG ####
 ######################################################
 

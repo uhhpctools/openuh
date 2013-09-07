@@ -457,6 +457,14 @@ WN_Tree_Type(const WN *wn)
 	break;
       case OPR_ILOAD:
 	ty = WN_ty(wn);
+	//For ILOAD sometime, it ty is not correct., by daniel tian
+	//e.g
+	// U4U4LDID 0 <2,1,velocity> T<54,anon_ptr.,4>
+	//F4F4ILOAD 0 T<53,float3,4> T<54,anon_ptr.,4> <field_id:1>
+	//If didn't execute the following code, the ty is not correct. It returns float3 struct. 
+	//But actually returning a float ty is correct.
+	if(TY_Is_Structured(ty) && WN_field_id(wn) != 0)
+		ty = Get_Field_Type(ty, WN_field_id(wn));
 	break;
       case OPR_LDID:
 	 ty = WN_ty(wn);
@@ -613,10 +621,21 @@ WN_Tree_Type(const WN *wn)
 				       WN_kid1(wn),
 				       TY_pointed(ty)) == NULL)
 	    {
-	       ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
+	       //why return scalar var? just return the pointer type ty
+	       //ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
+	       break;
 	    }
 #endif /* BUILD_WHIRL2C */
 	 }
+	 else if (WN_opc_rtype(WN_kid0(wn)) == Pointer_Mtype || WN_opc_rtype(WN_kid1(wn)) == Pointer_Mtype)
+ 	 {
+ 	 	
+	    ty = WN_Tree_Type(WN_kid0(wn));
+	    if (!TY_Is_Pointer(ty))
+	    {
+	       ty = WN_Tree_Type(WN_kid1(wn));
+	    }
+ 	 }
 	 else
 	    ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
 	 break;

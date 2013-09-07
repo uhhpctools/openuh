@@ -569,6 +569,10 @@ BE_COM_PCH_CXX_SRCS = \
   wn_lower.cxx		\
   u64_lower_wn.cxx	\
   wn_mp.cxx		\
+  wn_acc.cxx	\
+  wn_acc_apu.cxx	\
+  wn_acc_scalar_replacement.cxx \
+  wn_acc_untils.cxx	\
   wn_verifier.cxx       \
   wn_retype_expr.cxx	\
   wn_unroll.cxx	\
@@ -927,5 +931,5 @@ install.pure:: pure
 
 ifeq (gcc,$(firstword $(CCNAME)))
 # work around gcc bug optimizing this file on ia32
-flags.o: OPTIMIZER = -O0
+flags.o: OPTIMIZER = -g -O0
 endif

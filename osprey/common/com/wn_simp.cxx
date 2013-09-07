@@ -390,8 +390,8 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
       }
    } else if (numkids == 1) {
       k0 = WN_kid0(t);
-
-      if (WN_operator(t) != OPR_CVTL) {
+	  //The "WN_operator(t) != OPR_TAS" is added by daniel,for OpenACC
+      if (WN_operator(t) != OPR_CVTL && WN_operator(t) != OPR_TAS) {
           if (WN_operator(t) == OPR_EXTRACT_BITS) {
               r = WN_SimplifyExp1(op,t);
           } else {
@@ -400,7 +400,18 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 # endif
         	 r = WN_SimplifyExp1(op, k0);
           }
-      } else {
+      } 
+	  //This if stmt is for OpenACC
+	  else if( WN_operator(t) == OPR_TAS)
+	  {
+		  bool keep_tas = (TY_kind(WN_ty(t)) == KIND_POINTER);
+		  
+		  if (!keep_tas) 
+		  {
+		     r = WN_SimplifyExp1(op, k0);
+		  }
+	  }
+	  else {
 # if defined (KEY) && defined (Is_True_On)
         if (Enable_WN_Simp_Expr_Limit == -1 || (Enable_WN_Simp_Expr_Limit != -1 && cur_idx < Enable_WN_Simp_Expr_Limit))
 # endif

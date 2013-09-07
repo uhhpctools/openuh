@@ -405,6 +405,7 @@ extern  BOOL  Dragon_CFG_Phase;   // HL ++
 FGRAPH Curr_CFG;                 /* Lei Huang 09/18/02 current CFG */
 extern ofstream cfg_file;
 #endif
+#include "opt_dfa_openacc.h"
 
 extern "C" void
 Perform_Procedure_Summary_Phase (WN* w, struct DU_MANAGER *du_mgr,
@@ -430,6 +431,7 @@ INT64 osa_bb_start[100];
 INT64 osa_bb_end[100];
 #endif
 
+BOOL OPT_Enable_OpenACC_Liveness_Analysis = FALSE;
 extern BOOL Enable_WN_Simp;
 extern void Simplify_bool_expr(COMP_UNIT *);
 extern void WN_unroll(WN *);
@@ -648,6 +650,16 @@ private:
       WOPT_Enable_Copy_Propagate = TRUE;
       WOPT_Enable_Verify = 1;
       break;
+
+    /*case PREOPT_OPENACC_LIVENESS:
+      WOPT_Enable_DCE =
+      WOPT_Enable_DCE_Alias =
+      WOPT_Enable_Copy_Propagate = 
+		FALSE;
+
+      
+      WOPT_Enable_Verify = 1;
+      break;*/
 
     case PREOPT_IPA0_PHASE:
     case PREOPT_IPA1_PHASE:
@@ -1259,12 +1271,572 @@ Do_Pre_Before_Ivr(COMP_UNIT *comp_unit)
 
 } // Do_Pre_Before_Ivr
 
+WN *
+LivenessAnalysis_OpenACC(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
+	      ALIAS_MANAGER *alias_mgr)
+{
+  WN *wn_orig = wn_tree; // needed for region <--> RID consistency
+  SET_OPT_PHASE("Preparation");
+  OPT_Enable_OpenACC_Liveness_Analysis = TRUE;
+
+  Is_True(phase == PREOPT_OPENACC_LIVENESS ,
+          ("Must be PREOPT_OPENACC_LIVENESS phase"));
+
+  Is_True(WN_opcode(wn_orig)==OPC_FUNC_ENTRY,
+	  ("Pre_Optimizer, unknown WHIRL entry point"));
+
+  // sets Opt_current_pu_st static
+  Opt_set_current_pu_name(wn_tree);
+
+  // If dont_opt is TRUE then do lowering only.
+  BOOL dont_opt = Disable_opt(wn_tree, Opt_current_pu_st);
+
+  //scan the whole tree to symbol table first 
+  dfa_scan_all_var_st(wn_tree);
+
+  WN *wopt_pragma = (WN_opcode(wn_orig) == OPC_FUNC_ENTRY) ? 
+    WN_func_pragmas(wn_orig) : WN_region_pragmas(wn_orig);
+  INT32 pragma_flags = 0;
+  BOOL  disable_parm_alias = FALSE;
+  for (wopt_pragma = WN_first(wopt_pragma);
+       wopt_pragma != NULL;
+       wopt_pragma = WN_next(wopt_pragma)) {
+	 if ( WN_pragma(wopt_pragma) == WN_PRAGMA_WOPT_FINISHED_OPT ) {
+	   pragma_flags = WN_pragma_arg2(wopt_pragma);
+	 }
+       }
+
+  if (IS_FORTRAN && PU_args_aliased(Pu_Table[Opt_current_pu])) {
+    disable_parm_alias = TRUE;
+  }
+
+  WOPT_SWITCHES WOPT_Enable((OPT_PHASE)phase, pragma_flags,
+			    disable_parm_alias);
+
+  // A nested function that is not MP does not inherit the 
+  // restricted mapping. e.g. varfmt nested functions.
+  if (WN_opcode(wn_orig) != OPC_REGION) {
+    if (PU_is_nested_func(Pu_Table[Opt_current_pu]) &&
+	!PU_mp(Get_Current_PU()))
+      WOPT_Enable_Restricted_Map = FALSE;
+  }
+
+  BOOL Fold_ILOAD_save = WN_Simp_Fold_ILOAD;
+  BOOL Fold_LDA_save = WN_Simp_Fold_LDA;
+
+  enable_tree_freq_display();  // enable frequency display for ascii
+			       // WHIRL dumps
+
+  Opt_memory_init_pools();
+
+  // goto conversion
+  if (WOPT_Enable_Goto &&
+      (phase == PREOPT_LNO_PHASE 
+       || phase == PREOPT_PHASE
+#ifdef TARG_NVISA
+       || phase == PREOPT_CMC_PHASE
+#endif
+       )) {
+#ifdef KEY
+    // goto_skip_equal, goto_skip_before, goto_skip_after PU count specified
+    if ( Query_Skiplist ( Goto_Skip_List, Current_PU_Count() ) ) {
+      if ( Show_Progress )
+        ErrMsg(EC_Skip_PU, " goto conversion", Current_PU_Count(), Cur_PU_Name);
+    }
+    else {
+#endif
+    SET_OPT_PHASE("Goto conversion");
+    OPT_POOL_Push( &Opt_local_pool, MEM_DUMP_FLAG+2 );
+    {
+      GOTO_TABLE goto_table( wn_tree, &Opt_local_pool );
+      goto_table.Remove_Gotos();
+      // goto_table gets destructed before we pop the pool
+    }
+    OPT_POOL_Pop( &Opt_local_pool, MEM_DUMP_FLAG+2 );
+
+    if ( Get_Trace( TP_GLOBOPT, OPT_LOWER_FLAG ) ) {
+      fprintf( TFile, "%sAfter Goto Conversion\n%s",DBar,DBar );
+      fdump_tree(TFile, wn_tree);
+    }
+#ifdef KEY
+    }
+#endif
+  }
+
+  SET_OPT_PHASE("Preparation");
+
+#ifdef SKIP
+  // check for inadvertent increase in size of data structures
+  Is_True(sizeof(CODEREP) == 48,
+    ("Size of CODEREP has been changed (is now %d)!",sizeof(CODEREP)));
+#if defined(linux) || defined(BUILD_OS_DARWIN)
+  Is_True(sizeof(STMTREP) == 60,
+    ("Size of STMTREP has been changed (is now %d)!",sizeof(STMTREP)));
+#else
+  Is_True(sizeof(STMTREP) == 64,
+    ("Size of STMTREP has been changed (is now %d)!",sizeof(STMTREP)));
+#endif
+#endif
+
+  /***********************************************************************************/
+  /**************************Control Flow Graph analysis begins here************************/
+  /***********************************************************************************/
+  // allocate space for cfg, htable, and itable
+  COMP_UNIT *comp_unit = CXX_NEW(COMP_UNIT(wn_tree, alias_mgr,
+		(OPT_PHASE)phase, &Opt_global_pool, &Opt_local_pool),
+				 &Opt_global_pool);
+
+#ifdef Is_True_On
+  g_comp_unit = comp_unit;
+  // comp_unit->Verify_addr_taken();
+#endif
+
+  Is_True(comp_unit->Cfg()->Verify_tree(comp_unit->Input_tree()), 
+	  ("Verifying CFG wrong"));
+
+  // these flags tell the symbol table and cfg what to do
+  BOOL lower_fully = (phase == MAINOPT_PHASE);
+  // if lower_fully, we are definitely in mainopt
+  // if we are preopt, need to see who caller is
+  REGION_LEVEL rgn_level = (lower_fully) ? RL_MAINOPT :
+  					   RID_preopt_level(phase);
+
+  // create aux symbol table
+  // cannot print WHIRL tree after this point, use dump_tree_no_st
+  SET_OPT_PHASE("Create AUX Symbol table");
+  WN_Simplifier_Enable(TRUE);	// so that I can fold ILOAD-LDA
+  comp_unit->Opt_stab()->Create(comp_unit, rgn_level);
+  /*if (WOPT_Enable_Pt_Summary) {
+    comp_unit->Opt_stab()->Points_to_summarizer()->
+       Bind_callee_points_to_summary (wn_tree);
+  }*/
+
+  MEM_POOL alias_class_pool;
+
+  OPT_POOL_Initialize(&alias_class_pool, "Alias classification pool",
+		      FALSE, MEM_DUMP_FLAG+20);
+
+  ALIAS_CLASSIFICATION ac(comp_unit->Opt_stab(),
+			  AC_DESTINATION_OPT_STAB,
+			  &alias_class_pool);
+
+  comp_unit->Opt_stab()->Set_alias_classification(ac);
+
+  // Alias classification computation should move from here so that the
+  // alias class finalization process can update the OCC_TAB_ENTRY for
+  // each indirect memop. See comment below, after Compute_FFA().
+  if (WOPT_Enable_Alias_Classification &&
+      !REGION_has_black_regions(comp_unit->Rid())) {
+    SET_OPT_PHASE("Compute alias classification");
+    ac.Classify_memops(comp_unit->Input_tree());
+    comp_unit->Opt_stab()->Incorporate_alias_class_info();
+  }
+
+#ifdef Is_True_On
+  g_opt_stab = comp_unit->Opt_stab();
+#endif
+  WN_Simplifier_Enable(FALSE);
+  WN_Simp_Fold_ILOAD = Fold_ILOAD_save;;
+  WN_Simp_Fold_LDA = Fold_LDA_save;;
+
+  // create control flow graph
+  SET_OPT_PHASE("Create CFG");
+
+  // tail recursion
+  BOOL do_tail_rec = ((! IS_FORTRAN) && WOPT_Enable_Tail_Recur);
+
+/*#ifdef DRAGON
+  if (Dragon_CFG_Phase){       // clear all CFG Nodes
+        Curr_CFG.FG_Nodes.clear();
+        Curr_CFG.Set_pu_name(proc_name);
+        Curr_CFG.Set_Finished(FALSE);
+  }
+#endif*/
+  /**********************************************************************/
+  /*Create CFG Here*/
+  /**********************************************************************/
+  comp_unit->Cfg()->Create(comp_unit->Input_tree(), lower_fully,
+			   WOPT_Enable_Calls_Break_BB,
+			   rgn_level/*context*/, 
+			   comp_unit->Opt_stab(), do_tail_rec,
+			   Malloc_Mem_Pool);
+
+  // Transfer feedback data from Whirl annotation (at Cur_PU_Feedback)
+  // to optimizer CFG annotation (at comp_unit->Cfg()->Feedback())
+  /*if (Cur_PU_Feedback) {
+    SET_OPT_PHASE("Annotate CFG with feedback from Whirl");
+    OPT_FEEDBACK *feedback = CXX_NEW(OPT_FEEDBACK(comp_unit->Cfg(),
+						  &Opt_global_pool),
+				     &Opt_global_pool);
+    comp_unit->Cfg()->Set_feedback( feedback );
+    comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
+					  "after CFG Annotation" );
+    // TODO: Perhaps clear out Cur_PU_Feedback now?
+  }
+
+#ifdef DRAGON
+ if (Dragon_CFG_Phase)        // dump CFG into cfg_file
+   {
+     comp_unit->Cfg()->Dump_CFG(TFile); // update Curr_CFG
+     Curr_CFG.Print(cfg_file); // Dump it
+     //Debug
+     //Curr_CFG.Print();
+   }
+#endif*/
+
+  SET_OPT_PHASE("Control Flow Analysis");
+  comp_unit->Cfg()->Compute_dom_tree(TRUE); // create dominator tree
+  comp_unit->Cfg()->Compute_dom_tree(FALSE); // create post-dominator tree
+  comp_unit->Cfg()->Remove_fake_entryexit_arcs();
+  comp_unit->Cfg()->Compute_dom_frontier(); // create dominance frontier
+  comp_unit->Cfg()->Compute_control_dependence(); // create control-dependence set
+
+  SET_OPT_PHASE("Proactive Loop Transformation");
+  comp_unit->Pro_loop_trans();
+  comp_unit->Cfg()->Analyze_loops();
+
+  // Setup flow free alias information  --  CHI and MU list 
+  SET_OPT_PHASE("Create MU and CHI list");
+  comp_unit->Opt_stab()->Compute_FFA(comp_unit->Rid());
+
+  // Now the OCC_TAB_ENTRY for each indirect memop is set up, and the
+  // correspondence between memops and POINTS_TO's is finalized. We
+  // should delay alias classification until now so it can fill in the
+  // _alias_class field of each POINTS_TO as it finalizes the
+  // equivalence class for each memop.
+  //
+  // For the sake of not changing too much at once, though, I'm
+  // leaving it above for now.
+
+  Is_True(comp_unit->Cfg()->Verify_cfg(),
+	  ("Verify CFG wrong after MU and CHI"));
+
+  SET_OPT_PHASE("Create SSA Representation");
+  /**********************************************************************/
+  /*Create SSA form for each BB  Here*/
+  /**********************************************************************/
+  // create ssa representation
+  comp_unit->Ssa()->Construct(comp_unit->Htable(),
+			      comp_unit->Cfg(),
+			      comp_unit->Opt_stab());
+  // redundancy elimination with reassociation 
+
+  if (Get_Trace(TP_GLOBOPT, SSA_DUMP_FLAG)) {
+    fprintf(TFile, "\nAfter SSA Construction...\n");
+    comp_unit->Ssa()->Print();
+  }
+
+  // Why do we wait until now to free the alias class resources? It
+  // seems to me we could do it after
+  // comp_unit->Opt_stab()->Compute_FFA()
+  // above. -- RK 980722
+  //
+  // Note that this line deletes the alias classification memory pool.
+  comp_unit->Opt_stab()->Alias_classification()->Release_resources();
+  /*if (WOPT_Enable_Pt_Summary) {
+    SET_OPT_PHASE("Points-to Summary Annotation");
+    comp_unit->Opt_stab()->Points_to_summarizer()->
+       Annotate_points_to_summary();
+  }*/
+
+  SET_OPT_PHASE("SSA Pointer Alias Analysis");
+  comp_unit->Ssa()->Pointer_Alias_Analysis();
+  SET_OPT_PHASE("Dead Store Elimination");
+  comp_unit->Ssa()->Dead_store_elim(comp_unit->Cfg(),
+                                    comp_unit->Opt_stab(),
+                                    comp_unit->Exc());
+  /*if (phase == MAINOPT_PHASE) {
+    SET_OPT_PHASE("Reassociation enabled CSE");
+    comp_unit->Do_reasso();
+  }*/
+  comp_unit->Opt_stab()->Update_return_mu();
+  Analyze_pu_attr (comp_unit->Opt_stab(), Opt_current_pu_st);
+  
+  /*if (WOPT_Enable_Zero_Version) {
+    SET_OPT_PHASE("Find Zero Versions");
+    comp_unit->Ssa()->Find_zero_versions();
+  }*/
+  //TraverseAndCheckEachBBStmt(comp_unit->Cfg());
+  
+  SET_OPT_PHASE("Create CODEMAP Representation");
+  comp_unit->Ssa()->Create_CODEMAP();
+
+  /*if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+    SET_OPT_PHASE("Skip verify Live-Range because timing trace is on");
+  } else {
+    SET_OPT_PHASE("Verify Live-Range");
+    comp_unit->Verify_version();
+  }*/
+
+  /*SET_OPT_PHASE("Verify DO-loop");
+  Detect_invalid_doloops(comp_unit);*/
+
+  /*Is_True(comp_unit->Verify_IR(comp_unit->Cfg(), comp_unit->Htable(), 1),
+	  ("Verify CFG wrong after Htable"));*/
+
+  // Do some redundancy elimination phases early, to expose second order
+  // effects and deal with them in the subsequent phases (e.g. CVTLs).
+  //
+  //Do_Pre_Before_Ivr(comp_unit);
+
+  // do induction variable recognition
+  /*if (WOPT_Enable_IVR) {
+    SET_OPT_PHASE("Induction Variable Recognition");
+    comp_unit->Do_iv_recognition();
+  }
+
+  // do flow free copy propagation
+  if (WOPT_Enable_Copy_Propagate) {
+    SET_OPT_PHASE("Copy Propagation");
+    comp_unit->Do_copy_propagate();
+  }
+
+  if (WOPT_Enable_Bool_Simp) {
+    SET_OPT_PHASE("Boolean simplification");
+    Simplify_bool_expr(comp_unit); 
+  }*/
+
+  /*Is_True(comp_unit->Verify_IR(comp_unit->Cfg(), comp_unit->Htable(), 2),
+	  ("Verify CFG wrong after copy prop"));*/
+
+  // do dead-code elimination (both unreachable and dead-stores)
+  if (WOPT_Enable_DCE) {
+    SET_OPT_PHASE("Dead Code Elimination");
+    BOOL dce_renumber_pregs = This_preopt_renumbers_pregs(phase);
+    comp_unit->Do_dead_code_elim(TRUE, TRUE, TRUE, TRUE,
+				 WOPT_Enable_Copy_Propagate,
+				 dce_renumber_pregs,
+				 NULL);
+
+    if ( comp_unit->Cfg()->Feedback() )
+	 comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
+					       "after Dead Code Elimination" );
+  }
+
+/*#ifdef KEY
+  if (WOPT_Enable_Warn_Uninit && phase == MAINOPT_PHASE)
+    comp_unit->Find_uninitialized_locals();
+#endif*/
+
+#ifdef KEY // moved here because renaming causes bad code when there is
+    	   // overlapped live ranges, which can be created by copy propagation
+  if ( WOPT_Enable_Fold_Lda_Iload_Istore ) {
+    SET_OPT_PHASE("LDA-ILOAD/ISTORE folding in coderep");
+    comp_unit->Fold_lda_iload_istore();
+  }
+#endif
+
+  if (phase != PREOPT_LNO1_PHASE) {
+    for (INT i = 0; i < WOPT_Enable_Extra_Rename_Pass; ++i) {
+
+      if (Get_Trace(TP_WOPT2, SECOND_RENAME_FLAG)) 
+	fprintf(TFile, "%sEXTRA RENAME PASS %d:\n%s", DBar, i+1, DBar);
+
+      // only enable during MAINOPT_PHASE because the update of high level
+      // structure is not implemented.  -Raymond 5/29/98.
+      //
+      if (WOPT_Enable_CFG_Opt && phase == MAINOPT_PHASE) {
+	SET_OPT_PHASE("CFG optimization");
+	CFG_transformation(comp_unit,
+			   WOPT_Enable_CFG_Opt2 && i == 0, // first pass
+			   Get_Trace(TP_WOPT2, CFG_OPT_FLAG),
+			   WOPT_Enable_CFG_Display);
+
+	if ( comp_unit->Cfg()->Feedback() )
+	  comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
+						"after CFG Optimization" );
+      }
+
+      SET_OPT_PHASE("Second rename");
+      Rename_CODEMAP(comp_unit);
+
+      if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+	SET_OPT_PHASE("Skip verify Live-Range because timing trace is on");
+      } else {
+	SET_OPT_PHASE("Verify Live-Range");
+	comp_unit->Verify_version();
+      }
+
+      // do flow free copy propagation
+      if (WOPT_Enable_Copy_Propagate) {
+	SET_OPT_PHASE("Copy Propagation");
+	comp_unit->Do_copy_propagate();
+      }
+
+      if (WOPT_Enable_DCE) {
+	SET_OPT_PHASE("Dead Code Elimination");
+	BOOL paths_removed;
+	BOOL dce_renumber_pregs = This_preopt_renumbers_pregs(phase);
+	comp_unit->Do_dead_code_elim(TRUE, TRUE, TRUE, TRUE,
+				     WOPT_Enable_Copy_Propagate,
+				     dce_renumber_pregs,
+				     &paths_removed);
+
+	if ( comp_unit->Cfg()->Feedback() )
+	  comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
+						"Dead Code Elimination" );
+      
+	if (!paths_removed) break;
+    }
+
+#ifdef KEY // moved here because renaming causes bad code when there is
+    	   // overlapped live ranges, which can be created by copy propagation
+      if ( WOPT_Enable_Fold_Lda_Iload_Istore ) {
+	SET_OPT_PHASE("LDA-ILOAD/ISTORE folding in coderep");
+	comp_unit->Fold_lda_iload_istore();
+      }
+#endif
+
+      // synchronize CFG and feedback info
+      // comp_unit->Cfg()->Feedback().make_coherent();
+
+      if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+	SET_OPT_PHASE("Skip verify Live-Range because timing trace is on");
+      } else {
+	SET_OPT_PHASE("Verify Live-Range");
+	comp_unit->Verify_version();
+      }
+    }
+  }/*/
+
+  /*Is_True(comp_unit->Verify_IR(comp_unit->Cfg(), comp_unit->Htable(), 3),
+	  ("Verify CFG wrong after extra passes"));*/
+
+  /*if (WOPT_Enable_Edge_Placement && phase == MAINOPT_PHASE) {
+    SET_OPT_PHASE("Remove Critical Edge");
+    Is_Trace( Get_Trace(TP_GLOBOPT, EPRE_DUMP_FLAG), 
+	     ( TFile, "-------CFG before edge placement---------\n" ) );
+    Is_Trace_cmd( Get_Trace(TP_GLOBOPT, EPRE_DUMP_FLAG), 
+		 comp_unit->Cfg()->Print(TFile) );
+    INT count = comp_unit->Cfg()->Remove_critical_edge();
+    Is_Trace( Get_Trace(TP_GLOBOPT, EPRE_DUMP_FLAG), 
+	     ( TFile, "After edge Placement: BBs are placed on %d edges\n",
+	       count ) );
+    Is_Trace_cmd( (count>0 && Get_Trace(TP_GLOBOPT, EPRE_DUMP_FLAG)), 
+		  comp_unit->Cfg()->Print(TFile) );
+
+    if ( comp_unit->Cfg()->Feedback() )
+      comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
+					    "after Edge Placement" );
+  }*/
+
+  /*if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+    SET_OPT_PHASE("Skip verify Live-Range because timing trace is on");
+  } else {
+    SET_OPT_PHASE("Verify Live-Range");
+    comp_unit->Verify_version();
+  }*/
+
+/*#ifdef Is_True_On  
+  SET_OPT_PHASE("Verify CODEMAP");
+  Is_True(comp_unit->Verify_IR(comp_unit->Cfg(),comp_unit->Htable(),4),
+	  ("Verify CFG wrong after dce"));
+  if (Get_Trace(TKIND_INFO, TINFO_TIME)) 
+    SET_OPT_PHASE("Skip verify CODEMAP because timing trace is on");
+  else {
+    Is_True(comp_unit->Verify_CODEMAP(), ("CODEMAP corrupted."));
+    comp_unit->Htable()->Verify_hashing();
+  }
+#endif // Is_True_On*/
+
+  /*if(WOPT_Enable_WOVP){
+     WOVP wovp(comp_unit->Cfg(), comp_unit->Opt_stab());
+     wovp.Do_wovp();
+  }*/
+
+  // If this is the optimizer phase, we have more work to do
+  WN *opt_wn;
+/*****************************************************************************************************/
+/****************************************Main OPT Phase***********************************************/
+/*****************************************************************************************************/
+/*****************************************************************************************************/
+/****************************************Other OPT Phase***********************************************/
+/*****************************************************************************************************/
+  { 
+    SET_OPT_PHASE("Emitter");
+
+	//ready for liveness analysis
+/*****************************************************************************************************/
+/************************************Begin of LivenessAnalysis********************************************/
+/***************************************By Daniel Tian**************************************************/
+	init_dfa_openacc();
+    opt_wn = comp_unit->Emitter()->Emit(comp_unit, du_mgr, alias_mgr);
+	perform_global_dfa(comp_unit->Cfg());
+	free_dfa_resource_openacc();
+/*****************************************************************************************************/
+/*************************************End of LivenessAnalysis*********************************************/
+/*****************************************************************************************************/
+	/////////////////////////////////////////////////////////////////
+	//DFA Liveness Analysis for OpenACC, by Daniel Tian
+	//extern void opt_dfa_analysis_openacc(CFG *cfg, EMITTER* emitter);	
+	//comp_unit->Emitter()->Set_PrivateVar(comp_unit, du_mgr, alias_mgr);
+	//opt_dfa_analysis_openacc(comp_unit, comp_unit->Cfg(), comp_unit->Emitter());
+	/////////////////////////////////////////////////////////////////
+
+	if (This_preopt_renumbers_pregs(phase)) {
+      Set_PU_Info_flags(Current_PU_Info, PU_PREGS_RENUMBERED);
+    }
+
+    // Identify redudant mem clears that follow a calloc and remove them
+    remove_redundant_mem_clears(opt_wn, alias_mgr, du_mgr);
+
+    CXX_DELETE(comp_unit, &Opt_global_pool);
+    Opt_memory_terminate_pools();
+
+    if (WN_opcode(opt_wn) == OPC_FUNC_ENTRY)
+      Verify_SYMTAB (CURRENT_SYMTAB);
+  }
+  
+  /*****************************************************************************************************/
+  /****************************************End of  OPT Phase***********************************************/
+  /*****************************************************************************************************/
+
+  /* opt_wn now has result, set the RID level */
+  RID *rid = REGION_get_rid(opt_wn);
+  Is_True(rid != NULL, ("Pre_Optimizer, NULL RID after processing"));
+  RID_level(rid) = RID_preopt_level(phase);
+
+  SET_OPT_PHASE("Finalize");
+
+  REPORT_STATISTICS();
+
+  if (phase == MAINOPT_PHASE &&
+      Current_Dep_Graph != NULL && Get_Trace(TP_LNOPT, 1)) {
+    /* Trace LNO graph for CG again, since WN addresses have changed */
+    fprintf(TFile, "%sLNO dep graph for CG, after WOPT\n%s", DBar, DBar);
+    Current_Dep_Graph->Print(TFile);
+    fprintf(TFile, "%s", DBar);
+  }
+
+  Is_True(REGION_consistency_check(opt_wn),(""));
+
+  if (Get_Trace( TP_GLOBOPT, ALIAS_DUMP_FLAG)){
+    Dump_alias_mgr(alias_mgr, opt_wn, TFile);
+  }
+
+  disable_tree_freq_display();  // disable WHIRL tree frequency display
+
+  WN_verifier(opt_wn);
+
+  if (WN_opcode(opt_wn) == OPC_FUNC_ENTRY)
+    Set_PU_Info_tree_ptr (Current_PU_Info, opt_wn);
+
+  WN_CopyMap(opt_wn, WN_MAP_FEEDBACK, wn_orig);
+
+  return opt_wn;
+}
 
 WN *
 Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 	      ALIAS_MANAGER *alias_mgr)
 {
   WN *wn_orig = wn_tree; // needed for region <--> RID consistency
+  ///////////////////////////////////////////////////////////
+  //by daniel, for OpenACC
+  if(phase == PREOPT_OPENACC_LIVENESS)
+  	return LivenessAnalysis_OpenACC(phase, wn_tree, du_mgr, alias_mgr);
+  //disable OpenACC liveness Analysis
+  OPT_Enable_OpenACC_Liveness_Analysis = FALSE;
 
   SET_OPT_PHASE("Preparation");
 
@@ -1345,8 +1917,10 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 
 #ifdef KEY
     // No uplevel reference spliting for openmp
-    if ((PU_has_mp (Get_Current_PU ()) == FALSE) && 
-        (PU_mp(Get_Current_PU ()) == FALSE))
+    if (((PU_has_mp (Get_Current_PU ()) == FALSE) && 
+        (PU_mp(Get_Current_PU ()) == FALSE)) 
+        || ((PU_has_acc (Get_Current_PU ()) == FALSE) && 
+        (PU_acc(Get_Current_PU ()) == FALSE)))
       actions |= LOWER_UPLEVEL;
 #endif
     

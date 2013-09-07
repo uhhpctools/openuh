@@ -286,6 +286,9 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
                                           [Tok_SGI_Dir_End-Tok_SGI_Dir_Start];
 	boolean			disregard_open_mp
                                    [Tok_Open_Mp_Dir_End-Tok_Open_Mp_Dir_Start];
+	//by Daniel Tian(University of Houston)
+	boolean			disregard_open_acc[Tok_Open_Acc_Dir_End-Tok_Open_Acc_Dir_Start];
+	
 	dump_flags_type		dump_flags;
 
 	int			expanded_intrinsic_list = NULL_IDX;
@@ -518,6 +521,14 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
                                  		   "OPEN MP END MASTER",
                                  		   "OPEN MP END CRITICAL",
                                  		   "OPEN MP END ORDERED",
+                                 		   
+                                 		   "Open ACC End Atomic Stmt",					 
+										   "Open ACC End Data Stmt",					 
+										   "Open ACC End Host Data Stmt",					 
+										   "Open ACC End Kernels Stmt",					 
+										   "Open ACC End Parallel Stmt",					 
+										   "Open ACC End Loop Stmt",
+											
 						   "FORALL Construct",
 						   "FORALL",
 						   "END FORALL",

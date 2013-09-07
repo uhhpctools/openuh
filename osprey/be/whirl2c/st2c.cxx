@@ -503,7 +503,22 @@ ST2C_basic_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
      }
 
    CONTEXT_reset_unqualified_ty2c(context);
-   TY_IDX tidx = ST_sym_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+   //By daniel tian, for OpenACC
+   TY_IDX tidx;
+   if(ST_sym_class(st) == CLASS_FUNC)
+   {
+   	  tidx = ST_pu_type(st);
+   }
+   else
+   {
+   	  tidx = ST_type(st);
+	  //this is only for kernel shared array, because during the lower whirl, this type was declared as pointer
+	  //Actually, it is special array.
+   	  if(isGPUKernelFunc && ST_is_ACC_shared_array(st) && TY_kind(tidx)==KIND_POINTER)
+	  	tidx = TY_pointed(tidx);
+   }
+   //TY_IDX tidx = ST_sym_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+   //
 
    // This COMPILE_UPC code is not in latest Open64, Deepak
 #ifdef COMPILE_UPC
@@ -622,7 +637,59 @@ ST2C_decl_var(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
        */
       if (ST_sclass(st) == SCLASS_AUTO)
 	 CONTEXT_set_unqualified_ty2c(context);
-      ST2C_basic_decl(tokens, st, context); /*type, name, storage class*/
+	  if(isGPUKernelFunc && ST_is_ACC_shared_array(st))
+	  {
+	  	if(isGPUOpenCLKernelFunc)
+	  	{
+			//Append_Token_String(tokens, "extern");
+			Append_Token_String(tokens, "__local");
+	      	ST2C_basic_decl(tokens, st, context);  
+			Append_Token_Special(tokens, '[');
+			Append_Token_Special(tokens, ']');
+	  	}
+		else
+		{
+			Append_Token_String(tokens, "extern");
+			Append_Token_String(tokens, "__shared__");
+	      	ST2C_basic_decl(tokens, st, context);  
+			Append_Token_Special(tokens, '[');
+			Append_Token_Special(tokens, ']');
+		}
+	  }
+	  else if(isGPUKernelFunc && ST_is_ACC_shared_scalar(st))
+	  {
+		Append_Token_String(tokens, "extern");
+		Append_Token_String(tokens, "__device__");
+      	ST2C_basic_decl(tokens, st, context);  
+	  }
+	  else if(isGPUKernelFunc && ST_is_ACC_global_data(st))
+	  {
+		if(isGPUOpenCLKernelFunc)
+			Append_Token_String(tokens, "__global");
+		ST2C_basic_decl(tokens, st, context);
+	  }
+	  else if(isGPUKernelFunc && ST_is_ACC_private_data(st))
+          {
+                if(isGPUOpenCLKernelFunc)
+                        Append_Token_String(tokens, "__private");
+		ST2C_basic_decl(tokens, st, context);
+          }
+	  /*else if(isGPUKernelFunc && ST_is_ACC_shared_scalar(st))
+	  {
+		Append_Token_String(tokens, "extern");
+		Append_Token_String(tokens, "__device__");
+      	ST2C_basic_decl(tokens, st, context); 
+	  }*/
+	  /*else if(isGPUKernelFunc && ST_is_ACC_shared_array(st) == ST_ACC_SHARED_ARRAY)
+	  {
+		Append_Token_Special(tokens, "extern");
+		Append_Token_Special(tokens, "__shared__");
+      	ST2C_basic_decl(tokens, st, context); //type, name, storage class
+		Append_Token_Special(tokens, "]");
+		Append_Token_Special(tokens, "]");
+	  }*/
+	  else
+	  	ST2C_basic_decl(tokens, st, context); /*type, name, storage class*/
 #ifdef COMPILE_UPC
       if (ST_type(st) == upc_hsync_mem_ty) {
 	Append_Token_Special(tokens, '=');
@@ -922,9 +989,35 @@ ST2C_func_header(TOKEN_BUFFER  tokens,
    } else if (ST_export(st) == EXPORT_LOCAL) {
      //at this point, any static function will be SCLASS_TEXT,
      //so we look at its export scopt instead.  See bug 476.
-     Prepend_Token_String(header_tokens, "static");
+     if(isGPUKernelFunc && ST_is_ACC_kernels_func(st))
+     {
+     	if(isGPUOpenCLKernelFunc )
+     		Prepend_Token_String(header_tokens, " __kernel");
+		else
+     		Prepend_Token_String(header_tokens, "extern \"C\" __global__");
+     }
+     else if(isGPUKernelFunc && ST_is_ACC_device_func(st))
+     {	//only CUDA device function need this keyword
+     	if(isGPUOpenCLKernelFunc == FALSE)
+     		Prepend_Token_String(header_tokens, "extern \"C\" __device__");
+     }
+	 else
+     	Prepend_Token_String(header_tokens, "static");
    } else {
      //all non-static functions in C should have external linkage
+     if(isGPUKernelFunc && ST_is_ACC_kernels_func(st))
+     {
+     	if(isGPUOpenCLKernelFunc )
+     		Prepend_Token_String(header_tokens, " __kernel");
+		else
+     		Prepend_Token_String(header_tokens, "extern \"C\" __global__");
+     }
+     else if(isGPUKernelFunc && ST_is_ACC_device_func(st))
+     {
+     	if(isGPUOpenCLKernelFunc == FALSE)
+     		Prepend_Token_String(header_tokens, "extern \"C\" __device__");
+     }
+	 else
      Prepend_Token_String(header_tokens, "extern");
    }
       

@@ -1548,13 +1548,15 @@ EMITTER::Compute_use_def_stmt( DU_MANAGER *du_mgr, WN *wn, BB_NODE *wn_bb )
 	RID_TYPE_pragma(rid) ||
 	RID_level(rid) < Cfg()->Rgn_level()) {
 #else
-    if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid) || RID_TYPE_olimit(rid) ||
+    if (RID_TYPE_acc(rid) || RID_TYPE_mp(rid) || RID_TYPE_eh(rid) || RID_TYPE_olimit(rid) ||
 	RID_TYPE_pragma(rid) ||
 	RID_level(rid) < Cfg()->Rgn_level()) {
 #endif
       Compute_use_def_stmt(du_mgr, WN_region_body(wn), wn_bb);
       // need to do pragmas also because of xpragmas
       if (RID_TYPE_mp(rid))
+	Compute_use_def_stmt(du_mgr, WN_region_pragmas(wn), wn_bb);
+	  else if (RID_TYPE_acc(rid))
 	Compute_use_def_stmt(du_mgr, WN_region_pragmas(wn), wn_bb);
     }
   } else {

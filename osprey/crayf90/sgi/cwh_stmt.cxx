@@ -3234,6 +3234,27 @@ cwh_stmt_add_pragma(WN_PRAGMA_ID  wn_pragma_id,
   cwh_block_append(wn);
 }
 
+/*===============================================
+ *
+ * cwh_stmt_add_pragma_acc
+ *
+ * Generate a ACC PRAGMA node and add to the current
+ * block. All args except the id are default NULL.
+ *
+ *===============================================
+ */ 
+extern void
+cwh_stmt_add_pragma_acc(WN_PRAGMA_ID  wn_pragma_id,
+		    ST	         *st,
+		    INT32         arg1,
+		    INT32         arg2)
+{
+  WN *wn;
+  wn = WN_CreatePragma(wn_pragma_id, st, arg1, arg2);
+  WN_set_pragma_acc(wn);
+  cwh_block_append(wn);
+}
+
 #ifdef KEY /* Bug 2660 */
 /*===============================================
  *
@@ -3253,6 +3274,28 @@ cwh_stmt_add_options_pragma(ST *st)
   cwh_stmt_add_to_preamble(wn,block_pu);
 }
 #endif /* KEY Bug 2660 */
+
+/*===============================================
+ *
+ * cwh_stmt_add_xpragma_acc
+ *
+ * Generate a XPRAGMA node with a single kid 
+ * and add to the current block. Arg will be kid0 
+ * of xpragma. Omp and expr are default NULL.
+ *
+ *===============================================
+ */ 
+extern void
+cwh_stmt_add_xpragma_acc(WN_PRAGMA_ID  wn_pragma_id,
+		     WN * expr)
+{
+  WN *wn;
+  wn = WN_CreateXpragma(wn_pragma_id, (ST_IDX) NULL, 1);
+  WN_kid0(wn) = expr;
+  WN_set_pragma_acc(wn);  
+  cwh_block_append(wn);
+}
+
 
 /*===============================================
  *
@@ -3518,8 +3561,9 @@ fei_doloop(INT32	line)
    } else {
       stride_in_loop = WN_COPY_Tree(stride);
    }
-      
-   if (WNOPR(ub) != OPR_INTCONST && WNOPR(ub) != OPR_CONST) {
+
+   //if it is an ACC loop, there is no necessary to translate the loop ub into preg due to s2s translation
+   if (WNOPR(ub) != OPR_INTCONST && WNOPR(ub) != OPR_CONST && acc_offload_region == FALSE) {
       ubcomp = cwh_preg_temp_save("doloop_ub",ub);
    } else {
       ubcomp = WN_COPY_Tree(ub);
@@ -3573,7 +3617,7 @@ fei_doloop(INT32	line)
 			      WN_Intconst(doloop_ty,1));
      step  = WN_StidPreg(doloop_ty,loop_preg,step);
 
-     if (parallel_do_count) { /* parallel, calculate user index */
+     if (parallel_do_count || acc_doloop_count) { /* parallel, calculate user index */
        calcu = cwh_expr_bincalc(OPR_ADD,WN_COPY_Tree(lb),
 	cwh_expr_bincalc(OPR_MPY, WN_LdidPreg(doloop_ty,loop_preg), stride_in_loop));
        if (wlcv)

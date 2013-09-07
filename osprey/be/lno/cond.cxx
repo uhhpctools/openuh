@@ -763,6 +763,7 @@ static BOOL Eliminate_Dead_SCF_rec(WN *wn,
 	return result; 
       if (kid && WN_opcode(kid)==OPC_DO_LOOP 
 	  && Iters(kid)==1
+	  && !Do_Loop_Is_ACC(kid)
 	  && !Do_Loop_Is_Mp(kid)
           && !Is_Nested_Doacross(kid)) {
         WN *first, *last;
@@ -1101,6 +1102,15 @@ static void Mark_Dos(WN *wn, HASH_TABLE<WN *,BOOL> *htable)
       kid = next;
     }
   } else {
+
+
+    if(WN_opcode(wn) == OPC_REGION && REGION_is_acc(wn) == TRUE
+  	&& WN_opcode(WN_first(WN_region_pragmas(wn))) == OPC_PRAGMA
+  	&& (WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_PARALLEL_BEGIN
+  		|| WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_KERNELS_BEGIN))
+	{
+		return;
+	}
     for (INT kidno=0; kidno<WN_kid_count(wn); kidno++) {
       WN *kid = WN_kid(wn,kidno);
       Mark_Dos(kid,htable);
@@ -1234,6 +1244,14 @@ static void Guard_Dos_Rec(WN *wn, HASH_TABLE<WN *,BOOL> *htable)
       }
     }
   }
+  else if(WN_opcode(wn) == OPC_REGION && REGION_is_acc(wn) == TRUE
+  	&& WN_opcode(WN_first(WN_region_pragmas(wn))) == OPC_PRAGMA
+  	&& (WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_PARALLEL_BEGIN
+  		|| WN_pragma(WN_first(WN_kid(wn, 1))) == WN_PRAGMA_ACC_KERNELS_BEGIN))
+  {
+  	return;
+  }
+  
   if (opcode == OPC_BLOCK) {
     WN *kid = WN_first(wn);
     while (kid) {
@@ -1631,6 +1649,8 @@ BOOL Is_Consistent_Condition(ACCESS_VECTOR *av, WN *expr)
 static void STD_Canonicalize_Upper_Bound(WN* wn_loop)
 {
   if (Do_Loop_Is_Mp(wn_loop))
+    return; 
+  if (Do_Loop_Is_ACC(wn_loop))
     return; 
   OPCODE opc = WN_opcode(WN_end(wn_loop)); 
   OPERATOR opr = OPCODE_operator(opc);

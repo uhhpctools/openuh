@@ -174,6 +174,65 @@
 # define OPEN_MP_UNTIED_IDX             19
 # define OPEN_MP_COLLAPSE_IDX           20
 
+# define OPEN_ACC_DEVICE_TYPE_NVIDIA	1
+# define OPEN_ACC_DEVICE_TYPE_RADEON	2
+# define OPEN_ACC_DEVICE_TYPE_XEONPHI	3
+
+/*******************************************\
+|* open acc directive argument index macros *|
+\*******************************************/
+
+# define OPEN_ACC_LIST_CNT               44 /* by DANIEL TIAN, 04/01/14 */
+
+# define OPEN_ACC_IF_IDX               	    0
+# define OPEN_ACC_ASYNC_IDX			 			1 	
+# define OPEN_ACC_PRIVATE_IDX             	2
+# define OPEN_ACC_FIRST_PRIVATE_IDX         3
+# define OPEN_ACC_WAIT_IDX			        4
+# define OPEN_ACC_COPY_IDX	                5
+# define OPEN_ACC_PRESENT_OR_COPY_IDX       6
+# define OPEN_ACC_PCOPY_IDX			        7
+# define OPEN_ACC_COPYIN_IDX	            8
+# define OPEN_ACC_PRESENT_OR_COPYIN_IDX     9
+# define OPEN_ACC_PCOPYIN_IDX			    10
+# define OPEN_ACC_COPYOUT_IDX	            11
+# define OPEN_ACC_PRESENT_OR_COPYOUT_IDX    12
+# define OPEN_ACC_PCOPYOUT_IDX			    13
+# define OPEN_ACC_CREATE_IDX	            14
+# define OPEN_ACC_PRESENT_OR_CREATE_IDX     15
+# define OPEN_ACC_PCREATE_IDX			    16
+# define OPEN_ACC_PRESENT_IDX      			17
+# define OPEN_ACC_DELETE_IDX		        18
+# define OPEN_ACC_DEVICEPTR_IDX             19
+# define OPEN_ACC_USE_DEVICE_IDX      		20
+# define OPEN_ACC_COLLAPSE_IDX     			21
+# define OPEN_ACC_SEQ_IDX           		22
+# define OPEN_ACC_AUTO_IDX          		23
+# define OPEN_ACC_TILE_IDX        			24
+# define OPEN_ACC_DEVICE_TYPE_IDX           25
+# define OPEN_ACC_REDUCTION_OPR_IDX             26
+# define OPEN_ACC_REDUCTION_VAR_IDX		27
+# define OPEN_ACC_GANG_IDX        			28
+# define OPEN_ACC_WORKER_IDX             	29
+# define OPEN_ACC_VECTOR_IDX           		30	
+# define OPEN_ACC_NUM_GANGS_IDX        		31
+# define OPEN_ACC_NUM_WORKERS_IDX           32
+# define OPEN_ACC_VECTOR_LENGTH_IDX         33
+# define OPEN_ACC_INDEPENDENT_IDX         	34
+# define OPEN_ACC_DEFAULT_IDX         		35
+# define OPEN_ACC_READ_IDX         			36
+# define OPEN_ACC_WRITE_IDX         		37
+# define OPEN_ACC_UPDATE_IDX         		38
+# define OPEN_ACC_CAPTURE_IDX         		39
+# define OPEN_ACC_SELF_IDX         		40	
+# define OPEN_ACC_HOST_IDX         		41	
+# define OPEN_ACC_DEVICE_IDX         		42
+# define OPEN_ACC_BIND_IDX         			43
+# define OPEN_ACC_NOHOST_IDX         		44
+# define OPEN_ACC_DEVICE_RESIDENT_IDX       45
+# define OPEN_ACC_LINK_IDX                  46
+# define OPEN_ACC_CACHE_IDX		    47 
+
 /***************************************\
 |* sgi directive argument index macros *|
 \***************************************/

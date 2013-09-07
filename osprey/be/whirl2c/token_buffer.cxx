@@ -1178,6 +1178,13 @@ write_token(FILE        *ofile,   /* NULL if strbuf!=NULL */
    
    int tokenlen;    /* shilpa - added these 2 variables */
    char* current_token;
+   //NOW it is CUDA kernel
+   BOOL isGPUKernelFunc = FALSE;
+   if(Current_pu != NULL)
+   {
+   	  isGPUKernelFunc = PU_acc(Get_Current_PU());
+   	  isGPUKernelFunc = isGPUKernelFunc || PU_acc_routine(Get_Current_PU());
+   }
    
    Is_True(this_token != NO_TOKEN_IDX, ("Cannot write non-existent token"));
    
@@ -1209,7 +1216,9 @@ write_token(FILE        *ofile,   /* NULL if strbuf!=NULL */
          str = TOKEN_BUFFER_get_char_string(buffer, a_token);
          tokenlen = TOKEN_string_size(a_token);
 
-         if(PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG) //Source is FORTRAN
+		 //GPU function, leave the leading "-" there.
+		 //GPU function is either CUDA/OPENCL
+         if(!isGPUKernelFunc && Current_pu && (PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG)) //Source is FORTRAN
          { 
             for(ch_idx = 0; ch_idx < tokenlen; ch_idx++)             //shilpa - this eliminates leading underscores from fortran tokens
             {    if(str[ch_idx] != '_')

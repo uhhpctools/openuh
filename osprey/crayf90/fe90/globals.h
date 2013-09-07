@@ -1493,7 +1493,8 @@ enum    operator_values      {  Null_Opr,
                                 Noinline_Routine_Star_Opr,
                                 Inline_Global_Star_Opr,
                                 Noinline_Global_Star_Opr,
-
+                
+				/*OpenMP directives*/
 				Atomic_Open_Mp_Opr,
 				Barrier_Open_Mp_Opr,
 				Critical_Open_Mp_Opr,
@@ -1632,6 +1633,26 @@ enum    operator_values      {  Null_Opr,
                 ChangeTeam_Opr,
                 EndTeam_Opr,
 #endif
+                /*OpenACC directives*/
+                Wait_Open_Acc_Opr,
+                Update_Open_Acc_Opr,
+                Declare_Open_Acc_Opr,
+                Cache_Open_Acc_Opr,
+                Atomic_Open_Acc_Opr,
+                Endatomic_Open_Acc_Opr,
+                Data_Open_Acc_Opr,
+                Enddata_Open_Acc_Opr,
+                Host_Data_Open_Acc_Opr,
+                Endhost_Data_Open_Acc_Opr,
+                Kernels_Open_Acc_Opr,
+                Endkernels_Open_Acc_Opr,
+                Parallel_Open_Acc_Opr,
+                Endparallel_Open_Acc_Opr,
+                Loop_Open_Acc_Opr,
+                Endloop_Open_Acc_Opr,
+                Enter_Data_Open_Acc_Opr,
+                Exit_Data_Open_Acc_Opr,
+                Routine_Open_Acc_Opr,
 
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
                                 /* DO NOT PUT ANY OPRS AFTER THIS ONE */
@@ -1799,6 +1820,14 @@ enum stmt_type_values           {Null_Stmt,
 				 Open_MP_End_Master_Stmt,
 				 Open_MP_End_Critical_Stmt,
 				 Open_MP_End_Ordered_Stmt,
+				 /*OpenACC stmt*/								 
+				Open_ACC_End_Atomic_Stmt,					 
+				Open_ACC_End_Data_Stmt,					 
+				Open_ACC_End_Host_Data_Stmt,					 
+				Open_ACC_End_Kernels_Stmt,					 
+				Open_ACC_End_Parallel_Stmt,					 
+				Open_ACC_End_Loop_Stmt,
+
 
                                  Forall_Cstrct_Stmt,
                                  Forall_Stmt,
@@ -1942,6 +1971,27 @@ enum    open_mp_directive_values     {
 
 typedef enum open_mp_directive_values        open_mp_directive_type;
 
+/* by Daniel Tian from UH, 04/01/14 */
+enum    open_acc_directive_values     {
+                                Data_Acc,
+                                Host_Data_Acc,
+                                Atomic_Acc,
+                                Kernels_Acc,
+                                Parallel_Acc, 
+                                Loop_Acc,
+                                Enter_Data_Acc,
+                                Exit_Data_Acc, 
+                                Routine_Acc,
+                                Wait_Acc,
+                                Update_Acc,
+                                Declare_Acc,
+                                Cache_Acc,
+                                Num_Acc_Values   /* must be last */
+                                };
+
+typedef enum open_acc_directive_values        open_acc_directive_type;
+
+
 enum    open_mp_clause_values        {
                                 If_Omp_Clause,
                                 Num_Threads_Omp_Clause, /* by jhs, 02/7/18 */
@@ -1967,6 +2017,69 @@ typedef enum open_mp_clause_values open_mp_clause_type;
 extern char    *(open_mp_dir_str[Num_Omp_Values]);
 
 extern boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause];
+
+/* by Daniel Tian from UH, 04/01/14 */
+enum    open_acc_clause_values        {
+                                If_Acc_Clause,
+                                Async_Acc_Clause, 
+                                Private_Acc_Clause,
+                                First_Private_Acc_Clause,
+                                Wait_Acc_Clause,
+                                //copy
+                                Copy_Acc_Clause,
+                                Present_Or_Copy_Acc_Clause,
+                                Pcopy_Acc_Clause,
+                                //copyin
+                                Copyin_Acc_Clause,
+                                Present_Or_Copyin_Acc_Clause,
+                                Pcopyin_Acc_Clause,
+                                //copyout
+                                Copyout_Acc_Clause,
+                                Present_Or_Copyout_Acc_Clause,
+                                Pcopyout_Acc_Clause,
+                                //create
+                                Create_Acc_Clause,
+                                Present_Or_Create_Acc_Clause,
+                                Pcreate_Acc_Clause,
+                                //present
+                                Present_Acc_Clause,
+                                Delete_Acc_Clause,
+                                Deviceptr_Acc_Clause,
+                                Use_Device_Acc_Clause,
+								Collapse_Acc_Clause,
+								Seq_Acc_Clause,
+								Auto_Acc_Clause,
+								Tile_Acc_Clause,
+								Device_Type_Acc_Clause,
+								Reduction_Acc_Clause,
+								Gang_Acc_Clause,
+								Worker_Acc_Clause,
+								Vector_Acc_Clause,
+								Num_Gangs_Acc_Clause,
+								Num_Workers_Acc_Clause,
+								Vector_Length_Acc_Clause,
+								Independent_Acc_Clause,
+								Default_Acc_Clause,
+                                Read_Acc_Clause,
+                                Write_Acc_Clause,
+                                Update_Acc_Clause,
+                                Capture_Acc_Clause,
+                                Self_Acc_Clause,
+                                Host_Acc_Clause,
+                                Device_Acc_Clause,
+                                Bind_Acc_Clause,
+                                Nohost_Acc_Clause,
+                                Device_Resident_Acc_Clause,
+                                Cache_Acc_Clause,
+                                Link_Acc_Clause,
+                                Last_Acc_Clause     /* must be last */
+                                };
+typedef enum open_acc_clause_values open_acc_clause_type;
+
+extern char    *(open_acc_dir_str[Num_Acc_Values]);
+
+extern boolean open_acc_clause_allowed[Num_Acc_Values][Last_Acc_Clause];
+
 
 
 typedef enum	addr_mode_values		addr_mode_type;
@@ -2105,6 +2218,7 @@ struct	cmd_line_flags_entry {
 	boolean		ccg_dump_options	: 1;		/* -Y  flags  */
 	boolean		co_array_fortran	: 1;		/* -Z	      */
 	boolean		do_UDB_checks		: 1;		/* -G0&!scala0*/
+	boolean     disregard_all_accs      : 1;            /* -x  acc    */
 	};
 
 struct	ac_cmd_line_flags_entry {
@@ -2128,6 +2242,7 @@ struct	dump_flags_entry {
         boolean		mod_version		: 1;
 	boolean		mp			: 1;
 	boolean		open_mp			: 1;
+	boolean		open_acc			: 1;
 	boolean		dsm			: 1;
 	boolean		cray_compatible		: 1;
 	boolean		pack_half_word		: 1;
@@ -2411,7 +2526,8 @@ struct	cdir_switch_entry	{
 				 int		copyprivate_list_idx; /* by jhs, 02/7/22 */
 				 int		default_scope_list_idx;
 				 int		dir_nest_check_sh_idx;
-                                 int		do_omp_sh_idx;
+                 int		do_omp_sh_idx;
+                 int		do_acc_sh_idx;	//acc loop
 				 int            doacross_sh_idx;
 				 int		doall_sh_idx;
                                  int		dopar_sh_idx;
@@ -2440,6 +2556,8 @@ struct	cdir_switch_entry	{
 				 int		shared_list_idx;
 				 int		wait_list_idx;
 				 int		unroll_count_idx;
+                                 int		paralleldo_acc_sh_idx;	//acc parallel loop
+                                 int		kernelsdo_acc_sh_idx;	//acc kernels loop
 
                                  opnd_type	first_sh_blk_stk;
 
@@ -3252,6 +3370,7 @@ extern	boolean			disregard_mics[];
 extern	boolean			disregard_directive[];
 extern	boolean			disregard_mips[];
 extern	boolean			disregard_open_mp[];
+extern	boolean			disregard_open_acc[];
 extern	FILE		       *debug_file;
 extern	char			debug_file_name[];
 extern	dump_flags_type		dump_flags;

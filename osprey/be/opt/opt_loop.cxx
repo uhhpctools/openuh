@@ -362,6 +362,12 @@ NORMALIZE_LOOP::Normalize_do_loop( WN *wn, OPT_PHASE phase )
     {
       return NULL;
     }
+	//Don't normalize the ACC LOOP
+    if ( !WOPT_Enable_IVR_Outermost_Loop_Parallel_Region &&
+	 (Is_outermost_loop_in_parallel_region(wn,WN_PRAGMA_ACC_LOOP_BEGIN)))
+    {
+      return NULL;
+    }
 
     // create a block to hold the old init statement
     WN *newblock = WN_CreateBlock();

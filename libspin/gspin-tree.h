@@ -301,6 +301,19 @@ typedef enum gs_code {
  GS_VEC_DELETE_EXPR,
  GS_VEC_NEW_EXPR,
  GS_TEMPLATE_TEMPLATE_PARM, /* this is 233; should not be higher than 255 */
+
+ #ifdef FE_GNU_4_2_0
+ GS_ACC_PARALLEL,
+ GS_ACC_KERNEL,
+ GS_ACC_LOOP,
+ GS_ACC_HOST_DATA,
+ GS_ACC_DATA,
+ GS_ACC_UPDATE,
+ GS_ACC_CACHE,
+ GS_ACC_DECLARE,
+ GS_ACC_WAIT,
+ GS_ACC_CLAUSE,
+#endif
  GS_FREQ_HINT_STMT,
  GS_ZDL_STMT
 
@@ -2497,5 +2510,108 @@ typedef enum gs_symbol_visibility_kind
   GS_VISIBILITY_HIDDEN,
   GS_VISIBILITY_INTERNAL
 } gs_symbol_visibility_kind_t;
+
+typedef enum gs_acc_clause_code
+{
+  GS_ACC_CLAUSE_ERROR,
+
+  /* OpenACC clause: IF (expression).  */
+  GS_ACC_CLAUSE_IF,
+
+  /* OpenACC clause:  */
+  GS_ACC_CLAUSE_ASYNC,
+
+  /* OpenACC clause:  */
+  GS_ACC_CLAUSE_NUM_GANGS,
+
+  /* OpenACC clause:  */
+  GS_ACC_CLAUSE_NUM_WORKERS,
+
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_VECTOR_LENGTH,
+
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_COPY,
+
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_COPYIN,
+
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_COPYOUT,
+
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_CREATE,
+
+  /* OpenACC clause: .  */
+  GS_ACC_CLAUSE_PRESENT,
+
+  /* OpenACC clause: .  */
+  GS_ACC_CLAUSE_PRESENT_OR_COPY,
+
+  /* OpenACC clause: .  */
+  GS_ACC_CLAUSE_PRESENT_OR_COPYIN,
+
+  /* OpenACC clause: .  */
+  GS_ACC_CLAUSE_PRESENT_OR_COPYOUT,
+  
+  /* OpenACC clause: .  */
+  GS_ACC_CLAUSE_PRESENT_OR_CREATE,
+	  
+  /* OpenACC clause: . parmeter to launch cuda*/
+  GS_ACC_CLAUSE_PARM,
+
+  /*ACC_RESIDENT*/
+  GS_ACC_CLAUSE_ACC_RESIDENT,
+  
+  /*ACC_RESIDENT*/
+  GS_ACC_CLAUSE_USE_DEVICE,
+
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_DEVICEPTR,
+
+  /* OpenACC clause:  */
+  GS_ACC_CLAUSE_COLLAPSE,
+
+  /* OpenACC clause:  */
+  GS_ACC_CLAUSE_SEQ,
+
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_PRIVATE,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_FIRST_PRIVATE,
+  
+  /* OpenACC clause:   variables' list. for acc cache construction*/
+  GS_ACC_CLAUSE_VARLIST,
+  
+  /* OpenACC clause:   
+  scalar-integer-expression, no keywords for clause, just exp
+  for acc wait construction*/
+  GS_ACC_CLAUSE_INTEXP,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_REDUCTION,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_GANG,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_WORKER,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_VECTOR,
+  
+  /* OpenACC clause:   */  
+  GS_ACC_CLAUSE_INDEPENDENT,
+  
+  /* OpenACC clause:   */
+  GS_ACC_CLAUSE_HOST,
+  
+  /* OpenACC clause: */
+  GS_ACC_CLAUSE_DEVICE,
+
+  /*OpenACC const clause*/
+  GS_ACC_CLAUSE_CONST
+}gs_acc_clause_code_t;
 
 #endif /* __GSPIN_TREE_H__ */

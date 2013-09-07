@@ -419,6 +419,7 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
         # 32bit libraries
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
@@ -566,7 +567,7 @@ INSTALL_CAF_EXTRA_LIB () {
 }
 
 
-# Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a, libm.a, libopenmp.a
+# Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a, libm.a, libopenmp.a, libopenacc.a
 INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
 
     if [ "$TARG_HOST" = "ia64" ] ; then
@@ -578,6 +579,7 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
@@ -598,6 +600,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/libopenmp-pcl.a
@@ -615,6 +619,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/32/libopenmp-pcl.a
@@ -622,10 +628,10 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.a ${PHASEPATH}/32/libacml_mv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.so.1 ${PHASEPATH}/32/libacml_mv.so.1
 
-        (cd ${PHASEPATH}; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so; ln -sf libopenacc.so.1 libopenacc.so)
         (cd ${PHASEPATH}; ln -sf libopenmp-pcl.so.1 libopenmp-pcl.so)
         (cd ${PHASEPATH}; ln -sf libacml_mv.so.1 libacml_mv.so)
-        (cd ${PHASEPATH}/32; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}/32; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so; ln -sf libopenacc.so.1 libopenacc.so)
         (cd ${PHASEPATH}/32; ln -sf libopenmp-pcl.so.1 libopenmp-pcl.so)
         (cd ${PHASEPATH}/32; ln -sf libacml_mv.so.1 libacml_mv.so)
     fi 
@@ -738,8 +744,10 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${AREA}/include/libelf/libelf.h  ${ROOT}/include/${VERSION}/libelf/libelf.h
     INSTALL_DATA_SUB ${AREA}/include/libelf/sys_elf.h  ${ROOT}/include/${VERSION}/libelf/sys_elf.h
 
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/openacc/openacc.h  ${ROOT}/include/${VERSION}/openacc.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp.h  ${ROOT}/include/${VERSION}/omp.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/openacc/openacc_lib.h ${ROOT}/include/${VERSION}/openacc_lib.h
 
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/shmem.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/mpp/shmem.h
@@ -793,6 +801,11 @@ INSTALL_MODULES () {
     ( cd ${ROOT}/include/${VERSION}/; echo -e "OMP_LIB.mod : omp_lib.f \n\t" \
          "${ROOT}/bin/openf90 -c -fno-second-underscore -fe \$<" |  \
          make -f - )
+
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/openacc/openacc_lib.f ${ROOT}/include/${VERSION}/openacc_lib.f
+    ( cd ${ROOT}/include/${VERSION}/; echo -e "OPENACC_LIB.mod : openacc_lib.f \n\t" \
+          "${ROOT}/bin/openf90 -c -fno-second-underscore -fe \$<" |  \
+          make -f - )
 
     return 0
 }

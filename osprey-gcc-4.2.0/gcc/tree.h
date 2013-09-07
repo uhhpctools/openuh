@@ -337,6 +337,119 @@ enum omp_clause_code
   /* OpenMP clause: untied.  */
   OMP_CLAUSE_UNTIED
 };
+
+
+/* Number of operands and names for each clause.  */
+extern unsigned const char acc_clause_num_ops[];
+extern const char * const acc_clause_code_name[];
+
+/* Clause codes.  Do not reorder, as this is used to index into the tables
+   omp_clause_num_ops and omp_clause_code_name.  */
+enum acc_clause_code
+{
+  /* Clause zero is special-cased inside the parser
+     (c_parser_omp_variable_list).  */
+  ACC_CLAUSE_ERROR = 0,
+
+  /* OpenACC clause: IF (expression).  */
+  ACC_CLAUSE_IF,
+
+  /* OpenACC clause:  */
+  ACC_CLAUSE_ASYNC,
+
+  /* OpenACC clause:  */
+  ACC_CLAUSE_NUM_GANGS,
+
+  /* OpenACC clause:  */
+  ACC_CLAUSE_NUM_WORKERS,
+
+  /* OpenACC clause: */
+  ACC_CLAUSE_VECTOR_LENGTH,
+
+  /* OpenACC clause: */
+  ACC_CLAUSE_COPY,
+
+  /* OpenACC clause: */
+  ACC_CLAUSE_COPYIN,
+
+  /* OpenACC clause: */
+  ACC_CLAUSE_COPYOUT,
+
+  /* OpenACC clause:   */
+  ACC_CLAUSE_CREATE,
+
+  /* OpenACC clause: .  */
+  ACC_CLAUSE_PRESENT,
+
+  /* OpenACC clause: .  */
+  ACC_CLAUSE_PRESENT_OR_COPY,
+
+  /* OpenACC clause: .  */
+  ACC_CLAUSE_PRESENT_OR_COPYIN,
+
+  /* OpenACC clause: .  */
+  ACC_CLAUSE_PRESENT_OR_COPYOUT,
+  
+  /* OpenACC clause: .  */
+  ACC_CLAUSE_PRESENT_OR_CREATE,
+  
+  /* OpenACC clause: . kernel/parallel/loop parmeter */
+  ACC_CLAUSE_PARM,
+
+  /*ACC_RESIDENT*/
+  ACC_CLAUSE_ACC_RESIDENT,
+  
+  /*ACC_RESIDENT*/
+  ACC_CLAUSE_USE_DEVICE,
+
+  /* OpenACC clause: */
+  ACC_CLAUSE_DEVICEPTR,
+
+  /* OpenACC clause:  */
+  ACC_CLAUSE_COLLAPSE,
+
+  /* OpenACC clause:  */
+  ACC_CLAUSE_SEQ,
+
+  /* OpenACC clause:   */
+  ACC_CLAUSE_PRIVATE,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_FIRST_PRIVATE,
+  
+  /* OpenACC clause:   variables' list. for acc cache construction*/
+  ACC_CLAUSE_VARLIST,
+  
+  /* OpenACC clause:   
+  scalar-integer-expression, no keywords for clause, just exp
+  for acc wait construction*/
+  ACC_CLAUSE_INTEXP,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_REDUCTION,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_GANG,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_WORKER,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_VECTOR,
+  
+  /* OpenACC clause:   */  
+  ACC_CLAUSE_INDEPENDENT,
+  
+  /* OpenACC clause:   */
+  ACC_CLAUSE_HOST,
+  
+  /* OpenACC clause: */
+  ACC_CLAUSE_DEVICE,
+  
+  /* OpenACC const clause: UH extension*/
+  ACC_CLAUSE_CONST
+};
+
 
 /* The definition of tree nodes fills the next several pages.  */
 
@@ -726,6 +839,28 @@ enum tree_node_structure_enum {
       omp_clause_range_check_failed (__t, __FILE__, __LINE__,		\
 				     __FUNCTION__, (CODE1), (CODE2));	\
     __t; })
+		
+
+#define ACC_CLAUSE_SUBCODE_CHECK(T, CODE) __extension__			\
+({  const tree __t = (T);						\
+    if (TREE_CODE (__t) != ACC_CLAUSE)					\
+      tree_check_failed (__t, __FILE__, __LINE__, __FUNCTION__,  	\
+			 ACC_CLAUSE, 0);				\
+    if (__t->acc_clause.code != (CODE))					\
+      acc_clause_check_failed (__t, __FILE__, __LINE__, __FUNCTION__, 	\
+			       (CODE));					\
+    __t; })
+    
+#define ACC_CLAUSE_RANGE_CHECK(T, CODE1, CODE2) __extension__		\
+		({	const tree __t = (T);						\
+			if (TREE_CODE (__t) != ACC_CLAUSE)					\
+			  tree_check_failed (__t, __FILE__, __LINE__, __FUNCTION__, 	\
+					 ACC_CLAUSE, 0);				\
+			if ((int) __t->acc_clause.code < (int) (CODE1)			\
+				|| (int) __t->acc_clause.code > (int) (CODE2))			\
+			  acc_clause_range_check_failed (__t, __FILE__, __LINE__,		\
+							 __FUNCTION__, (CODE1), (CODE2));	\
+			__t; })
 
 /* These checks have to be special cased.  */
 #define EXPR_CHECK(T) __extension__					\
@@ -776,6 +911,19 @@ enum tree_node_structure_enum {
       omp_clause_operand_check_failed (__i, __t, __FILE__, __LINE__,	\
 	                               __FUNCTION__);			\
     &__t->omp_clause.ops[__i]; }))
+
+	
+#define ACC_CLAUSE_ELT_CHECK(t, i) __extension__			\
+	(*({const tree __t = t; 						\
+		const int __i = (i);						\
+		if (TREE_CODE (__t) != ACC_CLAUSE)					\
+		  tree_check_failed (__t, __FILE__, __LINE__, __FUNCTION__, 	\
+				 ACC_CLAUSE, 0);				\
+		if (__i < 0 || __i >= acc_clause_num_ops [__t->acc_clause.code])	\
+		  acc_clause_operand_check_failed (__i, __t, __FILE__, __LINE__,	\
+									   __FUNCTION__);			\
+		&__t->acc_clause.ops[__i]; }))
+		
 
 /* Special checks for TREE_OPERANDs.  */
 #define TREE_OPERAND_CHECK(T, I) __extension__				\
@@ -846,6 +994,18 @@ extern void omp_clause_range_check_failed (const tree, const char *, int,
 			       enum omp_clause_code)
     ATTRIBUTE_NORETURN;
 
+
+extern void acc_clause_check_failed (const tree, const char *, int,
+				     const char *, enum acc_clause_code)
+    ATTRIBUTE_NORETURN;
+extern void acc_clause_operand_check_failed (int, tree, const char *,
+				             int, const char *)
+    ATTRIBUTE_NORETURN;
+extern void acc_clause_range_check_failed (const tree, const char *, int,
+			       const char *, enum acc_clause_code,
+			       enum acc_clause_code)
+    ATTRIBUTE_NORETURN;
+
 #else /* not ENABLE_TREE_CHECKING, or not gcc */
 
 #define CONTAINS_STRUCT_CHECK(T, ENUM)          (T)
@@ -871,6 +1031,11 @@ extern void omp_clause_range_check_failed (const tree, const char *, int,
 #define OMP_CLAUSE_ELT_CHECK(T, i)	        ((T)->omp_clause.ops[i])
 #define OMP_CLAUSE_RANGE_CHECK(T, CODE1, CODE2)	(T)
 #define OMP_CLAUSE_SUBCODE_CHECK(T, CODE)	(T)
+
+#define ACC_CLAUSE_ELT_CHECK(T, i)	        ((T)->acc_clause.ops[i])
+#define ACC_CLAUSE_RANGE_CHECK(T, CODE1, CODE2)	(T)
+#define ACC_CLAUSE_SUBCODE_CHECK(T, CODE)	(T)
+
 
 #endif
 
@@ -1679,6 +1844,53 @@ struct tree_constructor GTY(())
   OMP_CLAUSE_OPERAND (OMP_CLAUSE_RANGE_CHECK (OMP_CLAUSE_CHECK (NODE),	\
 					      OMP_CLAUSE_PRIVATE,	\
 	                                      OMP_CLAUSE_COPYPRIVATE), 0)
+	
+#define ACC_BODY(NODE) \
+	  TREE_OPERAND (TREE_RANGE_CHECK (NODE, ACC_PARALLEL, ACC_DATA), 0)
+#define ACC_CLAUSES_1(NODE) \
+	  TREE_OPERAND (TREE_RANGE_CHECK (NODE, ACC_PARALLEL, ACC_DATA), 1)
+#define ACC_CLAUSES_2(NODE) \
+	  TREE_OPERAND (TREE_RANGE_CHECK (NODE, ACC_UPDATE, ACC_WAIT), 0)
+
+#define ACC_PARALLEL_BODY(NODE)	   	TREE_OPERAND (ACC_PARALLEL_CHECK (NODE), 0)
+#define ACC_PARALLEL_CLAUSES(NODE)	TREE_OPERAND (ACC_PARALLEL_CHECK (NODE), 1)
+
+#define ACC_KERNEL_BODY(NODE)	   	TREE_OPERAND (ACC_KERNEL_CHECK (NODE), 0)
+#define ACC_KERNEL_CLAUSES(NODE)	TREE_OPERAND (ACC_KERNEL_CHECK (NODE), 1)
+
+#define ACC_LOOP_BODY(NODE)	   	TREE_OPERAND (ACC_LOOP_CHECK (NODE), 0)
+#define ACC_LOOP_CLAUSES(NODE)	TREE_OPERAND (ACC_LOOP_CHECK (NODE), 1)
+#define ACC_LOOP_INIT(NODE)	   TREE_OPERAND (ACC_LOOP_CHECK (NODE), 2)
+#define ACC_LOOP_COND(NODE)	   TREE_OPERAND (ACC_LOOP_CHECK (NODE), 3)
+#define ACC_LOOP_INCR(NODE)	   TREE_OPERAND (ACC_LOOP_CHECK (NODE), 4)
+
+#define ACC_HOST_DATA_BODY(NODE)	   	TREE_OPERAND (ACC_HOST_DATA_CHECK (NODE), 0)
+#define ACC_HOST_DATA_CLAUSES(NODE)		TREE_OPERAND (ACC_HOST_DATA_CHECK (NODE), 1)
+
+#define ACC_DATA_BODY(NODE)	   		TREE_OPERAND (ACC_DATA_CHECK (NODE), 0)
+#define ACC_DATA_CLAUSES(NODE)		TREE_OPERAND (ACC_DATA_CHECK (NODE), 1)
+
+#define ACC_UPDATE_CLAUSES(NODE)		TREE_OPERAND (ACC_UPDATE_CHECK (NODE), 0)
+#define ACC_CACHE_CLAUSES(NODE)			TREE_OPERAND (ACC_CACHE_CHECK (NODE), 0)
+#define ACC_DECLARE_CLAUSES(NODE)		TREE_OPERAND (ACC_DECLARE_CHECK (NODE), 0)
+#define ACC_WAIT_CLAUSES(NODE)			TREE_OPERAND (ACC_WAIT_CHECK (NODE), 0)
+
+
+#define ACC_CLAUSE_CHAIN(NODE)     TREE_CHAIN (ACC_CLAUSE_CHECK (NODE))
+#define ACC_CLAUSE_DECL(NODE)      					\
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_RANGE_CHECK (ACC_CLAUSE_CHECK (NODE),	\
+							  ACC_CLAUSE_COPY,	\
+											  ACC_CLAUSE_CONST), 0)
+	
+#define ACC_CLAUSE_DATA_START_EXPR(NODE)     					\
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_RANGE_CHECK (ACC_CLAUSE_CHECK (NODE),	\
+							  ACC_CLAUSE_COPY,	\
+											  ACC_CLAUSE_CONST), 1)
+	  
+#define ACC_CLAUSE_DATA_END_EXPR(NODE)     					\
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_RANGE_CHECK (ACC_CLAUSE_CHECK (NODE),	\
+							  ACC_CLAUSE_COPY,	\
+											  ACC_CLAUSE_CONST), 2)
 
 /* True on an OMP_SECTION statement that was the last lexical member.
    This status is meaningful in the implementation of lastprivate.  */
@@ -1696,6 +1908,16 @@ struct tree_constructor GTY(())
    combined parallel work-sharing constructs.  */
 #define OMP_PARALLEL_COMBINED(NODE) \
   TREE_PRIVATE (OMP_PARALLEL_CHECK (NODE))
+	
+/* True on an ACC_PARALLEL statement if it represents an explicit
+   combined parallel work-sharing constructs.  */
+#define ACC_PARALLEL_COMBINED(NODE) \
+	  TREE_PRIVATE (ACC_PARALLEL_CHECK (NODE))
+	  
+/* True on an ACC_KERNELS statement if it represents an explicit
+   combined parallel work-sharing constructs.  */
+#define ACC_KERNELS_COMBINED(NODE) \
+	  TREE_PRIVATE (ACC_KERNEL_CHECK (NODE))
 
 /* True on a PRIVATE clause if its decl is kept around for debugging
    information only and its DECL_VALUE_EXPR is supposed to point
@@ -1740,6 +1962,31 @@ struct tree_constructor GTY(())
   OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_REDUCTION), 2)
 #define OMP_CLAUSE_REDUCTION_PLACEHOLDER(NODE) \
   OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_REDUCTION), 3)
+
+
+//Integer expresssion
+#define ACC_CLAUSE_INT_EXPR(NODE, KIND) \
+  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, KIND),0)
+	
+#define ACC_CLAUSE_IF_EXPR(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_IF), 0)
+
+
+#define ACC_CLAUSE_COLLAPSE_EXPR(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_COLLAPSE), 0)
+#define ACC_CLAUSE_COLLAPSE_ITERVAR(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_COLLAPSE), 1)
+#define ACC_CLAUSE_COLLAPSE_COUNT(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_COLLAPSE), 2)	
+	  
+#define ACC_CLAUSE_REDUCTION_CODE(NODE)	\
+	  (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_REDUCTION)->acc_clause.subcode.reduction_code)
+#define ACC_CLAUSE_REDUCTION_INIT(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_REDUCTION), 1)
+#define ACC_CLAUSE_REDUCTION_MERGE(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_REDUCTION), 2)
+#define ACC_CLAUSE_REDUCTION_PLACEHOLDER(NODE) \
+	  ACC_CLAUSE_OPERAND (ACC_CLAUSE_SUBCODE_CHECK (NODE, ACC_CLAUSE_REDUCTION), 3)
 
 enum omp_clause_schedule_kind
 {
@@ -1924,6 +2171,28 @@ struct tree_omp_clause GTY(())
   tree GTY ((length ("omp_clause_num_ops[OMP_CLAUSE_CODE ((tree)&%h)]"))) ops[1];
 };
 
+
+#define ACC_CLAUSE_CODE(NODE)					\
+		(ACC_CLAUSE_CHECK (NODE))->acc_clause.code
+
+
+#define ACC_CLAUSE_SET_CODE(NODE, CODE)				\
+		((ACC_CLAUSE_CHECK (NODE))->acc_clause.code = (CODE))
+
+
+#define ACC_CLAUSE_OPERAND(NODE, I)				\
+		ACC_CLAUSE_ELT_CHECK (NODE, I)
+
+
+struct tree_acc_clause GTY(())
+{
+  struct tree_common common;
+  enum acc_clause_code code;
+  union acc_clause_subcode {    
+    enum tree_code                reduction_code;
+  } GTY ((skip)) subcode;
+  tree GTY ((length ("acc_clause_num_ops[ACC_CLAUSE_CODE ((tree)&%h)]"))) ops[1];
+};
 
 struct varray_head_tag;
 
@@ -3356,6 +3625,7 @@ union tree_node GTY ((ptr_alias (union lang_tree_node),
   struct tree_memory_tag GTY ((tag ("TS_MEMORY_TAG"))) mtag;
   struct tree_struct_field_tag GTY ((tag ("TS_STRUCT_FIELD_TAG"))) sft;
   struct tree_omp_clause GTY ((tag ("TS_OMP_CLAUSE"))) omp_clause;
+  struct tree_acc_clause GTY ((tag ("TS_ACC_CLAUSE"))) acc_clause;
 };
 
 /* Standard named or nameless data types of the C compiler.  */
@@ -3720,6 +3990,7 @@ extern void annotate_with_locus (tree, location_t);
 #endif
 extern tree build_empty_stmt (void);
 extern tree build_omp_clause (enum omp_clause_code);
+extern tree build_acc_clause (enum acc_clause_code);
 
 /* Construct various nodes representing data types.  */
 

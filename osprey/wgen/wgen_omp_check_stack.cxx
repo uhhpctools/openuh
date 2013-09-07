@@ -185,6 +185,16 @@ extern void WGEN_Set_Cflag(WGEN_CLAUSE_KIND flag)
   omp_check_sp->cflag |=flag;
 }
 
+//set clause flag for top omp stmt
+extern void WGEN_ACC_Set_Cflag(WGEN_ACC_CLAUSE_KIND flag)
+{
+  FmtAssert (omp_check_sp >= omp_check_stack,
+             ("no entriy on stack in function WGEN_Set_Cflag"));
+
+  omp_check_sp->accflag |=flag;
+}
+
+
 //set line number and file number for the top omp stmt
 extern void WGEN_Set_LFnum(CHECK_STMT* cs,int lnum,int fnum)
 {
@@ -208,6 +218,14 @@ extern void WGEN_Set_Region (WN * region)
 extern bool WGEN_Check_Cflag(CHECK_STMT* cs, WGEN_CLAUSE_KIND flag)
 {
   if(flag & cs->cflag)
+    return true; 
+  else return false;
+}
+
+//check the clause flag of given CHECK_STMT with the given flag
+extern bool WGEN_ACC_Check_Cflag(CHECK_STMT* cs, WGEN_ACC_CLAUSE_KIND flag)
+{
+  if(flag & cs->accflag)
     return true; 
   else return false;
 }
@@ -272,6 +290,25 @@ extern int WGEN_CS_Find_Cflag(WGEN_CHECK_KIND kind,WGEN_CLAUSE_KIND flag)
 	{
 	    count++;
     	if(temp->kind==kind&&(temp->cflag&flag))
+    	{	 
+    		  rval=omp_check_num-count;
+    		  break;
+    	}
+     }
+	
+	return rval;
+}
+
+//search the stmt of the given kind with the given flag, return depth
+extern int WGEN_ACC_CS_Find_Cflag(WGEN_CHECK_KIND kind,WGEN_ACC_CLAUSE_KIND flag)
+{	
+	int rval=-1,count=0;
+	CHECK_STMT* temp;
+	
+	for(temp=omp_check_sp;temp>=omp_check_stack;temp--)
+	{
+	    count++;
+    	if(temp->kind==kind&&(temp->accflag&flag))
     	{	 
     		  rval=omp_check_num-count;
     		  break;

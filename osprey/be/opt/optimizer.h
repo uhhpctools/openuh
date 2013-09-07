@@ -77,6 +77,7 @@ typedef enum {
   MAINOPT_PHASE,	// used for -PHASE:w
   PREOPT_IPA0_PHASE,	// called by IPL
   PREOPT_IPA1_PHASE,	// called by main IPA
+  PREOPT_OPENACC_LIVENESS //for OpenACC offload region analysis
 } PREOPT_PHASES;
 
 typedef PREOPT_PHASES OPT_PHASE;

@@ -1077,6 +1077,9 @@ COPYPROP::Prop_var(CODEREP *x, BB_NODE *curbb, BOOL icopy_phase,
   CODEREP *expr;
   MTYPE    expr_ty;
 
+  //if it is just liveness analysis for OpenACC, no propagation
+  if(OPT_Enable_OpenACC_Liveness_Analysis)
+  	return NULL;
   // is this variable a constant initialized scalar?
 
   if (x->Is_var_volatile()) return NULL;
@@ -1095,6 +1098,12 @@ COPYPROP::Prop_var(CODEREP *x, BB_NODE *curbb, BOOL icopy_phase,
       Htable()->Inc_mainprops();
     return retv;
   }
+
+  //DON'T DO copy propogation in offload region. 
+  //Because this may make conflict between OpenACC liveness analysis and pragma declaraction by users.
+  //only the const replacement is allowed.
+  if (curbb->ACC_offload_region()) 
+  	return NULL;
 
   if (x->Is_flag_set((CR_FLAG)(CF_DEF_BY_PHI|CF_DEF_BY_CHI)) )
     return NULL;
@@ -1141,6 +1150,8 @@ COPYPROP::Prop_var(CODEREP *x, BB_NODE *curbb, BOOL icopy_phase,
 
 #ifdef KEY // bug 5131
   if (x->Mp_shared())
+    return NULL;
+  if (x->acc_offload())
     return NULL;
 #endif
 
@@ -1261,7 +1272,8 @@ COPYPROP::Prop_ivar(CODEREP *x, BB_NODE *curbb, BOOL icopy_phase,
 
   if (! WOPT_Enable_Prop_Ivar) return NULL;
 #ifdef KEY // bug 5804
-  if (Htable()->Phase() != MAINOPT_PHASE && PU_has_mp(Get_Current_PU())) 
+  if ((Htable()->Phase() != MAINOPT_PHASE && PU_has_mp(Get_Current_PU())) 
+  	|| Htable()->Phase() != MAINOPT_PHASE && PU_has_acc(Get_Current_PU())) 
     return NULL;
 #endif
   if (x->Is_ivar_volatile()) return NULL;

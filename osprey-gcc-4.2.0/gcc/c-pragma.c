@@ -873,6 +873,35 @@ init_pragma (void)
 				      omp_pragmas[i].id, true, true);
     }
 
+  
+  /***************************************************************/
+  //this part was added by daniel tian
+  if (flag_openacc && !flag_preprocess_only)
+    {
+      struct acc_pragma_def { const char *name; unsigned int id; };
+      static const struct acc_pragma_def acc_pragmas[] = {
+	{ "wait", 		PRAGMA_ACC_WAIT },
+	{ "declare", 	PRAGMA_ACC_DECLARE },
+	{ "parallel", 	PRAGMA_ACC_PARALLEL },
+	{ "kernels", 	PRAGMA_ACC_KERNELS },
+	{ "data", 		PRAGMA_ACC_DATA },
+	{ "host_data", 	PRAGMA_ACC_HOSTDATA },
+	{ "loop", 		PRAGMA_ACC_LOOP },
+	{ "cache", 		PRAGMA_ACC_CACHE },
+	{ "update", 	PRAGMA_ACC_UPDATE },
+	{ "routine", 	PRAGMA_ACC_ROUTINE }
+      };
+
+      const int n_acc_pragmas = sizeof (acc_pragmas) / sizeof (*acc_pragmas);
+      int i;
+
+      for (i = 0; i < n_acc_pragmas; ++i)
+	cpp_register_deferred_pragma (parse_in, "acc", acc_pragmas[i].name,
+				      acc_pragmas[i].id, true, true);
+    }
+  //this part is for openacc
+  /***************************************************************/
+
   cpp_register_deferred_pragma (parse_in, "GCC", "pch_preprocess",
 				PRAGMA_GCC_PCH_PREPROCESS, false, false);
 

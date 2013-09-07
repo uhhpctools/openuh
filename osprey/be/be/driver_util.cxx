@@ -262,7 +262,12 @@ Process_Command_Line (INT argc, char **argv)
         } else if (strcmp (cp, "oarray") == 0 ) {
             Enable_Coarray = TRUE;
 #endif
-		} else
+		} else if(strcmp (cp, "onstcache") == 0 )
+		{
+			//-constcache
+			run_autoConstCacheOpt = TRUE;
+		}
+		else
 		    ErrMsg (EC_Unknown_Flag, *(cp-1), argv[i]);
 		break;
 	    case 'd':
@@ -407,6 +412,9 @@ Process_Command_Line (INT argc, char **argv)
 		if (!strcmp( cp, "xceptions" )) {
 		  CXX_Exceptions_On = TRUE;
 		}
+		if (!strcmp( cp, "nableacc" )) {
+		  Enable_UHACC = TRUE;
+		}
 		else {
 		  ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );
 		}
@@ -417,7 +425,16 @@ Process_Command_Line (INT argc, char **argv)
 					      DEF_O_LEVEL, argv[i] ); 
 		opt_set = TRUE;
 		break;
-
+		
+		case 'r':			
+		if (!strcmp( cp, "dglobal" )) {
+		  Enable_UHACCFlag |= 1;
+		  break;
+		}
+		else if (!strcmp( cp, "drolling" )) {
+		  Enable_UHACCFlag |= 1<<UHACC_REDUCTION_USING_UNROLLING;
+		  break;
+		}
 	    case 's':
 		if (strcmp (cp, "how") == 0) {
 		    Show_Progress = TRUE;
@@ -426,9 +443,13 @@ Process_Command_Line (INT argc, char **argv)
 #ifdef OPENSHMEM_ANALYZER
 		if (!strcmp( cp, "hmem-analyzer" )) {
 		  OSA_Flag = TRUE;
+            break;
 		}
-		break;
 #endif
+	    else if (strcmp (cp, "2s") == 0) {
+		    run_ACCS2S= TRUE;
+		    break;
+		}
 #if defined(TARG_SL)
 	    case 'i':
 		if (strcmp (cp, "pisr") == 0) {
@@ -446,7 +467,89 @@ Process_Command_Line (INT argc, char **argv)
                 } else if (strcmp (cp, "pocost") == 0) {
                     UH_Apocost_Flag = TRUE; /* autoscope */
                     break;
+                }			
+				else if (!strcmp( cp, "ccdfa" )) {
+				  	Enable_UHACCFlag |= 1<<UHACC_ENABLE_DFA_OFFLOAD_REGION;
+                    break;
+				}	
+				else if (!strncmp( cp, "ccfeedback", 10)) 
+				{
+					//
+					if(!strncmp( cp+10, ":" , 1))
+					{
+						if(!strcmp( cp+11, "p0" ))
+						{				  		
+					  		Enable_UHACCFeedback = ACC_REGISTER_FEEDBACK_PHASE0;
+						}
+						else if(!strcmp( cp+11, "p1" ))
+						{
+					  		Enable_UHACCFeedback = ACC_REGISTER_FEEDBACK_PHASE1;
+						}
+						else if(!strcmp( cp+11, "p2" ))
+						{
+					  		Enable_UHACCFeedback = ACC_REGISTER_FEEDBACK_PHASE2;
+						}
+					}
+					
+                    break;
+				}
+				else if (!strncmp( cp, "ccscalar", 8)) 
+				{										
+				  	Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL1;
+					if(!strncmp( cp+8, ":" , 1))
+					{
+						if(!strcmp( cp+9, "l3" ))
+						{				  		
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL2;
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL3;
+						}
+						else if(!strcmp( cp+9, "l2" ))
+						{
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL2;
+						}
+					}
+					
+                    break;
+				}
+				else if(!strcmp( cp, "ccunrolling" )) {
+					Enable_UHACCFlag |= 1<<UHACC_ENABLE_LOOP_UNROLLING_OFFLOAD;
+					break;
+				}
+				else if(!strcmp( cp, "ccptrrestrict" )) {
+					Enable_UHACCFlag |= 1<<UHACC_ENABLE_RESTRICT_PTR_OFFLOAD;
+					break;
+				}
+				else if(!strncmp( cp, "ccinfo:", 7 ))
+				{
+					char* strHex = cp+7;
+					Enable_UHACCInfoFlag = strtol(strHex, NULL, 16);
+					break;
+				}
+				else if(!strncmp( cp, "ccregnum:", 9 ))
+				{
+					char* strRegNum = cp+9;
+					Enable_UHACCRegNum= strtol(strRegNum, NULL, 10);
+					break;
+				}
+				else if(!strncmp( cp, "ccarch:", 7 ))
+                {
+                        char* strArchType = cp+7;
+			UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;
+                        if(!strcmp( strArchType, "nvidia" ))
+                        {
+                                UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;
+                        }
+                        else if(!strcmp( strArchType, "apu" ))
+                        {
+                                UHACC_Arch_Type = ACC_ARCH_TYPE_APU;
+                        }
+                        else if(!strcmp( strArchType, "cpu" ))
+                        {
+                                UHACC_Arch_Type = ACC_ARCH_TYPE_CPU;
+                        }
+                        break;
                 }
+                break;
 
 	    case 'S':		    /* -S: Produce assembly file: */
 		add_phase_args (PHASE_CG, argv[i]);

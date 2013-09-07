@@ -1342,6 +1342,24 @@ Add_Edges_For_Node (IP_FILE_HDR& s, INT i, SUMMARY_PROCEDURE* proc_array, SUMMAR
 	}
 #endif
         if (callee_idx != INVALID_NODE_INDEX) {
+		 {
+			SUMMARY_CALLSITE* callsite_debug = &callsite_array[callsite_index];
+			SUMMARY_ACTUAL* actualarray_debug = IPA_get_actual_array(caller);
+			actualarray_debug = &actualarray_debug[callsite_debug->Get_actual_index()];
+			UINT32 param_count = callsite_debug->Get_param_count();
+			for(int pidx=0; pidx<param_count; pidx++)
+			{
+				SUMMARY_ACTUAL* actual_debug = &actualarray_debug[pidx];
+				IPA_PASS_TYPE pass_type = actual_debug->Get_pass_type();
+				TY_IDX param_ty = actual_debug->Get_ty();
+				BOOL Is_value_parm = actual_debug->Is_value_parm();
+			    UINT32 param_sindex = actual_debug->Get_symbol_index();
+			    ST_IDX param_st_idx = symbol_array[param_sindex].St_idx ();
+			    //const ST* param_st = &St_Table[param_st_idx];
+				//printf("ST_name:%s.\n", ST_name(param_st));
+				//printf("test actual parameters.\n");				
+			}
+         }
           IPA_EDGE* ipa_edge = 
             IPA_Call_Graph->Add_New_Edge (&callsite_array[callsite_index],
                                           caller_idx, 
@@ -4128,6 +4146,27 @@ fprintf(fp, SBar);
        }
   }
 }//Print-vobose()
+
+void IPA_CALL_GRAPH::Print_Debug_Info()
+{
+  int GraphSize = IPA_Call_Graph->Node_Size();
+  IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
+  
+   float callee_freq,edge_freq,callee_cycle_count;
+   SUMMARY_FEEDBACK *fb;
+   INT32 callsite_linenum;
+   WN* call_wn;
+   USRCPOS callsite_srcpos;
+
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+
+    IPA_NODE* node = cg_iter.Current();
+    if(node)
+	{
+		printf("Fun Name:%s:%d:%d\n", ST_name(node->Func_ST()), node->Icall_List().empty(), node->Ocall_List().empty());
+	}// if
+  }// for
+}
 
 #ifdef DRAGON
 void IPA_CALL_GRAPH::Dragon_Print(ofstream &outfile)

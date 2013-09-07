@@ -22079,5 +22079,31 @@ Error : Optional TEAM argument must be a scalar, non-coarray of type TEAM_TYPE
 Optional TEAM argument must be a scalar, non-coarray of type TEAM_TYPEt be followed by any constructs/strings
 .ME
 $
-$ LAST NUMBER USED : 1730
+$ Error : 1731
+$msg  1731 The int-exp(gang/worker/vector num_gangs/num_workers/vector_length async/wait/tile/collapse) expression must be a scalar INTEGER expression.
+$nexp 1731
+Error : The int-exp expression must be a scalar INTEGER expression.
+.PP
+The INT_EXP expression to the !$ACC PARALLEL/KERNELS directive must
+be a scalar integer expression.
+.ME
+$
+$ Error : 1732
+$msg  1732 The array region expression in copy/copyin/copyout/present/create/pcreate/pcopyout/pcopyin/pcopy/delete must be a scalar INTEGER expression.
+$nexp 1732
+Error : The array region expression must be a scalar INTEGER expression.
+.PP
+The arrary region expression to the !$ACC PARALLEL/KERNELS/DATA/ENTER DATA/EXIT DATA directive must
+be a scalar integer expression.
+.ME
+$
+$ Error : 1733
+$msg  1733 The %s clause is not allowed with the %s openacc directive.
+$nexp 1733
+Error : The %s clause is not allowed with the %s openacc directive.
+.PP
+A clause was encountered that was not supported on the openacc directive
+specified.
+.ME
+$ LAST NUMBER USED : 1733
 

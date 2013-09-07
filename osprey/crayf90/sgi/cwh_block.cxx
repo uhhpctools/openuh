@@ -102,10 +102,16 @@ cwh_block_push_block(WN *deferred, WN *append, BOOL is_top_pdo)
 
   if (parallel_do_count) {
     block_stack[block_stack_top].is_parallel_do = TRUE;
+  	block_stack[block_stack_top].is_acc_loop = FALSE;
     parallel_do_count--;
 
-  } else {
+  } else if(acc_doloop_count)  {  
+  	block_stack[block_stack_top].is_acc_loop = TRUE;
     block_stack[block_stack_top].is_parallel_do = FALSE;
+	acc_doloop_count --;
+  }else {
+    block_stack[block_stack_top].is_parallel_do = FALSE;
+	block_stack[block_stack_top].is_acc_loop = FALSE;
   }
 
   block_stack[block_stack_top].is_top_pdo = is_top_pdo;
@@ -127,13 +133,14 @@ extern void
 cwh_block_pop_block(void)
 {
    WN *block, *append;
-   BOOL is_parallel_do, is_top_pdo;
+   BOOL is_parallel_do, is_top_pdo, is_acc_loop;
 
    DevAssert((block_stack_top >= 0),("block stack underflow"));
 
    block = block_stack[block_stack_top].wn;
    is_parallel_do = block_stack[block_stack_top].is_parallel_do;
    is_top_pdo = block_stack[block_stack_top].is_top_pdo;
+   is_acc_loop = block_stack[block_stack_top].is_acc_loop;
 
    DevAssert((WN_opcode(block)!=OPC_REGION),("stack mismatch, expected BLOCK"));
 
@@ -154,13 +161,19 @@ cwh_block_pop_block(void)
 
    if (is_parallel_do && !is_top_pdo) 
      cwh_block_pop_region();
+
+   //acc loop is implicit end, 
+   //so if pop the loop end and find this loop is an acc loop
+   //pop the acc loop region also.
+   else if(is_acc_loop)
+   	 cwh_block_pop_region();
 }
 
 /*==============================================
  * 
  * cwh_block_pop_region
  *
- * pop the MP region on top of the block stack.
+ * pop the MP/ACC region on top of the block stack.
  * 
  *===============================================
  */

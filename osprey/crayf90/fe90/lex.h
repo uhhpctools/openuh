@@ -863,6 +863,101 @@ static  kwd_type        kwd_open_mp_dir[] = {
 
 static  int                     kwd_open_mp_dir_idx[27];
 
+/*************************************************************************************/
+static  int             *kwd_open_acc_dir_len;
+
+static  kwd_type        kwd_open_acc_dir[] = {
+	
+		"ACC_RESIDENT",			Tok_Open_Acc_Dir_Acc_Resident,		/* Acc_Resident			  */
+		"ATOMIC",				Tok_Open_Acc_Dir_Atomic,			/* begin of atomic operations region, ACC2.0   */
+		"ASYNC",				Tok_Open_Acc_Dir_Async,				/* Async			  */
+				
+		"BIND",					Tok_Open_Acc_Dir_Bind, 				/* Bind, ACC2.0 */ 
+		
+		"COLLAPSE",				Tok_Open_Acc_Dir_Collapse, 			/* collapse					  */
+		"CAPTURE",				Tok_Open_Acc_Dir_Atomic_Capture,	/* atomic capture, ACC2.0			  */
+		"COPYOUT",				Tok_Open_Acc_Dir_Copyout,			/* Copyout */
+		"COPYIN",				Tok_Open_Acc_Dir_Copyin, 			/* Copyin */ 
+		"CREATE",				Tok_Open_Acc_Dir_Create,			/* Create 			  */
+		"CACHE",				Tok_Open_Acc_Dir_Cache,				/* Cache					  */
+		"COPY",					Tok_Open_Acc_Dir_Copy,				/* Copy				  */
+		
+		"DEVICE_RESIDENT",		Tok_Open_Acc_Dir_Device_Resident,	/* Device_resident,  ACC2.0*/
+		"DEVICE_TYPE",			Tok_Open_Acc_Dir_Device_Type,		/* Device_type, ACC2.0*/
+		"DEVICEPTR",			Tok_Open_Acc_Dir_Deviceptr,			/* device ptr 					  */
+		"DECLARE",				Tok_Open_Acc_Dir_Declare,			/* Declare 				  */
+		"DEFAULT",				Tok_Open_Acc_Dir_Default, 			/* Default, ACC2.0*/ 
+		"DELETE",				Tok_Open_Acc_Dir_Delete,			/* SCHEDULE, ACC2.0 				  */
+		"DEVICE",				Tok_Open_Acc_Dir_Device,  			/* Device */
+		"DTYPE",				Tok_Open_Acc_Dir_DType,  			/* Device_type, ACC2.0 */
+		"DATA",					Tok_Open_Acc_Dir_Data, 				/* Data						  */
+		
+		"ENDHOST_DATA",			Tok_Open_Acc_Dir_Endhost_Data, 		/* end of host_data				  */
+		"ENDPARALLEL",			Tok_Open_Acc_Dir_Endparallel, 		/* End of parallel 		 */ 
+		"ENDKERNELS",			Tok_Open_Acc_Dir_Endkernels,		/* End of kernels 					  */
+		"ENTERDATA",			Tok_Open_Acc_Dir_Enter_Data,		/* Enter_data, ACC2.0			  */
+		"ENDATOMIC",			Tok_Open_Acc_Dir_Endatomic, 		/* end of atomic region, ACC2.0					  */
+		"EXITDATA",				Tok_Open_Acc_Dir_Exit_Data,			/* RUNTIME, ACC2.0					  */
+		"ENDDATA",				Tok_Open_Acc_Dir_Enddata,			/* End of Data					  */
+		
+		"FIRSTPRIVATE",			Tok_Open_Acc_Dir_Firstprivate, 		/* First Private				  */
+		
+		"GANG",					Tok_Open_Acc_Dir_Gang,				/* Gang 					  */	
+		
+		"HOST_DATA",			Tok_Open_Acc_Dir_Host_Data,			/* host_data					  */
+		"HOST",					Tok_Open_Acc_Dir_Host, 				/* Host				  */	
+		
+		"INDEPENDENT",			Tok_Open_Acc_Dir_Independent,		/* independent 				  */		
+		"IF",					Tok_Open_Acc_Dir_If,				/* If					  */
+		
+		"KERNELS",				Tok_Open_Acc_Dir_Kernels,			/* Kernels 	  */
+		
+		"LINK",					Tok_Open_Acc_Dir_Link, 				/* Link	  */
+		"LOOP",					Tok_Open_Acc_Dir_Loop, 				/* Loop	  */
+		
+		"NUM_WORKERS",			Tok_Open_Acc_Dir_Num_Workers, 		/* Num of workers */
+		"NUM_GANGS",			Tok_Open_Acc_Dir_Num_Gangs,			/* num gangs			  */
+		"NOHOST",				Tok_Open_Acc_Dir_Nohost,			/* nohost, ACC2.0 */
+		"NVIDIA",				Tok_Open_Acc_Dir_NVidia,			/* NVIDIA, ACC2.0, device type */
+		"NONE",					Tok_Open_Acc_Dir_None,				/* Default (none), ACC 2.0 */
+		
+		"PRESENT_OR_COPYOUT",	Tok_Open_Acc_Dir_Present_or_Copyout,/* pcopyout				  */
+		"PRESENT_OR_COPYIN",	Tok_Open_Acc_Dir_Present_or_Copyin, /* pcopyin						  */
+		"PRESENT_OR_CREATE",	Tok_Open_Acc_Dir_Present_or_Create, /* pcreate					  */
+		"PRESENT_OR_COPY",		Tok_Open_Acc_Dir_Present_or_Copy, 	/* Pcopy					  */
+		"PARALLEL",				Tok_Open_Acc_Dir_Parallel, 			/* Parallel					  */
+		"PCOPYOUT",				Tok_Open_Acc_Dir_Pcopyout,			/* Pcopyout					  */
+		"PCOPYIN",				Tok_Open_Acc_Dir_Pcopyin,			/* Pcopyin					  */
+		"PCREATE",				Tok_Open_Acc_Dir_Pcreate,			/* Pcreate					  */
+		"PRESENT",				Tok_Open_Acc_Dir_Present,			/* Present					  */
+		"PRIVATE",				Tok_Open_Acc_Dir_Private,			/* Private				  */
+		"PCOPY",				Tok_Open_Acc_Dir_Pcopy,				/* Pcopy					  */
+		
+		"REDUCTION",			Tok_Open_Acc_Dir_Reduction,			/* Reduction 			  */	
+		"ROUTINE",				Tok_Open_Acc_Dir_Routine, 			/* routine, ACC2.0  */
+		"RADEON",				Tok_Open_Acc_Dir_Radeon,			/* radeon, ACC2.0, device type */	
+		"READ",					Tok_Open_Acc_Dir_Atomic_Read, 		/* atomic read, ACC2.0	  */
+
+		"SELF",					Tok_Open_Acc_Dir_Self,				/* Update Self(var-list)*/
+		"SEQ",					Tok_Open_Acc_Dir_Seq, 				/* Seq */ 
+		
+		"TILE",					Tok_Open_Acc_Dir_Tile,				/* Tile, ACC2.0		*/
+		
+		"USE_DEVICE",			Tok_Open_Acc_Dir_Use_Device,		/* use device 					  */
+		"UPDATE",				Tok_Open_Acc_Dir_Update, 			/* Update					  */
+		
+		"VECTOR_LENGTH",		Tok_Open_Acc_Dir_Vector_Length, 	/* Vector_length */ 
+		"VECTOR",				Tok_Open_Acc_Dir_Vector, 			/* Vector				  */
+		
+		"WORKER",				Tok_Open_Acc_Dir_Worker,			/* Worker					  */
+		"WRITE",				Tok_Open_Acc_Dir_Atomic_Write, 		/* atomic write, ACC2.0					  */
+		"WAIT",					Tok_Open_Acc_Dir_Wait,				/* Wait 				  */
+		"XEONPHI",				Tok_Open_Acc_Dir_Xeonphi,			/* Intel Xeon Phi, OpenACC 2.0, device type	  */
+		"",						Tok_LAST };
+
+static  int                     kwd_open_acc_dir_idx[27];
+
+/*************************************************************************************/
 
 # ifdef _DEBUG
 static 	int			*kwd_dbg_len;

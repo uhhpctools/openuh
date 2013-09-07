@@ -99,6 +99,8 @@ char *rii_file_name=NULL;
 BOOL enable_dsm_recompile = FALSE;
 BOOL enable_dsm_processing = FALSE;
 static BOOL enable_mp_processing = FALSE;
+//this is from University of Houston, Daniel Tian for OpenACC compiler
+static BOOL enable_acc_processing = FALSE;
 
 BOOL Full_arrayexp = TRUE;
 BOOL Full_arrayexp_set = FALSE;
@@ -127,6 +129,7 @@ BOOL disable_old_mp = TRUE;		// bug 4406
 BOOL disable_old_mp = FALSE;
 #endif
 BOOL disable_open_mp = FALSE;
+BOOL disable_open_acc = FALSE;
 
 BOOL FE_Call_Never_Return = TRUE;
 
@@ -368,8 +371,13 @@ void Process_Command_Line (INT argc, char ** argv)
 	 } else {
 	    pass_option = TRUE;
 	    switch ( *cp++ ) {
-	     case 'a':
-	       if (strcmp(cp,"lign32")==0) {
+	     case 'a': 
+			   
+		   if (strcmp(cp,"cc") == 0) {
+					pass_option = FALSE;
+			enable_acc_processing = TRUE;
+		   }
+	       else if (strcmp(cp,"lign32")==0) {
 		  pass_option = TRUE;
 		  FE_align = 4;
 	       } else if (strcmp(cp,"lign64")==0) {
@@ -1041,6 +1049,11 @@ void sgi_cmd_line (INT *argc, char ***argv)
       if (! disable_open_mp) {
          add_cray_args("-uopen_mp");
       }
+   }
+   
+   if (enable_acc_processing) {
+
+         add_cray_args("-uopen_acc");
    }
 
    /* Add the deferred arguments */

@@ -76,12 +76,22 @@ extern void cwh_stmt_add_pragma(WN_PRAGMA_ID  wn_pragma_id,
 				ST *st      = (ST_IDX) NULL,
 				INT32  arg1 = 0,
 				INT32 arg2  = 0) ;
+
+extern void cwh_stmt_add_pragma_acc(WN_PRAGMA_ID  wn_pragma_id,
+		    ST	         *st,
+		    INT32         arg1 = 0,
+		    INT32         arg2 = 0);
+
 #ifdef KEY /* Bug 2660 */
 extern void cwh_stmt_add_options_pragma(ST *st);
 #endif /* KEY Bug 2660 */
 extern void cwh_stmt_add_xpragma(WN_PRAGMA_ID wn_pragma_id, 
 				 BOOL is_omp = FALSE,
 				 WN* expr = NULL);
+
+extern void cwh_stmt_add_xpragma_acc(WN_PRAGMA_ID  wn_pragma_id,
+		     WN * expr);
+
 extern void cwh_stmt_postprocess_pu(void);
 
 
@@ -103,6 +113,7 @@ struct nested_do {
   int	current;	/* the current nest level */
   BOOL  explicit_end;   /* True if an explicit end_* is present for region */
   WN_PRAGMA_ID type;	/* what directive introduced the nest */
+  int 	acc_loop_depth;	/* the depth of the nested acc loop  */
   };
 
 extern struct nested_do nested_do_descriptor;

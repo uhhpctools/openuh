@@ -310,7 +310,8 @@ Stab_Reset_Referenced_Flag(SYMTAB_IDX symtab)
 
 enum W2FC_FLAGS
 {
-    W2FC_TY_TRANS  = 0x02     // TY is translated already in PU.
+    W2FC_TY_TRANS  = 0x02,     // TY is translated already in PU.
+    W2CUDA_TY_TRANS  = 0x04,     // TY is translated already in PU.
 };
 
 class W2FC_FLAG_ARRAY {
@@ -388,6 +389,26 @@ extern BOOL
 TY_is_translated_to_c(const TY_IDX ty) 
 {
   return (W2fc_ty_tab->Check_w2fc_flag(TY_IDX_index(ty),W2FC_TY_TRANS)) ;
+}
+
+
+// TY flag functions
+extern void 
+Set_TY_is_translated_to_cuda(const TY_IDX ty) 
+{
+  W2fc_ty_tab->Set_w2fc_flag(TY_IDX_index(ty),W2CUDA_TY_TRANS) ;
+}
+
+extern void 
+Reset_TY_is_translated_to_cuda(const TY_IDX ty) 
+{
+  W2fc_ty_tab->Reset_w2fc_flag(TY_IDX_index(ty),W2CUDA_TY_TRANS) ;
+} 
+
+extern BOOL 
+TY_is_translated_to_cuda(const TY_IDX ty) 
+{
+  return (W2fc_ty_tab->Check_w2fc_flag(TY_IDX_index(ty),W2CUDA_TY_TRANS)) ;
 }
 
 // clear all flags..
@@ -520,6 +541,8 @@ Stab_Compare_Types(TY_IDX t1,
      case KIND_ARRAY:
 	if (TY_Is_String(t2) && TY_Is_Array_Of_Chars(t1))
 	   return TRUE;
+	else if(TY_kind(t2) == KIND_POINTER && TY_pointed(t2) == TY_etype(t1) && isGPUKernelFunc)
+		return TRUE;
 #ifdef _UH_COARRAYS
     else if (TY_is_coarray(t1)) {
         ARB_HANDLE bounds(Ty_Table[t1].Arb());

@@ -4866,6 +4866,66 @@ gimplify_scan_omp_clauses (tree *list_p, tree *pre_p,
   gimplify_omp_ctxp = ctx;
 }
 
+/* Scan the OpenACC clauses in *LIST_P, installing mappings into a new
+   and previous omp contexts.  */
+
+static void
+gimplify_scan_acc_clauses (tree *list_p, tree *pre_p)
+{
+  tree c;
+
+  while ((c = *list_p) != NULL)
+    {
+      bool remove = false;
+
+      switch (ACC_CLAUSE_CODE (c))
+	{
+	  case  ACC_CLAUSE_IF:
+	  case  ACC_CLAUSE_ASYNC:
+	  case  ACC_CLAUSE_NUM_GANGS:
+	  case  ACC_CLAUSE_NUM_WORKERS:
+	  case  ACC_CLAUSE_VECTOR_LENGTH:
+	  case  ACC_CLAUSE_COPY:
+	  case  ACC_CLAUSE_COPYIN:
+	  case  ACC_CLAUSE_COPYOUT:
+	  case  ACC_CLAUSE_CREATE:
+	  case  ACC_CLAUSE_PRESENT:
+	  case  ACC_CLAUSE_PRESENT_OR_COPY:
+	  case  ACC_CLAUSE_PRESENT_OR_COPYIN:
+	  case  ACC_CLAUSE_PRESENT_OR_COPYOUT: 
+	  case  ACC_CLAUSE_PRESENT_OR_CREATE:
+	  case  ACC_CLAUSE_PARM:
+	  case  ACC_CLAUSE_ACC_RESIDENT:
+	  case  ACC_CLAUSE_USE_DEVICE:
+	  case  ACC_CLAUSE_DEVICEPTR:
+	  case  ACC_CLAUSE_COLLAPSE:
+	  case  ACC_CLAUSE_SEQ:
+	  case  ACC_CLAUSE_PRIVATE:
+	  case  ACC_CLAUSE_FIRST_PRIVATE:
+	  case  ACC_CLAUSE_VARLIST:
+	  case  ACC_CLAUSE_INTEXP:  
+	  case  ACC_CLAUSE_REDUCTION:
+	  case  ACC_CLAUSE_GANG:
+	  case  ACC_CLAUSE_WORKER:
+	  case  ACC_CLAUSE_VECTOR:
+	  case  ACC_CLAUSE_INDEPENDENT:
+	  case  ACC_CLAUSE_HOST:
+	  case  ACC_CLAUSE_DEVICE:
+	  case  ACC_CLAUSE_CONST:
+		remove = true;
+	  	break;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (remove)
+	*list_p = ACC_CLAUSE_CHAIN (c);
+      else
+	list_p = &ACC_CLAUSE_CHAIN (c);
+    }
+}
+
 /* For all variables that were not actually used within the context,
    remove PRIVATE, SHARED, and FIRSTPRIVATE clauses.  */
 
@@ -4991,6 +5051,65 @@ gimplify_adjust_omp_clauses (tree *list_p)
   
   gimplify_omp_ctxp = ctx->outer_context;
   delete_omp_context (ctx);
+}
+
+static void
+gimplify_adjust_acc_clauses (tree *list_p)
+{
+  tree c;
+
+  while ((c = *list_p) != NULL)
+    {
+      splay_tree_node n;
+      bool remove = false;
+
+      switch (ACC_CLAUSE_CODE (c))
+	{
+	  case  ACC_CLAUSE_ERROR:
+	  case  ACC_CLAUSE_IF:
+	  case  ACC_CLAUSE_ASYNC:
+	  case  ACC_CLAUSE_NUM_GANGS:
+	  case  ACC_CLAUSE_NUM_WORKERS:
+	  case  ACC_CLAUSE_VECTOR_LENGTH:
+	  case  ACC_CLAUSE_COPY:
+	  case  ACC_CLAUSE_COPYIN:
+	  case  ACC_CLAUSE_COPYOUT:
+	  case  ACC_CLAUSE_CREATE:
+	  case  ACC_CLAUSE_PRESENT:
+	  case  ACC_CLAUSE_PRESENT_OR_COPY:
+	  case  ACC_CLAUSE_PRESENT_OR_COPYIN:
+	  case  ACC_CLAUSE_PRESENT_OR_COPYOUT: 
+	  case  ACC_CLAUSE_PRESENT_OR_CREATE:
+	  case  ACC_CLAUSE_PARM:
+	  case  ACC_CLAUSE_ACC_RESIDENT:
+	  case  ACC_CLAUSE_USE_DEVICE:
+	  case  ACC_CLAUSE_DEVICEPTR:
+	  case  ACC_CLAUSE_COLLAPSE:
+	  case  ACC_CLAUSE_SEQ:
+	  case  ACC_CLAUSE_PRIVATE:
+	  case  ACC_CLAUSE_FIRST_PRIVATE:
+	  case  ACC_CLAUSE_VARLIST:
+	  case  ACC_CLAUSE_INTEXP:  
+	  case  ACC_CLAUSE_REDUCTION:
+	  case  ACC_CLAUSE_GANG:
+	  case  ACC_CLAUSE_WORKER:
+	  case  ACC_CLAUSE_VECTOR:
+	  case  ACC_CLAUSE_INDEPENDENT:
+	  case  ACC_CLAUSE_HOST:
+	  case  ACC_CLAUSE_DEVICE:
+	  case  ACC_CLAUSE_CONST:
+		remove = true;
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (remove)
+	*list_p = ACC_CLAUSE_CHAIN (c);
+      else
+	list_p = &ACC_CLAUSE_CHAIN (c);
+    }
 }
 
 /* Gimplify the contents of an OMP_PARALLEL statement.  This involves
@@ -5156,6 +5275,21 @@ gimplify_omp_workshare (tree *expr_p, tree *pre_p)
   gimplify_scan_omp_clauses (&OMP_CLAUSES (stmt), pre_p, ORT_WORKSHARE);
   gimplify_to_stmt_list (&OMP_BODY (stmt));
   gimplify_adjust_omp_clauses (&OMP_CLAUSES (stmt));
+
+  return GS_ALL_DONE;
+}
+
+/* Gimplify the gross structure of other OpenMP worksharing constructs.
+   In particular .  */
+
+static enum gimplify_status
+gimplify_acc_workshare (tree* acclauses, tree* accbody, tree *expr_p, tree *pre_p)
+{
+  //tree stmt = *expr_p;
+
+  gimplify_scan_acc_clauses (acclauses, pre_p);
+  gimplify_to_stmt_list (accbody);
+  gimplify_adjust_acc_clauses (acclauses);
 
   return GS_ALL_DONE;
 }
@@ -5944,6 +6078,21 @@ gimplify_expr (tree *expr_p, tree *pre_p, tree *post_p,
 	case OMP_RETURN:
 	case OMP_CONTINUE:
 	  ret = GS_ALL_DONE;
+	  break;
+	case ACC_PARALLEL:
+	case ACC_KERNEL:
+	case ACC_LOOP:
+	case ACC_HOST_DATA:
+	case ACC_DATA:
+	  ret = gimplify_acc_workshare (&ACC_CLAUSES_1(*expr_p), 
+	  				&ACC_BODY(*expr_p),  expr_p, pre_p);
+	  break;
+	case ACC_UPDATE:
+	case ACC_CACHE:
+	case ACC_DECLARE:
+	case ACC_WAIT:
+	  ret = gimplify_acc_workshare (&ACC_CLAUSES_2(*expr_p), 
+	  				&ACC_BODY(*expr_p),  expr_p, pre_p);
 	  break;
 
 	default:

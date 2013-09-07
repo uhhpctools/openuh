@@ -1,0 +1,125 @@
+# -*- Makefile -*-
+#
+#  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+#
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
+#  Copyright (C) 2003 - 2009 Tsinghua University.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  This library is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public
+#  License along with this library; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+#  
+#  Contact information: HPC Institute, Department of Computer Science and Technology,
+#  Tsinghua University, Beijing 100084, CHINA, or:
+#
+#  http://hpc.cs.tsinghua.edu.cn
+#
+#
+
+# Makefile for libopenmp library
+
+# What we're building, and where to find it.
+LIBRARY = libopenacc.a
+#PROF_LIB = libopenacc_p.a
+dso_version := 1
+DSO = libopenacc.so.$(dso_version)
+
+ifeq ($(BUILD_TYPE), NONSHARED)
+TARGETS = $(LIBRARY)
+else
+TARGETS = $(LIBRARY) $(DSO)
+endif
+
+CFLAGS = -g -fPIC -Wall -g DACC_WARN_LOG -DACC_DEBUG_LOG -DACC_INFO_LOG
+ACCINCL = $(CUDA_HOME)/include
+
+
+ACCDYNAMIC_LIBS = -lcuda -lcudart -lpthread
+ifeq ($(BUILD_ARCH), IA32)
+ACCLIBS = -L$(CUDA_HOME)/lib $(ACCDYNAMIC_LIBS)
+else
+ACCLIBS = -L$(CUDA_HOME)/lib64 $(ACCDYNAMIC_LIBS)
+endif
+
+ACCLDFLAGS = -g -shared
+SRC_DIRS = $(BUILD_BASE) 
+
+# Makefile setup
+include $(COMMONDEFS)
+
+VPATH    =  $(SRC_DIRS)
+
+# Compiler options
+LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
+LCDEFS = $(HOSTDEFS) $(TARGDEFS)
+LCINCS += $(addprefix -I, $(SRC_DIRS))
+LCINCS += $(addprefix -I, $(ACCINCL))
+
+# HOSTDEFS += -DTAU_USE_C_API
+#HOSTDEFS += -I$(TAU_ROOT)/include -I$(PAPI_ROOT)/include -DPROFILING_ON -DTAU_PAPI -DTAU_STDCXXLIB -DTAU_DOT_H_LESS_HEADERS -DTAU_OPEN64ORC  -DTAU_OPENMP -DTAU_MULTIPLE_COUNTERS   -DTAU_LINUX_TIMERS -DTAU_PAPI_WALLCLOCKTIME -DTAU_PAPI_VIRTUAL -DTAU_CALLPATH -DTAU_COMPENSATE -DTAU_LARGEFILE -D_LARGEFILE64_SOURCE -DSTD_COMPLEX  -DTAU_MPI -DTAU_MPI_THREADED -DTAU_MPIATTRFUNCTION
+
+#
+# don't support i386 since it lacks atomic instructions.
+#
+#ifeq ($(BUILD_ARCH), IA32)
+#CFLAGS += -march=i486
+#endif
+
+#CFLAGS += -DTARG_$(BUILD_TARGET)
+#ifeq ($(NUMA_AFFINITY),1)
+#CFLAGS += -DEXIST_LIBNUMA
+#endif
+#CXXFLAGS += -DTARG_$(BUILD_TARGET)
+#CFLAGS += -fgnu89-inline
+
+
+CFILES = acc_stack.c acc_context.c acc_data.c acc_kernel.c acc_reduction.c acc_util.c acc_hashmap.c vector.c acc_log.c
+CXXFILES = acc_init.cxx
+
+#ifeq ($(BUILD_COMPILER), GNU)
+#NO_UNWIND=-fno-unwind-tables
+#else
+#NO_UNWIND=-CG:emit_unwind_info=off
+#endif
+
+# Adding -fno-exceptions to avoid EH related stuffs, 
+#  which may cause undefined symbols in C program
+CXXFLAGS += -fno-exceptions $(NO_UNWIND)
+
+# CXXFLAGS += --std=gnu++0x
+
+default:
+	$(MAKE)  first
+	$(MAKE)  $(TARGETS)
+	$(MAKE)  last
+
+first : 
+ifndef SKIP_DEP_BUILD
+	$(call submake,$(BUILD_AREA)/include)
+endif
+
+last : make_libdeps
+
+include $(COMMONRULES)
+
+$(LIBRARY): $(OBJECTS)
+	@echo ${BUILD_COMPILER}
+	$(ar) cru $@ $^
+	$(ranlib) $@
+
+
+$(DSO): $(OBJECTS:%.o=%.pic.o)
+	$(ld) $(ACCLDFLAGS) -o $@ $^ $(ACCLIBS)
+	$(ln) -sf $(DSO) $(basename $(DSO))
+

@@ -230,6 +230,15 @@ is_gimple_stmt (tree t)
     case OMP_CRITICAL:
     case OMP_RETURN:
     case OMP_CONTINUE:
+	case ACC_PARALLEL:
+	case ACC_KERNEL:
+	case ACC_LOOP:
+	case ACC_HOST_DATA:
+	case ACC_DATA:
+	case ACC_UPDATE:
+	case ACC_CACHE:
+	case ACC_DECLARE:
+	case ACC_WAIT:
       /* These are always void.  */
       return true;
 

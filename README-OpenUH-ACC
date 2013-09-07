@@ -1,0 +1,64 @@
+This is an alpha release of the OpenUH OpenACC compiler, developed by the
+HPCTools group at the University of Houston. As this implementation is still
+in its early stages, there will be some bugs in the code which we are working
+on fixing.
+
+We are still working on OpenACC compiler to make it more robust. Here are the
+instructions to building the OpenUH OpenACC compiler.
+
+###########################################################
+                  Building the OpenUH OpenACC
+###########################################################
+
+1. setup build directory for building the compiler:
+
+$ mkdir build-openacc
+$ cd build-openacc
+$ ../configure --prefix=/path/to/compiler/installation --with-cuda=/path/to/cuda
+
+2. Build and install:
+
+$ make
+$ make install
+
+###########################################################
+           Compiling and Running OpenACC Programs
+###########################################################
+
+1. Compiling source codes with OpenACC directives which generates object code 
+for host and CUDA source files for GPU (*.w2c.cu). E.g.:
+
+$ uhcc -fopenacc -lopenacc <C source file>
+
+2. Compile CUDA code using Nvidia compiler. E.g.:
+
+$ nvcc --ptx <compiler-generated CUDA source file>
+
+3. Run program:
+
+$ ./a.out
+
+###########################################################
+                      LIMITATIONS
+###########################################################
+
+This is an alpha release version of OpenACC compiler, and so there are still
+many limitations:
+
+1. OpenACC is only supported for C source code.
+
+2. No multi-dimensional array support
+
+3. No structure support
+
+4. kernel regions only allow perfectly nested loops
+
+5. These directives either are unsupported or are unstable currently:
+   parallel, host_data, declare, cache
+
+   These clauses are not yet supported for kernel/parallel directive:
+   async, if
+
+
+Please send any questions to openuh@cs.uh.edu.
+

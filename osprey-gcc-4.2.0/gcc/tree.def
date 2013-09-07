@@ -1054,6 +1054,58 @@ DEFTREECODE (OMP_ATOMIC, "omp_atomic", tcc_statement, 2)
 /* OpenMP clauses.  */
 DEFTREECODE (OMP_CLAUSE, "omp_clause", tcc_exceptional, 0)
 
+/* The ordering of the codes is
+   exposed to TREE_RANGE_CHECK.  */
+/* OpenACC - #pragma acc parallel [clause1 ... clauseN]
+   Operand 0: ACC_PARALLEL_BODY: Code to be executed by all threads.
+   Operand 1: ACC_PARALLEL_CLAUSES: List of clauses.
+*/
+DEFTREECODE (ACC_PARALLEL, "acc_parallel", tcc_statement, 2)
+
+/* OpenACC - #pragma acc kernel [clause1 ... clauseN]
+   Operand 0: ACC_KERNEL_BODY: Code to be executed by all threads.
+   Operand 1: ACC_KERNEL_CLAUSES: List of clauses.
+ */
+DEFTREECODE (ACC_KERNEL, "acc_kernel", tcc_statement, 2)
+
+/* OpenACC - #pragma acc loop [clause1 ... clauseN]
+   Operand 0: ACC_LOOP_BODY: Loop body.
+   Operand 1: ACC_LOOP_CLAUSES: List of clauses.
+   Operand 2: ACC_LOOP_INIT:
+   Operand 3: ACC_LOOP_COND:
+   Operand 4: ACC_LOOP_INCR:
+ */
+DEFTREECODE (ACC_LOOP, "acc_loop", tcc_statement, 5)
+
+/* OpenACC - #pragma acc host_data [clause]
+   Operand 0: ACC_HOST_DATA_BODY: .
+   Operand 1: ACC_HOST_DATA_CLAUSE:   */
+DEFTREECODE (ACC_HOST_DATA, "acc_host_data", tcc_statement, 2)
+
+/* OpenACC - #pragma acc data [clause]
+   Operand 0: ACC_DATA_BODY: .
+   Operand 1: ACC_DATA_CLAUSE:   */
+DEFTREECODE (ACC_DATA, "acc_data", tcc_statement, 2)
+
+/* OpenACC - #pragma acc update
+   Operand 0: ACC_UPDATE_CLAUSES: List of clauses.  */
+DEFTREECODE (ACC_UPDATE, "acc_update", tcc_statement, 1)
+
+/* OpenACC - #pragma acc cache
+   Operand 0: ACC_CACHE_CLAUSES: List of clauses.  */
+DEFTREECODE (ACC_CACHE, "acc_cache", tcc_statement, 1)
+
+/* OpenACC - #pragma acc declare
+   Operand 0: ACC_CACHE_DECLARE: List of clauses.  */
+DEFTREECODE (ACC_DECLARE, "acc_declare", tcc_statement, 1)
+
+/* OpenACC - #pragma acc wait
+   Operand 0: ACC_WAIT: List of clauses.  */
+DEFTREECODE (ACC_WAIT, "acc_wait", tcc_statement, 1)
+
+/*OpenACC-ACC CLAUSE*/
+DEFTREECODE (ACC_CLAUSE, "acc_clause", tcc_exceptional, 0)
+
 /* Reduction operations. 
    Operations that take a vector of elements and "reduce" it to a scalar
    result (e.g. summing the elements of the vector, finding the minimum over

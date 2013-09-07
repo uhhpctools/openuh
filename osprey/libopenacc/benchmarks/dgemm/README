@@ -1,0 +1,3 @@
+uhcc -fopenacc -o mm mm.c
+nvcc -arch=sm_35 -fmad=false --ptx mm.w2c.cu
+./mm 8192

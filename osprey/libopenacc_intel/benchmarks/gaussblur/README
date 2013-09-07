@@ -1,0 +1,11 @@
+This application is sensitive to the order of floating point operations.
+So to compare the OpenACC result with serial result easily, disable FMA.
+This can be done by passing -ta=nvidia,nofma to PGI compiler, or -fmad=false in NVCC compiler. 
+
+
+To compile with OpenUH compiler:
+> uhcc -fopenacc -lopenacc gaussblur.c -fopenacc -v
+> nvcc -arch=sm_35 -fmad=false --ptx gaussblur.w2c.cu
+
+To run the program:
+> ./gaussblur 1024 1024 20000

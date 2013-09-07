@@ -62,6 +62,10 @@ CLIST_FLAGS Clist_Flags =
    NULL,  /* doth_filename */
    NULL,  /* dotc_filename */
    NULL,  /* loc_filename */
+   NULL,  /* gpu_filename */
+   NULL,  /* gpuh_filename */
+   NULL,  /* cl_filename */
+   NULL,  /* clh_filename */
    FALSE, /* enabled */
    TRUE,  /* verbose */
    FALSE, /* no_pragmas */
@@ -145,6 +149,12 @@ static OPTION_DESC Options_CLIST[] =
   { OVK_NAME,	OV_SHY,	        FALSE, "loc_file",       NULL,
        0, 0, 0, &CLF.loc_filename, NULL,
        "The name of a source location map-table file"},
+  { OVK_NAME,	OV_SHY,	        FALSE, "gpu_file",       NULL,
+       0, 0, 0, &CLF.gpu_filename, NULL,
+       "The name of a GPU source code by OpenACC"},
+  { OVK_NAME,	OV_SHY,	        FALSE, "gpu_file",       NULL,
+       0, 0, 0, &CLF.gpuh_filename, NULL,
+       "The name of a GPU header source code by OpenACC"},
   { OVK_COUNT }			    /* List terminator -- must be last */
 }; /* Options_CLIST */
 #undef CLF

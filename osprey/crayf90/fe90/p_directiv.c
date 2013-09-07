@@ -119,6 +119,10 @@ static void	parse_vfunction_dir(void);
 static void	parse_open_mp_directives(void);
 static void	parse_open_mp_clauses(open_mp_directive_type);
 static int	update_fld_type(fld_type, int,int);
+/*openacc, by daniel tian*/
+static void parse_open_acc_directives(void);
+static void	parse_acc_var_common_list(opnd_type	 *list_opnd,
+				      boolean	  subobjects_allowed);
 
 
 /******************************************************************************\
@@ -412,6 +416,32 @@ void parse_directive_stmt (void)
          parse_err_flush(Find_EOS, NULL);
          NEXT_LA_CH;
          goto EXIT;
+      }
+   }
+   else if (TOKEN_STR(token)[0] == '$' &&
+            TOKEN_STR(token)[1] == 'A' &&
+            TOKEN_STR(token)[2] == 'C' &&
+            TOKEN_STR(token)[3] == 'C') {
+
+      if (MATCHED_TOKEN_CLASS(Tok_Class_Open_Acc_Dir_Kwd)) {
+
+# if defined(_TARGET_OS_MAX)
+         PRINTMSG(TOKEN_LINE(token), 801, Warning, TOKEN_COLUMN(token));
+         parse_err_flush(Find_EOS, NULL);
+         NEXT_LA_CH;
+         goto EXIT;
+# else		 
+         if (cmd_line_flags.disregard_all_accs) {
+
+            /* Do not attempt to recognize any acc directives. */
+
+            parse_err_flush(Find_EOS, NULL);
+            NEXT_LA_CH;
+            goto EXIT;
+         }
+
+         parse_open_acc_directives();
+# endif
       }
    }
    else if (TOKEN_STR(token)[0] == '$' &&
@@ -8536,6 +8566,87 @@ NEXT:
    return;
 
 }  /* parse_var_common_list */
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	<description>							      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+
+static void	parse_acc_var_common_list(opnd_type	 *list_opnd,
+				      boolean	  subobjects_allowed)
+
+{
+   int          	attr_idx;
+   int          	column;
+   int          	line;
+   int          	list_idx	= NULL_IDX;
+   int			name_idx;
+   opnd_type    	opnd;
+   int			sb_idx;
+   token_values_type	token_value;
+
+
+   TRACE (Func_Entry, "parse_acc_var_common_list", NULL);
+
+   token_value	= TOKEN_VALUE(token);
+
+   while(TRUE) {
+      if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+         OPND_LINE_NUM(opnd)	= TOKEN_LINE(token);
+         OPND_COL_NUM(opnd)	= TOKEN_COLUMN(token);
+
+        parse_deref(&opnd, NULL_IDX);
+        find_opnd_line_and_column(&opnd, &line, &column);
+
+        if (!subobjects_allowed && OPND_FLD(opnd) != AT_Tbl_Idx) {
+           PRINTMSG(line, 802, Error, column);
+           goto NEXT;
+        }
+
+         if (list_idx == NULL_IDX) {
+            NTR_IR_LIST_TBL(list_idx);
+            OPND_FLD((*list_opnd))	= IL_Tbl_Idx;
+            OPND_IDX((*list_opnd))	= list_idx;
+            OPND_LIST_CNT((*list_opnd))	= 1;
+         }
+         else {
+            NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+            IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+            (OPND_LIST_CNT((*list_opnd)))++;
+            list_idx = IL_NEXT_LIST_IDX(list_idx);
+         }
+
+         COPY_OPND(IL_OPND(list_idx), opnd);
+      }
+      else {
+         parse_err_flush(Find_Comma_Rparen, "IDENTIFIER");
+      }
+
+NEXT:
+
+      if (LA_CH_VALUE != COMMA) {
+         break;
+      }
+      NEXT_LA_CH;
+   }
+
+   TRACE (Func_Exit, "parse_acc_var_common_list", NULL);
+
+   return;
+
+}  /* parse_acc_var_common_list */
+
 
 /******************************************************************************\
 |*									      *|
@@ -10202,6 +10313,2316 @@ static void parse_id_directive(void)
    return;
 
 }  /* parse_id_directive */
+
+
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      This routine parses the open acc directive.                            *|
+|*      The ir it produces looks like ..                                      *|
+|*                                                                            *|
+|*                        (open acc directive operator)                        *|
+|*                       /                                                    *|
+|*                      |- IF condition                                       *|
+|*                      |- copy expr                          *|
+|*                      |- copyin expr                          *|
+|*                      |- copyout expr                          *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+static void parse_open_acc_clauses(open_acc_directive_type directive)
+{
+   int          i;
+   int          ir_idx;
+   int          list_array[OPEN_ACC_LIST_CNT];
+   int          list_idx;
+   opnd_type    opnd;
+   int		opr_ir_idx;
+   long		the_constant;
+
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
+   int          column;
+   int          line;
+   int          list2_idx;
+   boolean      seen_nest = FALSE;
+# endif
+
+
+   TRACE (Func_Entry, "parse_open_acc_clauses", NULL);
+
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+
+   for (i = 0; i < OPEN_ACC_LIST_CNT; i++) {
+      NTR_IR_LIST_TBL(list_array[i]);
+      if (i >= 1) {
+         IL_NEXT_LIST_IDX(list_array[i - 1]) = list_array[i];
+         IL_PREV_LIST_IDX(list_array[i]) = list_array[i - 1];
+      }
+   }
+
+   IR_FLD_L(ir_idx) = IL_Tbl_Idx;
+   IR_IDX_L(ir_idx) = list_array[0];
+   IR_LIST_CNT_L(ir_idx) = OPEN_ACC_LIST_CNT;
+
+   if(directive == Cache_Acc)
+   {
+   		if(LA_CH_VALUE == LPAREN)
+		{			
+              NEXT_LA_CH;
+              parse_acc_var_common_list(&opnd, TRUE);
+
+			  if (IL_IDX(list_array[OPEN_ACC_CACHE_IDX]) == NULL_IDX) 
+			  {
+                    COPY_OPND(IL_OPND(list_array[OPEN_ACC_CACHE_IDX]), opnd);
+              }
+              else 
+			  {
+					parse_err_flush(Find_EOS, "Cache directive clauses buffer is not empty.");
+              }
+			  
+			  if (LA_CH_VALUE == RPAREN) 
+			  {
+                  NEXT_LA_CH;
+				  if(LA_CH_VALUE != EOS)
+				  		parse_err_flush(Find_EOS, "Cache directive must end in EOS.");
+              }
+              else 
+			  {
+                 parse_err_flush(Find_EOS, ")");
+                 goto EXIT;
+              }
+		}
+        else 
+		{
+          parse_err_flush(Find_EOS, "(");
+          goto EXIT;
+        }
+		goto EXIT;
+   }
+
+   if(directive == Wait_Acc)
+   {
+	   if (LA_CH_VALUE == LPAREN) 
+	   {
+	   	  int    wait_list_idx	= NULL_IDX;
+		  opnd_type    	int_opnd;
+		  int          	line;
+		  int  			column;
+		  
+          NEXT_LA_CH;
+		  
+          parse_expr(&int_opnd);
+		  //find_opnd_line_and_column(&int_opnd, &line, &column);
+		  NTR_IR_LIST_TBL(wait_list_idx);
+          OPND_FLD((opnd))	= IL_Tbl_Idx;
+          OPND_IDX((opnd))	= wait_list_idx;
+          OPND_LIST_CNT(opnd)	= 1;
+		  COPY_OPND(IL_OPND(wait_list_idx), int_opnd);
+		  
+		  while(LA_CH_VALUE == COMMA)
+	  	  {
+	  	  	NEXT_LA_CH;
+	  	  	parse_expr(&int_opnd);
+			NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(wait_list_idx));
+    		IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(wait_list_idx)) = wait_list_idx;
+    		(OPND_LIST_CNT(opnd))++;
+    		wait_list_idx = IL_NEXT_LIST_IDX(wait_list_idx);
+			COPY_OPND(IL_OPND(wait_list_idx), int_opnd);
+	  	  }
+          //parse_acc_var_common_list(&opnd, TRUE);                  
+          COPY_OPND(IL_OPND(list_array[OPEN_ACC_WAIT_IDX]), opnd);
+		  
+          if (LA_CH_VALUE == RPAREN) 
+		  {
+             NEXT_LA_CH;
+          }
+          else 
+		  {
+             parse_err_flush(Find_EOS, ")");
+             goto EXIT;
+          }
+       }
+       else 
+	   {
+			IL_LINE_NUM(list_array[OPEN_ACC_WAIT_IDX]) = TOKEN_LINE(token);
+			IL_COL_NUM(list_array[OPEN_ACC_WAIT_IDX]) = TOKEN_COLUMN(token);
+			IL_FLD(list_array[OPEN_ACC_WAIT_IDX]) = CN_Tbl_Idx;
+			IL_IDX(list_array[OPEN_ACC_WAIT_IDX]) = CN_INTEGER_NEG_ONE_IDX;;
+       }
+	   goto EXIT;
+   }
+   
+   
+   while (LA_CH_VALUE != EOS) {
+
+      if (MATCHED_TOKEN_CLASS(Tok_Class_Open_Acc_Dir_Kwd)) {
+
+         switch (TOKEN_VALUE(token)) {
+
+            case Tok_Open_Acc_Dir_Nohost:
+               if (! open_acc_clause_allowed[directive][Nohost_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "nohost", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only nohost clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_NOHOST_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "NOHOST", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_NOHOST_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_NOHOST_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_NOHOST_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_NOHOST_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+
+            case Tok_Open_Acc_Dir_Independent:
+               if (! open_acc_clause_allowed[directive][Independent_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Independent", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only independent clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_INDEPENDENT_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "INDEPENDENT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_INDEPENDENT_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_INDEPENDENT_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_INDEPENDENT_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_INDEPENDENT_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+			   
+            case Tok_Open_Acc_Dir_Atomic_Read:
+               if (! open_acc_clause_allowed[directive][Read_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Read", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only read clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_READ_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "READ", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+			   if(IL_IDX(list_array[OPEN_ACC_WRITE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_UPDATE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_CAPTURE_IDX]) != NULL_IDX)
+			   	{
+			   		parse_err_flush(Find_EOS, "Only one clause is allowed in atomic directive.");
+			   	}
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_READ_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_READ_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_READ_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_READ_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+			   
+            case Tok_Open_Acc_Dir_Atomic_Write:
+               if (! open_acc_clause_allowed[directive][Write_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Write", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only write clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_READ_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "WRITE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+			   
+			   if(IL_IDX(list_array[OPEN_ACC_READ_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_UPDATE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_CAPTURE_IDX]) != NULL_IDX)
+			   	{
+			   		parse_err_flush(Find_EOS, "Only one clause is allowed in atomic directive.");
+			   	}
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_WRITE_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_WRITE_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_WRITE_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_WRITE_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+			   
+            case Tok_Open_Acc_Dir_Atomic_Update:
+               if (! open_acc_clause_allowed[directive][Update_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Update", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only Update clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_UPDATE_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "UPDATE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+			   
+			   if(IL_IDX(list_array[OPEN_ACC_WRITE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_READ_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_CAPTURE_IDX]) != NULL_IDX)
+			   	{
+			   		parse_err_flush(Find_EOS, "Only one clause is allowed in atomic directive.");
+			   	}
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_UPDATE_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_UPDATE_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_UPDATE_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_UPDATE_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+			   
+            case Tok_Open_Acc_Dir_Atomic_Capture:
+               if (! open_acc_clause_allowed[directive][Capture_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Capture", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only Capture clause allowed */
+			   
+               if (IL_IDX(list_array[OPEN_ACC_CAPTURE_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "CAPTURE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+			   
+			   if(IL_IDX(list_array[OPEN_ACC_WRITE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_UPDATE_IDX]) != NULL_IDX ||
+			   	IL_IDX(list_array[OPEN_ACC_READ_IDX]) != NULL_IDX)
+			   {
+			   		parse_err_flush(Find_EOS, "Only one clause is allowed in atomic directive.");
+			   }
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_CAPTURE_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_CAPTURE_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_CAPTURE_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_CAPTURE_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+
+            case Tok_Open_Acc_Dir_If:
+
+               if (! open_acc_clause_allowed[directive][If_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "IF", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one IF clause allowed */
+               if (IL_IDX(list_array[OPEN_ACC_IF_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "IF", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_IF_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+               break;
+
+			case Tok_Open_Acc_Dir_DType:
+            case Tok_Open_Acc_Dir_Device_Type:
+               if (! open_acc_clause_allowed[directive][Device_Type_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Device_Type", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one DTYPE clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_DEVICE_TYPE_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "DEVICE_TYPE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+
+                  if (MATCHED_TOKEN_CLASS(Tok_Class_Open_Acc_Dir_Kwd)) {
+
+                     switch (TOKEN_VALUE(token)) {
+                        case Tok_Open_Acc_Dir_NVidia:
+                           the_constant = OPEN_ACC_DEVICE_TYPE_NVIDIA;
+                           break;
+
+                        case Tok_Open_Acc_Dir_Radeon:
+                           the_constant = OPEN_ACC_DEVICE_TYPE_RADEON;
+                           break;
+
+                        case Tok_Open_Acc_Dir_Xeonphi:
+                           the_constant = OPEN_ACC_DEVICE_TYPE_XEONPHI;
+                           break;
+						   
+                        default:
+                           parse_err_flush(Find_EOS,"Device type");
+                           goto EXIT;
+                     }
+
+                     IL_FLD(list_array[OPEN_ACC_DEVICE_TYPE_IDX]) =CN_Tbl_Idx;
+                     IL_IDX(list_array[OPEN_ACC_DEVICE_TYPE_IDX]) =
+                                           C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
+                                                       the_constant);
+
+                     IL_LINE_NUM(list_array[OPEN_ACC_DEVICE_TYPE_IDX]) =
+                                                         TOKEN_LINE(token);
+                     IL_COL_NUM(list_array[OPEN_ACC_DEVICE_TYPE_IDX]) =
+                                                         TOKEN_COLUMN(token);                     
+
+                     if (LA_CH_VALUE == RPAREN) {
+                        NEXT_LA_CH;
+                     }
+                     else {
+                        parse_err_flush(Find_EOS, ")");
+                        goto EXIT;
+                     }
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, "Device type");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Reduction:
+
+               if (! open_acc_clause_allowed[directive][Reduction_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "REDUCTION", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  /* determine operator */
+
+                  NTR_IR_TBL(opr_ir_idx);
+                  IR_LINE_NUM(opr_ir_idx) = LA_CH_LINE;
+                  IR_COL_NUM(opr_ir_idx) = LA_CH_COLUMN;
+                  IR_TYPE_IDX(opr_ir_idx) = INTEGER_DEFAULT_TYPE;
+
+                  if (LA_CH_CLASS == Ch_Class_Letter) {
+
+                     if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+
+                        if (TOKEN_STR(token)[0] == 'M') {
+                           if (strcmp(TOKEN_STR(token), "MAX") == 0) {
+                              IR_OPR(opr_ir_idx) = Max_Opr;
+                           }
+                           else if (strcmp(TOKEN_STR(token), "MIN") == 0) {
+                              IR_OPR(opr_ir_idx) = Min_Opr;
+                           }
+                           else {
+                              parse_err_flush(Find_EOS, 
+                                    "MAX, MIN, IAND, IOR, IEOR");
+                              goto EXIT;
+                           }
+                        }
+                        else if (TOKEN_STR(token)[0] == 'I') {
+                           if (strcmp(TOKEN_STR(token), "IAND") == 0) {
+                              IR_OPR(opr_ir_idx) = Band_Opr;
+                           }
+                           else if (strcmp(TOKEN_STR(token), "IOR") == 0) {
+                              IR_OPR(opr_ir_idx) = Bor_Opr;
+                           }
+                           else if (strcmp(TOKEN_STR(token), "IEOR") == 0) {
+                              IR_OPR(opr_ir_idx) = Bneqv_Opr;
+                           }
+                           else {
+                              parse_err_flush(Find_EOS,
+                                    "MAX, MIN, IAND, IOR, IEOR");
+                              goto EXIT;
+                           }
+                        }
+                        else {
+                           parse_err_flush(Find_EOS, 
+                                 "MAX, MIN, IAND, IOR, IEOR");
+                           goto EXIT;
+                        }
+                     }
+                     else {
+                        parse_err_flush(Find_EOS, 
+                              "MAX, MIN, IAND, IOR, IEOR");
+                        goto EXIT;
+                     }
+                  }
+                  else if (MATCHED_TOKEN_CLASS(Tok_Class_Op)) {
+                     switch (TOKEN_VALUE(token)) {
+                     case Tok_Op_Add:
+                        IR_OPR(opr_ir_idx) = Plus_Opr;
+                        break;
+
+                     case Tok_Op_Sub:
+                        IR_OPR(opr_ir_idx) = Minus_Opr;
+                        break;
+
+                     case Tok_Op_Mult:
+                        IR_OPR(opr_ir_idx) = Mult_Opr;
+                        break;
+
+                     case Tok_Op_And:
+                        IR_OPR(opr_ir_idx) = And_Opr;
+                        break;
+
+                     case Tok_Op_Or:
+                        IR_OPR(opr_ir_idx) = Or_Opr;
+                        break;
+
+                     case Tok_Op_Eqv:
+                        IR_OPR(opr_ir_idx) = Eqv_Opr;
+                        break;
+
+                     case Tok_Op_Neqv:
+                        IR_OPR(opr_ir_idx) = Neqv_Opr;
+                        break;
+
+                     default:
+                        parse_err_flush(Find_EOS, 
+                              "+, *, -, .AND., .OR., .EQV., or .NEQV.");
+                        goto EXIT;
+                     }
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, "operator or intrinsic");
+                     goto EXIT;
+                  }
+
+                  if (IL_IDX(list_array[OPEN_ACC_REDUCTION_OPR_IDX]) == NULL_IDX) 
+				  {
+                     NTR_IR_LIST_TBL(list_idx);
+                     IL_FLD(list_array[OPEN_ACC_REDUCTION_OPR_IDX]) = IL_Tbl_Idx;
+                     IL_IDX(list_array[OPEN_ACC_REDUCTION_OPR_IDX]) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_REDUCTION_OPR_IDX]) = 1;
+                  }
+                  else 
+				  {
+                     /* find the end of list */
+                     list_idx = IL_IDX(list_array[OPEN_ACC_REDUCTION_OPR_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) 
+					 {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+                     IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+                     list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     IL_LIST_CNT(list_array[OPEN_ACC_REDUCTION_OPR_IDX]) += 1;
+                  }
+
+                  IL_FLD(list_idx) = IR_Tbl_Idx;
+                  IL_IDX(list_idx) = opr_ir_idx;
+
+                  if (LA_CH_VALUE == COLON) 
+				  {
+                     NEXT_LA_CH;
+                  }
+                  else 
+				  {
+                     parse_err_flush(Find_EOS, ":");
+                     goto EXIT;
+                  }
+
+                  /* parse var list */
+                  parse_var_name_list(&opnd);
+
+                  if (IL_IDX(list_array[OPEN_ACC_REDUCTION_VAR_IDX]) == NULL_IDX) 
+				  {
+                     NTR_IR_LIST_TBL(list_idx);
+                     IL_FLD(list_array[OPEN_ACC_REDUCTION_VAR_IDX]) = IL_Tbl_Idx;
+                     IL_IDX(list_array[OPEN_ACC_REDUCTION_VAR_IDX]) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_REDUCTION_VAR_IDX]) = 1;
+
+                  }
+                  else 
+				  {
+                     /* find the end of list */
+                     list_idx = IL_IDX(list_array[OPEN_ACC_REDUCTION_VAR_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) 
+					 {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+                     IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+                     list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     IL_LIST_CNT(list_array[OPEN_ACC_REDUCTION_VAR_IDX]) += 1;
+                  }
+
+                  COPY_OPND(IL_OPND(list_idx), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) 
+				  {
+                     NEXT_LA_CH;
+                  }
+                  else 
+				  {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else 
+			   {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+
+            case Tok_Open_Acc_Dir_Default:
+               if (! open_acc_clause_allowed[directive][Default_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Default", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one default clause allowed */
+               if (IL_IDX(list_array[OPEN_ACC_DEFAULT_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "DEFAULT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               } 
+			   if (LA_CH_VALUE == LPAREN) 
+			   {
+                  NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Open_Acc_Dir_Kwd)) 
+				   {
+						 if(TOKEN_VALUE(token) != Tok_Open_Acc_Dir_None)					 	 
+						 {
+						 	parse_err_flush(Find_EOS,"default(none)");
+						 	goto EXIT;
+						 }
+                   }
+
+				  
+                   if (LA_CH_VALUE == RPAREN) 
+				   {
+                      NEXT_LA_CH;
+                   }
+                   else 
+				   {
+                        parse_err_flush(Find_EOS, ")");
+                        goto EXIT;
+                   }                  
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+			   
+			   IL_LINE_NUM(list_array[OPEN_ACC_DEFAULT_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_DEFAULT_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_DEFAULT_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_DEFAULT_IDX]) = CN_INTEGER_ZERO_IDX;
+					
+               break;
+			
+            case Tok_Open_Acc_Dir_Wait:
+               if (! open_acc_clause_allowed[directive][Wait_Acc_Clause]) 
+			   {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Wait", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+			   
+               if (IL_IDX(list_array[OPEN_ACC_WAIT_IDX]) != NULL_IDX)
+			   {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "WAIT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) 
+			   {
+			   	  int    wait_list_idx	= NULL_IDX;
+				  opnd_type    	int_opnd;
+				  int          	line;
+				  int  			column;
+				  
+                  NEXT_LA_CH;
+				  
+                  parse_expr(&int_opnd);
+				  //find_opnd_line_and_column(&int_opnd, &line, &column);
+				  NTR_IR_LIST_TBL(wait_list_idx);
+	              OPND_FLD((opnd))	= IL_Tbl_Idx;
+	              OPND_IDX((opnd))	= wait_list_idx;
+	              OPND_LIST_CNT(opnd)	= 1;
+				  COPY_OPND(IL_OPND(wait_list_idx), int_opnd);
+				  
+				  while(LA_CH_VALUE == COMMA)
+			  	  {
+			  	  	NEXT_LA_CH;
+			  	  	parse_expr(&int_opnd);
+					NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(wait_list_idx));
+            		IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(wait_list_idx)) = wait_list_idx;
+            		(OPND_LIST_CNT(opnd))++;
+            		wait_list_idx = IL_NEXT_LIST_IDX(wait_list_idx);
+					COPY_OPND(IL_OPND(wait_list_idx), int_opnd);
+			  	  }
+                  //parse_acc_var_common_list(&opnd, TRUE);                  
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_WAIT_IDX]), opnd);
+				  
+                  if (LA_CH_VALUE == RPAREN) 
+				  {
+                     NEXT_LA_CH;
+                  }
+                  else 
+				  {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else 
+			   {
+					IL_LINE_NUM(list_array[OPEN_ACC_WAIT_IDX]) = TOKEN_LINE(token);
+					IL_COL_NUM(list_array[OPEN_ACC_WAIT_IDX]) = TOKEN_COLUMN(token);
+					IL_FLD(list_array[OPEN_ACC_WAIT_IDX]) = CN_Tbl_Idx;
+					IL_IDX(list_array[OPEN_ACC_WAIT_IDX]) = CN_INTEGER_NEG_ONE_IDX;;
+               }
+
+               break;
+
+            case Tok_Open_Acc_Dir_Async:
+               if (! open_acc_clause_allowed[directive][Async_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Async", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one Async clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_ASYNC_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "ASYNC", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_ASYNC_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+					IL_LINE_NUM(list_array[OPEN_ACC_ASYNC_IDX]) = TOKEN_LINE(token);
+					IL_COL_NUM(list_array[OPEN_ACC_ASYNC_IDX]) = TOKEN_COLUMN(token);
+					IL_FLD(list_array[OPEN_ACC_ASYNC_IDX]) = CN_Tbl_Idx;
+					IL_IDX(list_array[OPEN_ACC_ASYNC_IDX]) = CN_INTEGER_NEG_ONE_IDX;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Gang:
+               if (! open_acc_clause_allowed[directive][Gang_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Gang", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one gang clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_GANG_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "GANG", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_GANG_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  //parse_err_flush(Find_EOS, "(");
+                  //goto EXIT;
+					IL_LINE_NUM(list_array[OPEN_ACC_GANG_IDX]) = TOKEN_LINE(token);
+					IL_COL_NUM(list_array[OPEN_ACC_GANG_IDX]) = TOKEN_COLUMN(token);
+					IL_FLD(list_array[OPEN_ACC_GANG_IDX]) = CN_Tbl_Idx;
+					IL_IDX(list_array[OPEN_ACC_GANG_IDX]) = CN_INTEGER_ZERO_IDX;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Worker:
+               if (! open_acc_clause_allowed[directive][Worker_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Worker", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one worker clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_WORKER_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "WORKER", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_WORKER_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {                  
+					IL_LINE_NUM(list_array[OPEN_ACC_WORKER_IDX]) = TOKEN_LINE(token);
+					IL_COL_NUM(list_array[OPEN_ACC_WORKER_IDX]) = TOKEN_COLUMN(token);
+					IL_FLD(list_array[OPEN_ACC_WORKER_IDX]) = CN_Tbl_Idx;
+					IL_IDX(list_array[OPEN_ACC_WORKER_IDX]) = CN_INTEGER_ZERO_IDX;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Vector:
+               if (! open_acc_clause_allowed[directive][Vector_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Vector", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one vector clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_VECTOR_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "VECTOR", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_VECTOR_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {				   
+				   IL_LINE_NUM(list_array[OPEN_ACC_VECTOR_IDX]) = TOKEN_LINE(token);
+				   IL_COL_NUM(list_array[OPEN_ACC_VECTOR_IDX]) = TOKEN_COLUMN(token);
+				   IL_FLD(list_array[OPEN_ACC_VECTOR_IDX]) = CN_Tbl_Idx;
+				   IL_IDX(list_array[OPEN_ACC_VECTOR_IDX]) = CN_INTEGER_ZERO_IDX;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Vector_Length:
+               if (! open_acc_clause_allowed[directive][Vector_Length_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Vector_Length", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one vector_length clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_VECTOR_LENGTH_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "vector_length", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_VECTOR_LENGTH_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Num_Workers:
+
+               if (! open_acc_clause_allowed[directive][Num_Workers_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Num_Workers", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one Num_Workers clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_NUM_WORKERS_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "Num_Workers", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_NUM_WORKERS_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Num_Gangs:
+
+               if (! open_acc_clause_allowed[directive][Num_Gangs_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Num_Gangs", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one Num_Gangs clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_NUM_GANGS_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "Num_Gangs", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_NUM_GANGS_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+               break;
+			
+            case Tok_Open_Acc_Dir_Self:
+
+               if (! open_acc_clause_allowed[directive][Self_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Self", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_SELF_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_SELF_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_SELF_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_SELF_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Device:
+
+               if (! open_acc_clause_allowed[directive][Device_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Device", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_DEVICE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_DEVICE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_DEVICE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_DEVICE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Host:
+
+               if (! open_acc_clause_allowed[directive][Host_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Host", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_HOST_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_HOST_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_HOST_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_HOST_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Device_Resident:
+
+               if (! open_acc_clause_allowed[directive][Device_Resident_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Device_Resident", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_DEVICE_RESIDENT_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_DEVICE_RESIDENT_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_DEVICE_RESIDENT_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_DEVICE_RESIDENT_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Link:
+
+               if (! open_acc_clause_allowed[directive][Link_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Link", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_LINK_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_LINK_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_LINK_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_LINK_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Private:
+
+               if (! open_acc_clause_allowed[directive][Private_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PRIVATE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PRIVATE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PRIVATE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PRIVATE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PRIVATE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Firstprivate:
+
+               if (! open_acc_clause_allowed[directive][First_Private_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1724, Error, TOKEN_COLUMN(token),
+                           "FIRSTPRIVATE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_FIRST_PRIVATE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_FIRST_PRIVATE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_FIRST_PRIVATE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_FIRST_PRIVATE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Copy:
+
+               if (! open_acc_clause_allowed[directive][Copy_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "COPY", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_COPY_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_COPY_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_COPY_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_COPY_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			   
+            case Tok_Open_Acc_Dir_Present_or_Copy:
+            case Tok_Open_Acc_Dir_Pcopy:
+
+               if (! open_acc_clause_allowed[directive][Pcopy_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PCOPY", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PCOPY_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PCOPY_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PCOPY_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PCOPY_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Copyin:
+
+               if (! open_acc_clause_allowed[directive][Copyin_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "COPYIN", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_COPYIN_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_COPYIN_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_COPYIN_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_COPYIN_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Present_or_Copyin:
+            case Tok_Open_Acc_Dir_Pcopyin:
+
+               if (! open_acc_clause_allowed[directive][Pcopyin_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PCOPYIN", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PCOPYIN_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PCOPYIN_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PCOPYIN_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PCOPYIN_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Copyout:
+
+               if (! open_acc_clause_allowed[directive][Copyout_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "COPYOUT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_COPYOUT_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_COPYOUT_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_COPYOUT_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_COPYOUT_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Present_or_Copyout:
+            case Tok_Open_Acc_Dir_Pcopyout:
+
+               if (! open_acc_clause_allowed[directive][Pcopyout_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PCOPYOUT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PCOPYOUT_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PCOPYOUT_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PCOPYOUT_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PCOPYOUT_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Present:
+
+               if (! open_acc_clause_allowed[directive][Present_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PRESENT", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PRESENT_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PRESENT_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PRESENT_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PRESENT_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Create:
+
+               if (! open_acc_clause_allowed[directive][Create_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "CREATE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_CREATE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_CREATE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_CREATE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_CREATE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Present_or_Create:
+            case Tok_Open_Acc_Dir_Pcreate:
+
+               if (! open_acc_clause_allowed[directive][Pcreate_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "PCREATE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_PCREATE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_PCREATE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_PCREATE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_PCREATE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			
+            case Tok_Open_Acc_Dir_Delete:
+
+               if (! open_acc_clause_allowed[directive][Delete_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Delete", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_DELETE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_DELETE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_DELETE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_DELETE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;			
+			
+            case Tok_Open_Acc_Dir_Use_Device:
+
+               if (! open_acc_clause_allowed[directive][Use_Device_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1724, Error, TOKEN_COLUMN(token),
+                           "Use_Device", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_USE_DEVICE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_USE_DEVICE_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_USE_DEVICE_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_USE_DEVICE_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			   
+            case Tok_Open_Acc_Dir_Deviceptr:
+
+               if (! open_acc_clause_allowed[directive][Deviceptr_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1724, Error, TOKEN_COLUMN(token),
+                           "Deviceptr", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_acc_var_common_list(&opnd, TRUE);
+
+                  if (IL_IDX(list_array[OPEN_ACC_DELETE_IDX]) == NULL_IDX) {
+                     COPY_OPND(IL_OPND(list_array[OPEN_ACC_DEVICEPTR_IDX]), opnd);
+                  }
+                  else {
+                     /* find the end of list */
+
+                     list_idx = IL_IDX(list_array[OPEN_ACC_DEVICEPTR_IDX]);
+                     while (IL_NEXT_LIST_IDX(list_idx)) {
+                        list_idx = IL_NEXT_LIST_IDX(list_idx);
+                     }
+
+                     /* append the new list */
+                     IL_NEXT_LIST_IDX(list_idx) = OPND_IDX(opnd);
+                     IL_PREV_LIST_IDX(OPND_IDX(opnd)) = list_idx;
+                     IL_LIST_CNT(list_array[OPEN_ACC_DEVICEPTR_IDX]) +=
+                                                         OPND_LIST_CNT(opnd);
+                  }
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
+
+               break;
+			 
+
+            default:
+               PRINTMSG(TOKEN_LINE(token), 1517, Error, TOKEN_COLUMN(token),
+                        "OpenACC");
+               parse_err_flush(Find_EOS, NULL);
+			 	
+         	}
+		 
+		    if (LA_CH_VALUE == COMMA) 
+			{
+		         NEXT_LA_CH;
+		    }
+      	}
+   	}
+   EXIT:
+
+   TRACE (Func_Exit, "parse_open_acc_clauses", NULL);
+   return;
+   	
+}
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	OpenACC directive parser(by Daniel Tian)      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+static void parse_open_acc_directives(void)
+{	
+	int 		 ir_idx;
+	int 		 list_idx;
+	opnd_type	 opnd;
+	int 		 sh_idx;
+	int 		 type_idx;
+	
+	static	int  acc_loop_nest_depth  = 0;
+	static  int  acc_data_nest_depth = 0;
+	TRACE (Func_Entry, "parse_open_acc_directives", NULL);
+
+   if (TOKEN_VALUE(token) > Tok_Open_Acc_Dir_Start &&
+       TOKEN_VALUE(token) < Tok_Open_Acc_Dir_End &&
+       disregard_open_acc[TOKEN_VALUE(token) - Tok_Open_Acc_Dir_Start])
+   {
+      parse_err_flush(Find_EOS, NULL);
+      goto EXIT;
+   }
+   
+   switch (TOKEN_VALUE(token)) 
+   {
+      case Tok_Open_Acc_Dir_Atomic:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Atomic_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Atomic_Open_Acc_Opr);
+
+         if (directive_region_error(Atomic_Open_Acc_Opr,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+		 
+         SET_DIRECTIVE_STATE(Open_Acc_Atomic_Region);
+         PUSH_BLK_STK (Open_Acc_Atomic_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endatomic:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endatomic_Open_Acc_Opr);
+
+         
+         if (LA_CH_VALUE != EOS) {
+            parse_err_flush(Find_EOS, "( or EOS");
+         }
+
+         if (directive_region_error(Endatomic_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         CLEAR_DIRECTIVE_STATE(Open_Acc_Atomic_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Atomic_Stmt;
+         stmt_type = Open_ACC_End_Atomic_Stmt;
+
+         if (CURR_BLK == Open_Acc_Atomic_Blk &&
+             IR_FLD_L(SH_IR_IDX(CURR_BLK_FIRST_SH_IDX)) == CN_Tbl_Idx) {
+
+            /* must be named */
+            if (IR_FLD_L(ir_idx) != CN_Tbl_Idx ||
+                strcmp((char *)&CN_CONST(IR_IDX_L(SH_IR_IDX(
+                                           CURR_BLK_FIRST_SH_IDX))),
+                       (char *)&CN_CONST(IR_IDX_L(ir_idx))) != 0) {
+
+               PRINTMSG(IR_LINE_NUM(ir_idx), 1472, Error, IR_COL_NUM(ir_idx));
+            }
+         }
+         end_open_acc_atomic_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Data:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Data_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Data_Acc);
+
+         if (directive_region_error(Data_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         /* clear directive state */
+         //directive_state &= (long) 0;
+
+         acc_data_nest_depth ++;
+		 
+         SET_DIRECTIVE_STATE(Open_Acc_Data_Region);
+         PUSH_BLK_STK (Open_Acc_Data_Blk);
+		 //data region only take care of data
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = FALSE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Enddata:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Enddata_Open_Acc_Opr);
+
+         if (directive_region_error(Enddata_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         if (--acc_data_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Data_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Data_Stmt;
+         stmt_type = Open_ACC_End_Data_Stmt;
+         end_open_acc_data_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Host_Data:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Host_Data_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Host_Data_Acc);
+
+         if (directive_region_error(Host_Data_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	 
+         SET_DIRECTIVE_STATE(Open_Acc_Host_Data_Region);
+         PUSH_BLK_STK (Open_Acc_Host_Data_Blk);
+		 //data region only take care of data
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = FALSE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endhost_Data:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endhost_Data_Open_Acc_Opr);
+
+         if (directive_region_error(Endhost_Data_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         CLEAR_DIRECTIVE_STATE(Open_Acc_Host_Data_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Host_Data_Stmt;
+         stmt_type = Open_ACC_End_Host_Data_Stmt;
+         end_open_acc_host_data_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Kernels:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Kernels_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Kernels_Acc);
+
+         if (directive_region_error(Parallel_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         
+         SET_DIRECTIVE_STATE(Open_Acc_Kernels_Region);
+         PUSH_BLK_STK (Open_Acc_Kernels_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endkernels:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endkernels_Open_Acc_Opr);
+
+         if (directive_region_error(Endkernels_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         CLEAR_DIRECTIVE_STATE(Open_Acc_Kernels_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Kernels_Stmt;
+         stmt_type = Open_ACC_End_Kernels_Stmt;
+         end_open_acc_kernels_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Loop:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Loop_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Loop_Acc);
+
+         if (directive_region_error(Loop_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         /* clear directive state */
+         //directive_state &= (long) 0;
+
+         acc_loop_nest_depth++;
+         SET_DIRECTIVE_STATE(Open_Acc_Loop_Region);
+         PUSH_BLK_STK (Open_Acc_Loop_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endloop:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endloop_Open_Acc_Opr);
+
+         if (directive_region_error(Endloop_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+		 acc_loop_nest_depth--;
+		 if(acc_loop_nest_depth == 0)
+		 	CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Loop_Stmt;
+         stmt_type = Open_ACC_End_Loop_Stmt;
+         end_open_acc_loop_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Parallel:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Parallel_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Parallel_Acc);
+
+         if (directive_region_error(Parallel_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         /* clear directive state */
+         //directive_state &= (long) 0;
+
+         //par_nest_depth++;
+         SET_DIRECTIVE_STATE(Open_Acc_Parallel_Region);
+         PUSH_BLK_STK (Open_Acc_Parallel_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endparallel:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endparallel_Open_Acc_Opr);
+
+         if (directive_region_error(Endparallel_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         CLEAR_DIRECTIVE_STATE(Open_Acc_Parallel_Region);
+
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_ACC_End_Parallel_Stmt;
+         stmt_type = Open_ACC_End_Parallel_Stmt;
+         end_open_acc_parallel_blk(FALSE);
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Enter_Data:
+	  	
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Enter_Data_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Enter_Data_Acc);
+
+         if (directive_region_error(Enter_Data_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+      case Tok_Open_Acc_Dir_Exit_Data:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Exit_Data_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Exit_Data_Acc);
+
+         if (directive_region_error(Exit_Data_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Routine:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Routine_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Routine_Acc);
+
+         if (directive_region_error(Routine_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Wait:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Wait_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Wait_Acc);
+
+         if (directive_region_error(Wait_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Update:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Update_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Update_Acc);
+
+         if (directive_region_error(Update_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Declare:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Declare_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Declare_Acc);
+
+         if (directive_region_error(Declare_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Cache:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Cache_Open_Acc_Opr);
+
+
+         parse_open_acc_clauses(Cache_Acc);
+
+         if (directive_region_error(Cache_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+	  	break;		
+
+      default:
+         PRINTMSG(TOKEN_LINE(token), 790, Warning, TOKEN_COLUMN(token));
+         parse_err_flush(Find_EOS, NULL);
+         break;
+   }
+   
+   EXIT:
+   NEXT_LA_CH;
+
+   TRACE (Func_Exit, "parse_open_acc_directives", NULL);
+
+   return;
+
+}
+
 
 /******************************************************************************\
 |*									      *|

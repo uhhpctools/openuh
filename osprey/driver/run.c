@@ -276,6 +276,8 @@ get_binutils_lib_path(void)
 	return my_path;
 }
 
+extern boolean compiling_acc;
+extern boolean compiling_acc_s2s;
 
 void
 run_phase (phases_t phase, char *name, string_list_t *args)
@@ -596,7 +598,7 @@ run_phase (phases_t phase, char *name, string_list_t *args)
                                 // If the command line has explicit inline
 				// setting, follow it; else follow the
 				// front-end request.  Bug 11325.
-				if (inline_t != UNDEFINED) {
+				if (inline_t != UNDEFINED && compiling_acc != TRUE) {
 				  run_inline = inline_t;
 				  break;
 				}
@@ -604,14 +606,14 @@ run_phase (phases_t phase, char *name, string_list_t *args)
 				// bug 10215
 				if (gnu_major_version == 4) {
 				  if (is_matching_phase(get_phase_mask(phase),
-							P_wgen)) {
+							P_wgen) && compiling_acc != TRUE) {
 				    run_inline = TRUE;
 				  }
 				  break;
 				}
 				if (inline_t == UNDEFINED
 				    && is_matching_phase(
-					get_phase_mask(phase), P_any_fe) )
+					get_phase_mask(phase), P_any_fe) && compiling_acc != TRUE)
 				{
 					run_inline = TRUE;	// bug 11325
 				}

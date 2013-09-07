@@ -181,6 +181,26 @@ AS_HELP_STRING([--with-default-caf-teams-heap-size=<heap size>],
 DEFAULT_CAF_TEAMS_HEAP_SIZE="$with_default_caf_teams_heap_size",
 DEFAULT_CAF_TEAMS_HEAP_SIZE="10M")
 
+# cuda
+AC_ARG_WITH(cuda,
+AS_HELP_STRING([--with-cuda=<cuda path>],
+[CUDA path for building libopenacc]),
+CUDA_HOME="$with_cuda",
+CUDA_HOME="")
+
+#opencl
+AC_ARG_WITH(opencl_amd,
+AS_HELP_STRING([--with-opencl-amd=<opencl path>],
+[AMD OpenCL path for building libopenacc_amd]),
+AMD_CL_HOME="$with_opencl_amd",
+AMD_CL_HOME="")
+
+AC_ARG_WITH(opencl_intel,
+AS_HELP_STRING([--with-opencl-intel=<opencl path>],
+[INTEL OpenCL path for building libopenacc_intel]),
+INTEL_CL_HOME="$with_opencl_intel",
+INTEL_CL_HOME="")
+
 # set bash path
 AC_PATH_PROG([BASH_PATH], [bash])
 
@@ -258,6 +278,24 @@ if test -n "${GASNET_HOME}"; then
   if test  "${GASNET_CONDUITS}" = "*"; then
       AC_MSG_ERROR([Specified --with-gasnet-root=<path> does not look right. Check path.])
   fi
+fi
+
+if test -n "${CUDA_HOME}"; then
+  if test ! -d "${CUDA_HOME}"; then
+      AC_MSG_ERROR([Specified --with-cuda=<path> does not look right. Check path.])
+  fi
+fi
+
+if test -n "${AMD_CL_HOME}"; then
+  if test ! -d "${AMD_CL_HOME}"; then
+      AC_MSG_ERROR([Specified --with-opencl-amd=<path> does not look right. Check path.])
+  fi
+fi
+
+if test -n "${INTEL_CL_HOME}"; then
+  if test ! -d "${INTEL_CL_HOME}"; then
+       AC_MSG_ERROR([Specified --with-opencl-intel=<path> does not look right. Check path.])
+   fi
 fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
@@ -743,6 +781,9 @@ AC_SUBST([TAU_LIBS])
 AC_SUBST([EPIK_ROOT])
 AC_SUBST([OPENUH_VERSION])
 AC_SUBST([ENABLE_OSA])
+AC_SUBST([CUDA_HOME])
+AC_SUBST([AMD_CL_HOME])
+AC_SUBST([INTEL_CL_HOME])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
@@ -819,6 +860,15 @@ if test "${BUILD_TARGET}" = "SL"; then
   LIBLIST="include"
 elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
+  if test -n "${CUDA_HOME}"; then
+    LIBLIST="$LIBLIST libopenacc"
+  fi
+  if test -n "${INTEL_CL_HOME}"; then
+    LIBLIST="$LIBLIST libopenacc_intel"
+  fi
+  if test -n "${AMD_CL_HOME}"; then
+    LIBLIST="$LIBLIST libopenacc_amd"
+  fi
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
      if test "${ENABLE_COARRAYS}" = "YES"; then
@@ -830,6 +880,15 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   fi
 else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
+  if test -n "${CUDA_HOME}"; then
+       LIBLIST="$LIBLIST libopenacc"
+  fi
+  if test -n "${INTEL_CL_HOME}"; then
+       LIBLIST="$LIBLIST libopenacc_intel"
+  fi
+  if test -n "${AMD_CL_HOME}"; then
+       LIBLIST="$LIBLIST libopenacc_amd"
+  fi
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
      if test "${ENABLE_COARRAYS}" = "YES"; then
@@ -851,6 +910,15 @@ AC_CONFIG_FILES([
   osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in
 ])
 else
+if test -n "${CUDA_HOME}"; then
+   AC_CONFIG_FILES([osprey/targdir_lib/libopenacc/Makefile])
+fi
+if test -n "${INTEL_CL_HOME}"; then
+   AC_CONFIG_FILES([osprey/targdir_lib/libopenacc_intel/Makefile])
+fi
+if test -n "${AMD_CL_HOME}"; then
+   AC_CONFIG_FILES([osprey/targdir_lib/libopenacc_amd/Makefile])
+fi
 AC_CONFIG_FILES([
   osprey/targdir_lib/libopenmp/Makefile
   osprey/targdir_lib/libopenmp-pcl/Makefile
@@ -903,9 +971,18 @@ fi
 
 
 if test $BUILD_MULTILIB = "YES"; then
+  if test -n "${CUDA_HOME}"; then
+	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc/Makefile:osprey/targdir_lib/libopenacc/Makefile.in])
+  fi
+  if test -n "${INTEL_CL_HOME}"; then
+	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc_intel/Makefile:osprey/targdir_lib/libopenacc_intel/Makefile.in])
+  fi
+  if test -n "${AMD_CL_HOME}"; then
+	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc_amd/Makefile:osprey/targdir_lib/libopenacc_amd/Makefile.in])
+  fi
   AC_CONFIG_FILES([
     osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in
-    osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in
+    osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in    
     osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in
     osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in
     osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in

@@ -110,6 +110,8 @@ typedef INT64 LOWER_ACTIONS;
 #if defined(TARG_SL)
 #define LOWER_FP_EMULATE  0x400000000000ll
 #endif
+#define LOWER_ACC		  0x1000000000000ll
+#define LOWER_ACC_VH	  0x2000000000000ll
 
 
 /* 

@@ -1575,8 +1575,12 @@ BOOL Remove_region_exit(BB_NODE *bb, BOOL is_whirl)
 
   // at this point we know the regioninfo and rid are still there
 
-  // MP and EH regions do not have exits
+  // MP, ACC and EH regions do not have exits
   if (RID_TYPE_mp(rid)) { // the kind of the exit bb is about to be reset
+    bb_region->Set_region_end(NULL);
+    return TRUE;
+  }
+  if (RID_TYPE_acc(rid)) { // the kind of the exit bb is about to be reset
     bb_region->Set_region_end(NULL);
     return TRUE;
   }

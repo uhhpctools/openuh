@@ -430,6 +430,8 @@ extern BOOL LANG_Enable_CXX_Openmp;
 extern BOOL LANG_Enable_Global_Asm;
 #endif
 
+extern BOOL LANG_Enable_CXX_Openacc;
+
 extern BOOL WHIRL_Mtype_A_On;
 extern BOOL WHIRL_Mtype_B_On;
 extern BOOL WHIRL_Mtype_BS_On;
@@ -749,6 +751,52 @@ extern BOOL Enable_Coarray; /* -deepak */
 
 /* back end phases options */
 #ifdef BACK_END
+extern BOOL Enable_UHACC;
+extern BOOL run_ACCS2S;
+extern BOOL run_autoConstCacheOpt;
+/*reduction flags: 0bit-global/shared memory: if shared memory is used, it is 0; else it is 1; shared memory is default option
+			      1bit-rolling/unrolling: if unrolling, it is 0; else it is 1. default is unrolling*/
+/*DFA analysis flag: bit 2. If the DFA is enabled, set to 1; else set to 0*/
+#define UHACC_REDUCTION_USING_GLOBAL_MEMORY			(0x0)
+#define UHACC_REDUCTION_USING_UNROLLING				(0x1)
+#define UHACC_ENABLE_DFA_OFFLOAD_REGION				(0x2)
+#define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL1	(0x3)
+#define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL2	(0x4)
+#define UHACC_ENABLE_LOOP_UNROLLING_OFFLOAD			(0x5)
+#define UHACC_ENABLE_RESTRICT_PTR_OFFLOAD			(0x6)
+//enable read-only scalar recognization in the array index expression
+#define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL3	(0x7)
+//def-use chain, unsupported yet
+#define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL4	(0x8)
+//ignore the read-only and memory coalesced array elements
+//because they are alreadyin the read-only data cache
+//save the register
+typedef enum ACC_REGISTER_FEEDBACK
+{
+	ACC_REGISTER_FEEDBACK_NONE=0,
+	ACC_REGISTER_FEEDBACK_PHASE0,
+	ACC_REGISTER_FEEDBACK_PHASE1,
+	ACC_REGISTER_FEEDBACK_PHASE2
+}ACC_REGISTER_FEEDBACK;
+extern ACC_REGISTER_FEEDBACK Enable_UHACCFeedback;
+//#define UHACC_ENABLE_ACCFEEDBACK_OFFLOAD_PHASE1	(0x9)
+//#define UHACC_ENABLE_ACCFEEDBACK_OFFLOAD_PHASE2	(0x10)
+typedef enum ACC_ARCH_TYPE
+{
+        ACC_ARCH_TYPE_NONE=0,
+        ACC_ARCH_TYPE_NVIDIA,
+        ACC_ARCH_TYPE_APU,
+        ACC_ARCH_TYPE_CPU
+}ACC_ARCH_TYPE;
+extern ACC_ARCH_TYPE UHACC_Arch_Type;
+
+extern UINT32 Enable_UHACCFlag;
+
+#define UHACC_INFO_OUTPUT_DFA					(0x0)
+#define UHACC_INFO_OUTPUT_SCALARIZATION			(0x1)
+extern UINT32 Enable_UHACCInfoFlag;
+extern UINT32 Enable_UHACCRegNum;
+
 extern BOOL Run_lno;		    /* run loop-nest optimizer */
 extern BOOL Run_lego;               /* run lego-lowering */
 extern BOOL Run_lego_given;         /* was run lego-lowering given/not */

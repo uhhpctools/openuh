@@ -3005,6 +3005,12 @@ is inheriting pu_recursive OK?
   Set_PU_is_nested_func(pu);
   Set_PU_mp(pu);
   Set_PU_has_mp(pu);
+  //by Daniel Tian, for OpenMP&OpenACC hybrid programming
+  if(PU_acc(Get_Current_PU()))
+  	Set_PU_acc(pu);
+  if(PU_has_acc(Get_Current_PU()))
+  	Set_PU_has_acc(pu);
+  ////////////////////////////////////////////////////
   if (is_task_region)
     Set_PU_is_task(pu);
 #ifdef KEY
