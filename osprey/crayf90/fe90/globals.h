@@ -2297,7 +2297,12 @@ struct  expr_semantics_args    {basic_type_type		type		: 8;
 				 * the constraint on such assigments
 				 * within pure procedures */
 				boolean                 derived_assign  : 1;
+#ifndef _UH_COARRAYS
 				Uint			UNUSED2		: 5;
+#else
+				boolean			is_coarray	: 1;
+				Uint			UNUSED2		: 4;
+#endif
 #else /* KEY Bug 934 */
 				Uint			UNUSED2		: 6;
 #endif /* KEY Bug 934 */

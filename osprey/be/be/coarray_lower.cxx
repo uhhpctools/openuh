@@ -2715,19 +2715,17 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
                 }
 
                 /* stride multipliers */
-                if (rank > 0) {
-                    stride_mult = WN_Intconst(Integer_type, elem_size);
-                    local_access[i].stride_mult[0] = stride_mult;
-                }
                 BOOL noncontig = (WN_element_size(wp) < 0);
                 if (noncontig) {
-                    for (int j = 1; j < rank; j++) {
+                    for (int j = 0; j < rank; j++) {
                         stride_mult = WN_Mpy( MTYPE_U8,
                                 WN_Intconst(Integer_type, elem_size),
                                 WN_COPY_Tree(WN_kid(wp, rank-j)) );
                         local_access[i].stride_mult[j] = stride_mult;
                     }
-                } else {
+                } else if (rank > 0) {
+                    stride_mult = WN_Intconst(Integer_type, elem_size);
+                    local_access[i].stride_mult[0] = stride_mult;
                     for (int j = 1; j < rank; j++) {
                         stride_mult = WN_Mpy( MTYPE_U8,
                                 WN_COPY_Tree(stride_mult),

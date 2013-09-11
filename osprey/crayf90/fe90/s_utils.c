@@ -4494,7 +4494,8 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 
 #ifdef _UH_COARRAYS
       if ((i > rank) && exp_desc->rank == rank) {
-          if (i <= (rank+corank_orig)) {
+          if (i <= (rank+corank_orig) &&
+              BD_ARRAY_CLASS(ATD_PE_ARRAY_IDX(attr_idx)) != Deferred_Shape) {
               IL_FLD(list_idx) = BD_LB_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
               IL_IDX(list_idx) = BD_LB_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
           } else {
@@ -4573,7 +4574,8 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 
 #ifdef _UH_COARRAYS
       if ((i > rank) && exp_desc->rank == rank) {
-        if (i <= (rank+corank_orig)) {
+        if (i <= (rank+corank_orig) &&
+            BD_ARRAY_CLASS(ATD_PE_ARRAY_IDX(attr_idx)) != Deferred_Shape) {
           IL_FLD(list2_idx) = BD_XT_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
           IL_IDX(list2_idx) = BD_XT_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
         } else {
@@ -4600,7 +4602,8 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 
 #ifdef _UH_COARRAYS
       if ((i > rank) && exp_desc->rank == rank) {
-        if (i <= (rank+corank_orig)) {
+        if (i <= (rank+corank_orig) &&
+            BD_ARRAY_CLASS(ATD_PE_ARRAY_IDX(attr_idx)) != Deferred_Shape) {
           IL_FLD(list_idx) = BD_SM_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
           IL_IDX(list_idx) = BD_SM_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
           IL_LINE_NUM(list_idx) = line;

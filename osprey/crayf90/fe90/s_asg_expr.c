@@ -1850,10 +1850,16 @@ static boolean expr_sem_d(opnd_type      *result_opnd,
             exp_desc->target      = ATD_TARGET(attr_idx);
             exp_desc->allocatable = ATD_ALLOCATABLE(attr_idx);
             exp_desc->dope_vector = ATD_IM_A_DOPE(attr_idx);
+#ifdef _UH_COARRAYS
+            exp_desc->is_coarray = ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX;
+#endif
 
             if (ATD_POINTER(attr_idx) && rank_in != 0) {
                ok = FALSE;
                PRINTMSG(line, 408, Error, col);
+            } else if (ATD_ALLOCATABLE(attr_idx) && rank_in != 0) {
+               ok = FALSE;
+               PRINTMSG(line, 1724, Error, col);
             }
 
             if (cdir_switches.parallel_region       &&
@@ -8959,6 +8965,15 @@ static boolean struct_opr_handler(opnd_type		*result_opnd,
 
    exp_desc->dope_vector      = exp_desc_r.dope_vector;
 
+#ifdef _UH_COARRAYS
+   exp_desc->is_coarray       = (exp_desc_l.is_coarray || exp_desc_r.is_coarray);
+
+   /* if left was coarray and right is allocatable or pointer, then no longer
+    * a coarray */
+   exp_desc->is_coarray       &= !(exp_desc_l.is_coarray &&
+                                   (exp_desc_r.allocatable || exp_desc_r.pointer));
+#endif
+
    if (exp_desc_r.dope_vector &&
        ! no_sub_or_deref) {
       COPY_OPND((*result_opnd), IR_OPND_R(ir_idx));
@@ -10289,6 +10304,10 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
       exp_desc->contig_array = exp_desc_l.contig_array;
       exp_desc->dist_reshape_ref = exp_desc_l.dist_reshape_ref;
 
+#ifdef _UH_COARRAYS
+      exp_desc->is_coarray = exp_desc_l.is_coarray;
+#endif
+
       COPY_OPND((exp_desc->char_len), (exp_desc_l.char_len));
 
       if (IR_FLD_L(ir_idx)         == IR_Tbl_Idx    &&
@@ -10731,6 +10750,12 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
                   COPY_OPND(exp_desc->shape[exp_desc->rank - 1],
                             exp_desc_r.shape[0]);
                   curr_section = Vector_Section;
+
+#ifdef _UH_COARRAYS
+                  /* if expression has vector subscript, then it is not a
+                   * coarray */
+                  exp_desc->is_coarray = FALSE;
+#endif
                }
             }
             else if (exp_desc_r.rank > 1 ||
@@ -11134,6 +11159,9 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
                                  line, col, &exp_desc->bias_opnd);
                OPND_FLD(exp_desc->bias_opnd) = IL_Tbl_Idx;
                OPND_IDX(exp_desc->bias_opnd) = pe_dim_list_idx;
+
+               /* co-indexed expression is not a coarray */
+               exp_desc->is_coarray = FALSE;
 #endif
             }
 # if defined(_TARGET_OS_MAX)
@@ -11319,6 +11347,10 @@ static boolean substring_opr_handler(opnd_type		*result_opnd,
    exp_desc->dope_vector      = exp_desc_l.dope_vector;
    exp_desc->contig_array     = exp_desc_l.contig_array;
    exp_desc->dist_reshape_ref = exp_desc_l.dist_reshape_ref;
+
+#ifdef _UH_COARRAYS
+   exp_desc->is_coarray       = exp_desc_l.is_coarray;
+#endif
 
 
    IR_TYPE_IDX(ir_idx)      = exp_desc->type_idx;
