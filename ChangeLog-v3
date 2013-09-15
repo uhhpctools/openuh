@@ -20,6 +20,8 @@ revision, please refer to the version control commit history for OpenUH.
   * adds compiler check for illegal allocatable component selection to the
     right of a nonzero rank part-ref (Fortran)
 
+----------------------------------------------------------------------------
+
 2013-08-20: (3.0.31)
 
 * misc. improvements/fixes for CAF

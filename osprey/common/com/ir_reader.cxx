@@ -2898,7 +2898,8 @@ help_image_wn(stringstream &ss, WN *wn, INT indent)
       ss << WN_flag(wn);
     }
     if (OPCODE_has_sym(opcode)) {
-	help_image_st (ss,WN_st_idx(wn));
+      ss << " ";
+      help_image_st (ss,WN_st_idx(wn));
     }
 
     if (OPCODE_has_1ty(opcode)) {

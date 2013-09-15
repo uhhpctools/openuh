@@ -68,6 +68,7 @@
 #include "tracing.h"
 #include "profile_com.h"
 #include "fb_info.h"
+#include "vcg_whirlview.h"
 
 static BOOL simplify_tree = FALSE; /* Should we run the simplifier (for testing purposes) */
 
@@ -325,17 +326,52 @@ ir_all (char *input_file, char *output_file)
 
 } /* ir_all */
 
+/* Binary to Visualization conversion */
+static void
+ir_viz (char *input_file, char *output_file, char *globals_file,
+        const char *pu_name)
+{
+    WN *wn;
+    PU_Info *pu_tree, *pu = NULL;
+
+    if (globals_file == NULL) {
+        (void)Open_Input_Info (input_file);
+    } else {
+        (void)Open_Global_Input (globals_file);
+        (void)Open_Local_Input (input_file);
+    }
+
+    Initialize_Symbol_Tables (FALSE);
+    New_Scope (GLOBAL_SYMTAB, Malloc_Mem_Pool, FALSE);
+    pu_tree = Read_Global_Info (NULL);
+
+    if (output_file != NULL) {
+        if (freopen (output_file, "w+", stdout) == NULL) {
+            fprintf (stderr, "Can't open output file %s\n", output_file);
+            exit (1);
+        }
+    }
+
+    IR_reader_init();
+
+    vcg_pus(pu_tree, stdout, pu_name);
+
+    Free_Input_Info ();
+
+} /* ir_viz */
+
 static void
 usage (char *progname)
 {
-  INT a2b, b2a, sel, all;
+  INT a2b, b2a, sel, all, viz;
 
   // programes on windows are suffixed with .exe, so ignore that part
   a2b = (strncmp (progname, "ir_a2b",6) == 0);
   b2a = (strncmp (progname, "ir_b2a",6) == 0);
   sel = (strncmp (progname, "ir_sel",6) == 0);
   all = (strncmp (progname, "ir_all",6) == 0);
-  
+  viz = (strncmp (progname, "ir_viz",6) == 0);
+
   if (a2b) {
       fprintf (stderr, "New symbol table format not supported by ir_a2b (yet)\n");
   } else if (b2a) {
@@ -352,6 +388,8 @@ usage (char *progname)
 
   } else if (all) {
     fprintf (stderr, "Usage: %s <Binary IR input> [<Binary IR output>]\n", progname);
+  } else if (viz) {
+    fprintf (stderr, "Usage: %s <Binary IR input> [-globals <Global Symbtab>] [<graph output>] [-pu <pu name>]\n", progname);
   }
 
   exit (1);
@@ -360,9 +398,11 @@ usage (char *progname)
 main (INT argc, char *argv[])
 {
     register char *progname;
-    register INT a2b, b2a, sel, all;
+    register INT a2b, b2a, sel, all, viz;
     char *infile;
     char *outfile;
+    char *gfile;
+    char *pu_name;
     INT binarg = 1;
     BOOL stflag = FALSE;
     BOOL fbflag = FALSE;
@@ -394,6 +434,7 @@ main (INT argc, char *argv[])
     b2a = (strncmp (progname, "ir_b2a",6) == 0);
     sel = (strncmp (progname, "ir_sel",6) == 0);
     all = (strncmp (progname, "ir_all",6) == 0);
+    viz = (strncmp (progname, "ir_viz",6) == 0);
 
     if (a2b) {
 	usage (progname);
@@ -479,6 +520,44 @@ main (INT argc, char *argv[])
 	    usage(progname);
 	outfile = argv[2];
 	ir_all (argv[1], outfile);
+    }
+    else if (viz) {
+        if (argc < 2)
+            usage(progname);
+        if (!file_exists(argv[1]))
+            usage(progname);
+
+        if (argc < 3) {
+          pu_name = NULL;
+          outfile = NULL;
+          gfile = NULL;
+        } else {
+          pu_name = NULL;
+          outfile = NULL;
+          gfile = NULL;
+          int i = 2;
+          while (i < argc) {
+              if (strncmp(argv[i], "-pu", 3) == 0) {
+                  if (i < (argc-1)) {
+                      i++;
+                      pu_name = argv[i];
+                  } else {
+                      usage(progname);
+                  }
+              } else if (strncmp(argv[i], "-globals", 8) == 0) {
+                  if (i < (argc-1)) {
+                      i++;
+                      gfile = argv[i];
+                  } else {
+                      usage(progname);
+                  }
+              } else {
+                  outfile = argv[i];
+              }
+              i++;
+          }
+        }
+        ir_viz (argv[1], outfile, gfile, pu_name);
     }
     else 
 	fprintf(stderr, "unrecognized command %s\n", progname);
