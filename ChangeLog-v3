@@ -8,6 +8,17 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2013-10-09: (3.0.33)
+
+* misc. improvements/fixes for CAF
+  * fixes check for explicit interface for subroutines with dummy coarray args
+  * fixes runtime bug for atomic_define statement
+
+* other improvements
+  * adds ir_viz tool for generating VCG files from a WHIRL binary dump
+
+----------------------------------------------------------------------------
+
 2013-09-11: (3.0.32)
 
 * misc. improvements/fixes for CAF

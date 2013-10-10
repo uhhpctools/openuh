@@ -546,11 +546,13 @@ void coarray_free_all_shared_memory_slots()
 
 static void print_slots_below(struct shared_memory_slot *slot)
 {
-    FILE *f;
+    FILE *f = NULL;
     int i;
     struct shared_memory_slot *s;
 
+#if defined (TRACE)
     f = __trace_log_stream();
+#endif
 
     if (!f)
         f = stderr;

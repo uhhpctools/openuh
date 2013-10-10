@@ -1846,7 +1846,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
         in_progress = (ARMCI_Test(handle) == 0);
 
-        if (in_progress == 1) {
+        if (in_progress == 1 && hdl != (void *)-1) {
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
             handle_node->handle = handle;
@@ -1860,7 +1860,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             /* put has completed */
             comm_lcb_free(src);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
@@ -1947,7 +1947,7 @@ void comm_write(size_t proc, void *dest, void *src,
 
         in_progress = (ARMCI_Test(handle) == 0);
 
-        if (in_progress == 1) {
+        if (in_progress == 1 && hdl != (void *)-1) {
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
             handle_node->handle = handle;
@@ -1959,7 +1959,7 @@ void comm_write(size_t proc, void *dest, void *src,
             PROFILE_RMA_STORE_END(proc);
         } else if (handle == NULL) {
             /* put has completed */
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
@@ -2260,7 +2260,7 @@ void comm_strided_write_from_lcb(size_t proc,
 
             in_progress = (ARMCI_Test(handle) == 0);
 
-            if (in_progress == 1) {
+            if (in_progress == 1 && hdl != (void *)-1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
                 handle_node->handle = handle;
@@ -2274,7 +2274,7 @@ void comm_strided_write_from_lcb(size_t proc,
                 /* put has completed */
                 comm_lcb_free(src);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
@@ -2400,7 +2400,7 @@ void comm_strided_write(size_t proc,
 
             in_progress = (ARMCI_Test(handle) == 0);
 
-            if (in_progress == 1) {
+            if (in_progress == 1 && hdl != (void *)-1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
                 handle_node->handle = handle;
@@ -2413,7 +2413,7 @@ void comm_strided_write(size_t proc,
             } else if (handle == NULL) {
                 /* put has completed */
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);

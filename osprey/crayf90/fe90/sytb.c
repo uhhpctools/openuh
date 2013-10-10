@@ -6665,6 +6665,9 @@ void	fill_in_global_attr_ntry(int	ga_idx,
 #endif /* KEY Bug 14110 */
              GAD_VALUE_ATTR(ga_idx) ||
              GAD_ALLOCATABLE(ga_idx) ||
+#ifdef _UH_COARRAYS
+             ATD_PE_ARRAY_IDX(attr_idx) ||
+#endif
              GAD_TARGET(ga_idx)) {
             GAP_NEEDS_EXPL_ITRFC(ga_pgm_idx) = TRUE;
          }

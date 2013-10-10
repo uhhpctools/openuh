@@ -2679,7 +2679,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             comm_lcb_free(src);
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
@@ -2718,7 +2718,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             comm_lcb_free(src);
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
@@ -2816,7 +2816,7 @@ void comm_write(size_t proc, void *dest, void *src,
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
@@ -2854,7 +2854,7 @@ void comm_write(size_t proc, void *dest, void *src,
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
-            if (hdl != NULL)
+            if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
@@ -3112,7 +3112,7 @@ void comm_strided_write_from_lcb(size_t proc,
             } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 comm_lcb_free(src);
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
@@ -3160,7 +3160,7 @@ void comm_strided_write_from_lcb(size_t proc,
             } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 comm_lcb_free(src);
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
@@ -3276,7 +3276,7 @@ void comm_strided_write(size_t proc,
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
@@ -3320,7 +3320,7 @@ void comm_strided_write(size_t proc,
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
-                if (hdl != NULL)
+                if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
