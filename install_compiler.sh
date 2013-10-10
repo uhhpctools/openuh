@@ -373,6 +373,7 @@ INSTALL_WHIRL_STUFF () {
     [ "$INSTALL_FORTRAN" = "YES" ] && (cd ${PHASEPATH}; ln -sf be whirl2f_be) 
 
     INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_b2a    ${BIN_DIR}/ir_b2a
+    INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_viz    ${BIN_DIR}/ir_viz
     if [ "$INSTALL_GNU4" = "YES"  ]; then
       INSTALL_EXEC_SUB  ${AREA}/libspin_4_2_0/gspin42 ${BIN_DIR}/gspin42
       (cd ${BIN_DIR}; ln -sf gspin42 gspin)

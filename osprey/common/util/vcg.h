@@ -196,6 +196,8 @@ public:
 	void backEdge(Boolean val) { isBackEdge = val; }
 	Boolean backEdge() const { return isBackEdge; }
 
+    void setPriority(const UInt32 val) { priority = val; }
+
 private:
 
 	void next(VCGEdge *aNewEdge) { theNext = aNewEdge; }
@@ -209,6 +211,7 @@ private:
 	const char *theLabel;
 	Boolean isBackEdge:1;
 	VCGEdgeLineStyle theLineStyle:3;
+	UInt32 priority;
 }; 
 
 ////////////////////////////////////////////////////////////////////////////

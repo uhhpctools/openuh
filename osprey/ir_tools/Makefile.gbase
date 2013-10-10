@@ -82,7 +82,7 @@ GLDOPTS = $(STD_LOAD_OPTS)
 LIBCOMUTIL = $(BUILD_AREA)/libcomutil/libcomutil.a
 LLDLIBS	= $(LIBCOMUTIL) -lm
 
-TARGETS = ir_b2a ir_size ir_sel ir_all
+TARGETS = ir_b2a ir_size ir_sel ir_all ir_viz
 
 COMMON_UTIL_DIR= $(BUILD_TOT)/common/util
 COMMON_COM_DIR= $(BUILD_TOT)/common/com
@@ -178,14 +178,15 @@ install: default
 	$(STD_INSTALL) -lns ir_b2a -F /usr/sbin ir_a2b
 	$(STD_INSTALL) -lns ir_b2a -F /usr/sbin ir_sel
 	$(STD_INSTALL) -lns ir_b2a -F /usr/sbin ir_all
+	$(STD_INSTALL) -lns ir_b2a -F /usr/sbin ir_viz
 	$(STD_INSTALL) -F /usr/sbin ir_size
 
 include $(COMMONRULES)
 
 VPATH = $(BUILD_BASE) $(COMMON_COM_DIR) $(COMMON_COM_TARG_DIR) $(BE_COM_DIR)
 
-ir_b2a: $(OBJECTS) ir_a2b.o
-	$(link.c++f) -o ir_b2a ir_a2b.o $(OBJECTS) $(LDFLAGS)
+ir_b2a: $(OBJECTS) ir_a2b.o vcg_whirlview.o
+	$(link.c++f) -o ir_b2a ir_a2b.o vcg_whirlview.o $(OBJECTS) $(LDFLAGS)
 
 ir_a2b: ir_b2a
 	ln -sf ir_b2a ir_a2b
@@ -195,6 +196,9 @@ ir_sel: ir_b2a
 
 ir_all: ir_b2a
 	ln -sf ir_b2a ir_all
+
+ir_viz: ir_b2a
+	ln -sf ir_b2a ir_viz
 
 ir_size: $(OBJECTS) ir_size.o ir_b2a
 	$(link.c++f) -o ir_size ir_size.o $(OBJECTS) $(LDFLAGS)
