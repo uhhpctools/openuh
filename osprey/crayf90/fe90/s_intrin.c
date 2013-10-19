@@ -3751,7 +3751,12 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                 attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
+#ifndef _UH_COARRAYS
+            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+#else
             if (!arg_info_list[info_idx1].ed.is_coarray) {
+#endif
                /* error, not a co-array */
                PRINTMSG(opnd_line, 1575, Error, opnd_col);
             }
