@@ -796,6 +796,23 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         ST *LCB_st;
                         WN *xfer_sz_node;
 
+
+                        WN *if_local_wn = gen_local_image_condition(
+                                                image,
+                                                WN_COPY_Tree(stmt_node),
+                                                TRUE);
+
+
+                        /* if storing to local image, we need to release the
+                         * source LCB */
+                        /*
+                        insert_wnx = Generate_Call_release_lcb(
+                                WN_Lda(Pointer_type, 0, LCB_st) );
+                        WN_INSERT_BlockLast( WN_then(if_local_wn), insert_wnx);
+                        */
+
+                        /* setup else block for storing to remote image ... */
+
                         /* create source LCB for co-indexed term */
                         LCB_st = gen_lcbptr_symbol(
                                Make_Pointer_Type(elem_type,FALSE),
@@ -805,22 +822,18 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         insert_wnx = Generate_Call_acquire_lcb(
                                 xfer_sz_node,
                                 WN_Lda(Pointer_type, 0, LCB_st));
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
+                        WN_INSERT_BlockFirst(WN_else(if_local_wn),
+                                             insert_wnx);
 
                         /* create "normalized" assignment to remote coarray */
                         new_stmt_node = WN_COPY_Tree(stmt_node);
                         replace_RHS_with_LCB(new_stmt_node,
                                              LCB_st);
 
-                        WN *if_local_wn = gen_local_image_condition(
-                                                image,
-                                                WN_COPY_Tree(new_stmt_node),
-                                                TRUE);
-
                         Set_LCB_Stmt(new_stmt_node);
                         Set_Coarray_Sync(new_stmt_node, Coarray_Sync(stmt_node));
 
-                        WN_INSERT_BlockFirst( WN_else(if_local_wn),
+                        WN_INSERT_BlockLast( WN_else(if_local_wn),
                                               new_stmt_node);
 
                         WN_INSERT_BlockAfter(blk_node, stmt_node, if_local_wn);
@@ -832,8 +845,17 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                        wn_arrayexp, &replace_wn);
                         WN_Delete(coindexed_arr_ref);
                         temp_wipre.Replace(replace_wn);
+
+                        /* move copy of original statment into else block */
+                        WN_INSERT_BlockAfter( WN_else(if_local_wn),
+                                              WN_first(WN_else(if_local_wn)),
+                                              WN_COPY_Tree(stmt_node) );
+
                         wipre = temp_wipre;
 
+                        /* defer deletion of the old statment so that we can continue
+                         * to traverse the tree */
+                        add_caf_stmt_to_delete_list(stmt_node, blk_node);
                     }
 
                 } else if ( array_ref_on_RHS(coindexed_arr_ref, &elem_type) ) {
