@@ -223,6 +223,7 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
 {
     struct shared_memory_slot *empty_slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
                                                      var_size);
@@ -243,12 +244,16 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
+
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
         LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return empty_slot->addr;
     }
 
     void *retval =
         split_empty_shared_memory_slot_from_top(empty_slot, var_size);
+
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return retval;
@@ -264,7 +269,7 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
     struct shared_memory_slot *empty_slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
@@ -282,6 +287,7 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
         LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return empty_slot->addr;
     }
@@ -289,6 +295,7 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
     void *retval = split_empty_shared_memory_slot_from_bottom(empty_slot,
                                                               var_size);
 
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 
     return retval;
@@ -304,12 +311,15 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
     struct shared_memory_slot *empty_slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
     if (empty_slot == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Couldn't find empty slot.");
+
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return 0;
     }
 
@@ -321,12 +331,15 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return empty_slot->addr;
     }
 
     void *retval = split_empty_shared_memory_slot_from_bottom(empty_slot,
                                                               var_size);
 
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 
     return retval;
@@ -458,6 +471,7 @@ void coarray_deallocate_(void *var_address)
     struct shared_memory_slot *slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     slot = find_shared_memory_slot_above(common_slot, var_address);
     if (slot) {
@@ -468,6 +482,9 @@ void coarray_deallocate_(void *var_address)
     if (slot == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
                      var_address);
+
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
     }
 
@@ -476,6 +493,7 @@ void coarray_deallocate_(void *var_address)
 
     empty_shared_memory_slot(slot);
 
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
@@ -483,12 +501,15 @@ void coarray_asymmetric_deallocate_(void *var_address)
 {
     struct shared_memory_slot *slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
                      var_address);
+
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
     }
 
@@ -497,6 +518,7 @@ void coarray_asymmetric_deallocate_(void *var_address)
 
     empty_shared_memory_slot(slot);
 
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 

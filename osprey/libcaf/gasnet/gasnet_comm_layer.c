@@ -88,6 +88,7 @@
 #include "service.h"
 #include "trace.h"
 #include "util.h"
+#include "collectives.h"
 #include "profile.h"
 
 const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
@@ -95,9 +96,12 @@ const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
 const size_t SMALL_XFER_SIZE = 200;     /* size for which local mem copy would be
                                            advantageous */
 
+extern co_reduce_t co_reduce_algorithm;
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
+extern unsigned long _log2_images;
+extern unsigned long _rem_images;
 extern mem_usage_info_t *mem_info;
 
 extern int rma_prof_rid;
@@ -1114,18 +1118,59 @@ void comm_init()
     my_proc = gasnet_mynode();
     num_procs = gasnet_nodes();
 
+    /* compute log2_images and rem_images */
+    int log2_procs = 0;
+    long n = num_procs;
+    long m = 1;
+    while (n > 0) {
+        static int first = 1;
+        if (first) {
+            first = 0;
+        } else {
+            log2_procs++;
+            m <<= 1;
+        }
+        n >>= 1;
+    }
+    long rem_procs = num_procs - m;
+
 
     /* set extern symbols used for THIS_IMAGE and NUM_IMAGES intrinsics */
     _this_image = my_proc + 1;
     _num_images = num_procs;
+    _log2_images = log2_procs;
+    _rem_images = rem_procs;
 
     LIBCAF_TRACE_INIT();
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "_num_images = %ld, _log2_images = %ld, _rem_images = %ld",
+                  _num_images, _log2_images, _rem_images);
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "after gasnet_init");
 
 
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
             Error("Number of images must not exceed %lu", MAX_NUM_IMAGES);
+        }
+    }
+
+    /* which reduction algorithm to use */
+    char *alg;
+    alg = getenv(ENV_CO_REDUCE_ALGORITHM);
+    co_reduce_algorithm = CO_REDUCE_DEFAULT;
+
+    if (alg != NULL) {
+        if (strncasecmp(alg, "all2all", 7) == 0) {
+            co_reduce_algorithm = CO_REDUCE_ALL2ALL;
+        } else if (strncasecmp(alg, "2tree_syncall", 13) == 0) {
+            co_reduce_algorithm = CO_REDUCE_2TREE_SYNCALL;
+        } else if (strncasecmp(alg, "2tree_syncimages", 16) == 0) {
+            co_reduce_algorithm = CO_REDUCE_2TREE_SYNCIMAGES;
+        } else if (strncasecmp(alg, "2tree_events", 12) == 0) {
+            co_reduce_algorithm = CO_REDUCE_2TREE_EVENTS;
+        } else {
+            if (my_proc == 0) {
+                Warning("CO_REDUCE_ALGORITHM %s is not supported. Using default", alg);
+            }
         }
     }
 

@@ -3569,6 +3569,7 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
 
    IR_RANK(ir_idx) = res_exp_desc->rank;
 
+#ifndef _UH_COARRAYS
    if (ATP_INTRIN_ENUM(*spec_idx) == Rem_Images_Intrinsic) {
       ATP_EXTERNAL_INTRIN(*spec_idx) = FALSE;
       point_five = 0.5;
@@ -3655,8 +3656,9 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
       IR_FLD_L(ir_idx) = IR_Tbl_Idx;
       IR_OPND_R(ir_idx) = null_opnd;
       IR_OPR(ir_idx) = Int_Opr;
-   }
-   else if (ATP_INTRIN_ENUM(*spec_idx) == This_Image_Intrinsic) {
+   } else
+#endif /* !defined(_UH_COARRAYS) */
+   if (ATP_INTRIN_ENUM(*spec_idx) == This_Image_Intrinsic) {
 
       if (IR_LIST_CNT_R(ir_idx) > 0) {
 

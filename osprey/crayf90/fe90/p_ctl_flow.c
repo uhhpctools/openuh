@@ -4136,7 +4136,13 @@ PARSE_LOGICAL_IF:
          case Endfile_Stmt:
          case Where_Stmt:
          case Forall_Stmt:
-
+#ifdef _UH_COARRAYS
+         case Error_Stop_Stmt:
+         case Sync_Stmt:
+         case Lock_Stmt:
+         case Unlock_Stmt:
+         case Event_Stmt:
+#endif
 
             if (!stmt_parsers_called) {
 

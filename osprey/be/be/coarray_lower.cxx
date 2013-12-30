@@ -144,6 +144,8 @@ static std::map<ST *, ST *> common_save_target_symbol_map;
 
 static ST *this_image_st = NULL;
 static ST *num_images_st = NULL;
+static ST *log2_images_st = NULL;
+static ST *rem_images_st = NULL;
 
 static TY_IDX null_coarray_type;
 static TY_IDX null_array_type;
@@ -530,12 +532,14 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 /* don't allot space for this symbol in global memory */
                 //Set_TY_size(ST_type(sym), 0);
                 Set_ST_type(sym, null_coarray_type);
+                Set_ST_is_not_used(sym);
             }
         } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
             if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
                 gen_save_target_symbol(sym);
                 /* don't allot space for this symbol in global memory */
                 Set_ST_type(sym, null_array_type);
+                Set_ST_is_not_used(sym);
             } else if (ST_sclass(sym) == SCLASS_AUTO) {
                 gen_auto_target_symbol(sym);
                 ST *targ_ptr = auto_target_symbol_map[sym];
@@ -549,6 +553,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 /* don't allot space for this symbol in stack */
                 Set_ST_type(sym, null_array_type);
+                Set_ST_is_not_used(sym);
             }
         }
     }
@@ -565,6 +570,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     /* don't allot space for this symbol in global memory */
                     //Set_TY_size(ST_type(sym), 0);
                     Set_ST_type(sym, null_coarray_type);
+                    Set_ST_is_not_used(sym);
                 }
             } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
                 if (ST_sclass(sym) == SCLASS_COMMON ||
@@ -572,6 +578,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     gen_global_save_target_symbol(sym);
                     /* don't allot space for this symbol in global memory */
                     Set_ST_type(sym, null_array_type);
+                    Set_ST_is_not_used(sym);
                 }
             }
         }
@@ -4205,6 +4212,8 @@ static WN * Generate_Call_coarray_strided_write(WN *image, WN *dest,
  * Generates global extern symbols for:
  *    _this_image (this_image_st)
  *    _num_images (num_images_st)
+ *    _log2_images (num_images_st)
+ *    _rem_images (num_images_st)
  *
  * if they have not already been created.
  */
@@ -4224,6 +4233,20 @@ void init_caf_extern_symbols()
                 CLASS_VAR, SCLASS_EXTERN, EXPORT_PREEMPTIBLE,
                 MTYPE_To_TY(MTYPE_U8));
     }
+
+    if (log2_images_st == NULL) {
+        log2_images_st = New_ST( GLOBAL_SYMTAB );
+        ST_Init( log2_images_st, Save_Str( "_log2_images" ),
+                CLASS_VAR, SCLASS_EXTERN, EXPORT_PREEMPTIBLE,
+                MTYPE_To_TY(MTYPE_U8));
+    }
+
+    if (rem_images_st == NULL) {
+        rem_images_st = New_ST( GLOBAL_SYMTAB );
+        ST_Init( rem_images_st, Save_Str( "_rem_images" ),
+                CLASS_VAR, SCLASS_EXTERN, EXPORT_PREEMPTIBLE,
+                MTYPE_To_TY(MTYPE_U8));
+    }
 }
 
 /*
@@ -4234,6 +4257,8 @@ void init_caf_extern_symbols()
  *
  *    _THIS_IMAGE0: replace with global symbol _this_image
  *    _NUM_IMAGES: replace with global symbol _num_images
+ *    _LOG2_IMAGES: replace with global symbol _log2_images
+ *    _REM_IMAGES: replace with global symbol _rem_images
  *    _SYNC_IMAGES: replace arguments with (array-list, #array-list)
  *
  */
@@ -4273,6 +4298,22 @@ static void handle_caf_call_stmts(
         WN_Delete( WN_kid0(wn_next) );
         WN_kid0(wn_next) = WN_Ldid(MTYPE_U8, 0,
                 num_images_st, ST_type(num_images_st));
+    } else if ( NAME_IS(func_st, "_LOG2_IMAGES") ) {
+        wn_next = WN_next(wn);
+        wipre.Delete();
+        Is_True( WN_operator(wn_next) == OPR_STID,
+                ("Expected STID in IR after _log2_images() call"));
+        WN_Delete( WN_kid0(wn_next) );
+        WN_kid0(wn_next) = WN_Ldid(MTYPE_U8, 0,
+                log2_images_st, ST_type(log2_images_st));
+    } else if ( NAME_IS(func_st, "_REM_IMAGES") ) {
+        wn_next = WN_next(wn);
+        wipre.Delete();
+        Is_True( WN_operator(wn_next) == OPR_STID,
+                ("Expected STID in IR after _rem_images() call"));
+        WN_Delete( WN_kid0(wn_next) );
+        WN_kid0(wn_next) = WN_Ldid(MTYPE_U8, 0,
+                rem_images_st, ST_type(rem_images_st));
     } else if ( NAME_IS(func_st, "_SYNC_IMAGES") ) {
         wn_next = WN_next(wn);
 

@@ -74,10 +74,10 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 
 CFILES = \
    caf_rtl.c \
-   caf_collectives.c \
    armci_comm_layer.c \
    alloc.c \
    lock.c \
+   collectives.c \
    env.c \
    util.c
 

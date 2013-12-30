@@ -1,8 +1,9 @@
-          !!!!!!!!!!!!!!!!!!!!!
-          ! INT1 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_INT1_0(source, result)
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT1 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_ALL2ALL_INT1_0(source, result)
            integer (kind=1) :: source[*], result
            integer :: i
 
@@ -12,9 +13,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_0
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_0
 
-         subroutine CO_MAXVAL_INT1_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_1(source, result)
            integer (kind=1) :: source(:)[*], result(:)
            integer :: i
 
@@ -24,9 +25,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_1
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_1
 
-         subroutine CO_MAXVAL_INT1_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_2(source, result)
            integer (kind=1) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -36,9 +37,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_2
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_2
 
-         subroutine CO_MAXVAL_INT1_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_3(source, result)
            integer (kind=1) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -48,9 +49,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_3
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_3
 
-         subroutine CO_MAXVAL_INT1_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_4(source, result)
            integer (kind=1) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -60,9 +61,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_4
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_4
 
-         subroutine CO_MAXVAL_INT1_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_5(source, result)
            integer (kind=1) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -72,9 +73,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_5
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_5
 
-         subroutine CO_MAXVAL_INT1_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_6(source, result)
            integer (kind=1) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -84,9 +85,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_6
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_6
 
-         subroutine CO_MAXVAL_INT1_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT1_7(source, result)
            integer (kind=1) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -96,13 +97,13 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT1_7
+         end subroutine CO_MAXVAL_ALL2ALL_INT1_7
 
-          !!!!!!!!!!!!!!!!!!!!!
-          ! INT2 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT2 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_INT2_0(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_0(source, result)
            integer (kind=2) :: source[*], result
            integer :: i
 
@@ -112,9 +113,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_0
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_0
 
-         subroutine CO_MAXVAL_INT2_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_1(source, result)
            integer (kind=2) :: source(:)[*], result(:)
            integer :: i
 
@@ -124,9 +125,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_1
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_1
 
-         subroutine CO_MAXVAL_INT2_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_2(source, result)
            integer (kind=2) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -136,9 +137,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_2
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_2
 
-         subroutine CO_MAXVAL_INT2_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_3(source, result)
            integer (kind=2) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -148,9 +149,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_3
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_3
 
-         subroutine CO_MAXVAL_INT2_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_4(source, result)
            integer (kind=2) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -160,9 +161,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_4
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_4
 
-         subroutine CO_MAXVAL_INT2_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_5(source, result)
            integer (kind=2) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -172,9 +173,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_5
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_5
 
-         subroutine CO_MAXVAL_INT2_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_6(source, result)
            integer (kind=2) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -184,9 +185,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_6
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_6
 
-         subroutine CO_MAXVAL_INT2_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT2_7(source, result)
            integer (kind=2) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -196,13 +197,13 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT2_7
+         end subroutine CO_MAXVAL_ALL2ALL_INT2_7
 
-          !!!!!!!!!!!!!!!!!!!!!
-          ! INT4 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT4 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_INT4_0(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_0(source, result)
            integer (kind=4) :: source[*], result
            integer :: i
 
@@ -212,9 +213,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_0
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_0
 
-         subroutine CO_MAXVAL_INT4_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_1(source, result)
            integer (kind=4) :: source(:)[*], result(:)
            integer :: i
 
@@ -224,9 +225,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_1
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_1
 
-         subroutine CO_MAXVAL_INT4_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_2(source, result)
            integer (kind=4) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -236,9 +237,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_2
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_2
 
-         subroutine CO_MAXVAL_INT4_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_3(source, result)
            integer (kind=4) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -248,9 +249,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_3
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_3
 
-         subroutine CO_MAXVAL_INT4_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_4(source, result)
            integer (kind=4) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -260,9 +261,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_4
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_4
 
-         subroutine CO_MAXVAL_INT4_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_5(source, result)
            integer (kind=4) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -272,9 +273,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_5
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_5
 
-         subroutine CO_MAXVAL_INT4_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_6(source, result)
            integer (kind=4) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -284,9 +285,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_6
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_6
 
-         subroutine CO_MAXVAL_INT4_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT4_7(source, result)
            integer (kind=4) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -296,13 +297,13 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT4_7
+         end subroutine CO_MAXVAL_ALL2ALL_INT4_7
 
-          !!!!!!!!!!!!!!!!!!!!!
-          ! INT8 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT8 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_INT8_0(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_0(source, result)
            integer (kind=8) :: source[*], result
            integer :: i
 
@@ -312,9 +313,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_0
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_0
 
-         subroutine CO_MAXVAL_INT8_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_1(source, result)
            integer (kind=8) :: source(:)[*], result(:)
            integer :: i
 
@@ -324,9 +325,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_1
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_1
 
-         subroutine CO_MAXVAL_INT8_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_2(source, result)
            integer (kind=8) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -336,9 +337,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_2
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_2
 
-         subroutine CO_MAXVAL_INT8_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_3(source, result)
            integer (kind=8) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -348,9 +349,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_3
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_3
 
-         subroutine CO_MAXVAL_INT8_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_4(source, result)
            integer (kind=8) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -360,9 +361,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_4
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_4
 
-         subroutine CO_MAXVAL_INT8_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_5(source, result)
            integer (kind=8) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -372,9 +373,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_5
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_5
 
-         subroutine CO_MAXVAL_INT8_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_6(source, result)
            integer (kind=8) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -384,9 +385,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_6
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_6
 
-         subroutine CO_MAXVAL_INT8_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_INT8_7(source, result)
            integer (kind=8) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -396,13 +397,13 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_INT8_7
+         end subroutine CO_MAXVAL_ALL2ALL_INT8_7
 
-          !!!!!!!!!!!!!!!!!!!!!
-          ! REAL4 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL4 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_REAL4_0(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_0(source, result)
            real (kind=4) :: source[*], result
            integer :: i
 
@@ -412,9 +413,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_0
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_0
 
-         subroutine CO_MAXVAL_REAL4_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_1(source, result)
            real (kind=4) :: source(:)[*], result(:)
            integer :: i
 
@@ -424,9 +425,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_1
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_1
 
-         subroutine CO_MAXVAL_REAL4_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_2(source, result)
            real (kind=4) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -436,9 +437,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_2
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_2
 
-         subroutine CO_MAXVAL_REAL4_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_3(source, result)
            real (kind=4) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -448,9 +449,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_3
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_3
 
-         subroutine CO_MAXVAL_REAL4_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_4(source, result)
            real (kind=4) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -460,9 +461,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_4
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_4
 
-         subroutine CO_MAXVAL_REAL4_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_5(source, result)
            real (kind=4) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -472,9 +473,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_5
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_5
 
-         subroutine CO_MAXVAL_REAL4_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_6(source, result)
            real (kind=4) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -484,9 +485,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_6
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_6
 
-         subroutine CO_MAXVAL_REAL4_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL4_7(source, result)
            real (kind=4) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -496,13 +497,13 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL4_7
+         end subroutine CO_MAXVAL_ALL2ALL_REAL4_7
 
-          !!!!!!!!!!!!!!!!!!!!!
-          ! REAL8 CO_MAXVAL
-          !!!!!!!!!!!!!!!!!!!!!
+          !!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL8 CO_MAXVAL_ALL2ALL
+          !!!!!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_MAXVAL_REAL8_0(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_0(source, result)
            real (kind=8) :: source[*], result
            integer :: i
 
@@ -512,9 +513,9 @@
              result = max(result,1*source[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_0
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_0
 
-         subroutine CO_MAXVAL_REAL8_1(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_1(source, result)
            real (kind=8) :: source(:)[*], result(:)
            integer :: i
 
@@ -524,9 +525,9 @@
              result = max(result,1*source(:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_1
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_1
 
-         subroutine CO_MAXVAL_REAL8_2(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_2(source, result)
            real (kind=8) :: source(:,:)[*], result(:,:)
            integer :: i
 
@@ -536,9 +537,9 @@
              result = max(result,1*source(:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_2
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_2
 
-         subroutine CO_MAXVAL_REAL8_3(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_3(source, result)
            real (kind=8) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
@@ -548,9 +549,9 @@
              result = max(result,1*source(:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_3
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_3
 
-         subroutine CO_MAXVAL_REAL8_4(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_4(source, result)
            real (kind=8) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
@@ -560,9 +561,9 @@
              result = max(result,1*source(:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_4
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_4
 
-         subroutine CO_MAXVAL_REAL8_5(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_5(source, result)
            real (kind=8) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
@@ -572,9 +573,9 @@
              result = max(result,1*source(:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_5
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_5
 
-         subroutine CO_MAXVAL_REAL8_6(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_6(source, result)
            real (kind=8) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
@@ -584,9 +585,9 @@
              result = max(result,1*source(:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_6
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_6
 
-         subroutine CO_MAXVAL_REAL8_7(source, result)
+         subroutine CO_MAXVAL_ALL2ALL_REAL8_7(source, result)
            real (kind=8) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
@@ -596,5 +597,5 @@
              result = max(result,1*source(:,:,:,:,:,:,:)[i])
            end do
            sync all
-         end subroutine CO_MAXVAL_REAL8_7
+         end subroutine CO_MAXVAL_ALL2ALL_REAL8_7
 

@@ -76,11 +76,11 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 
 CFILES = \
 	caf_rtl.c \
-	caf_collectives.c \
 	gasnet_comm_layer.c  \
 	alloc.c \
 	service.c \
 	lock.c \
+	collectives.c \
 	env.c \
 	util.c
 

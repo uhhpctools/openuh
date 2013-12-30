@@ -29,13 +29,46 @@
 #ifndef _PROFILE_H
 #define _PROFILE_H
 
+
+/* needs to be consistent with parameters declared in caf_profiles
+ * (include/fort/caf-extra.caf) */
+typedef enum caf_prof_groups {
+     CAFPROF_STARTUP               = 0X00000001,
+     CAFPROF_STOPPED               = 0X00000002,
+     CAFPROF_COARRAY_ALLOC_DEALLOC = 0X00000004,
+     CAFPROF_TARGET_ALLOC_DEALLOC  = 0X00000008,
+
+     CAFPROF_LCB                   = 0X00000010,
+     CAFPROF_GET                   = 0X00000020,
+     CAFPROF_PUT                   = 0X00000040,
+     CAFPROF_WAIT                  = 0X00000080,
+
+     CAFPROF_SYNC_STATEMENTS       = 0X00000100,
+     CAFPROF_MUTEX                 = 0X00000200,
+     CAFPROF_EVENTS                = 0X00000400,
+     CAFPROF_ATOMICS               = 0X00000800,
+
+     CAFPROF_BCAST                 = 0X00001000,
+     CAFPROF_REDUCE                = 0X00002000,
+
+     /* group collections */
+     CAFPROF_NONE                  = 0x00000000,
+     CAFPROF_MEM_ALLOC             = 0x0000001C,
+     CAFPROF_ONESIDED_COMM         = 0X000000F0,
+     CAFPROF_SYNC                  = 0X00000F80,
+     CAFPROF_DEFAULT               = 0x00000FFF,
+     CAFPROF_COLLECTIVES           = 0X00003000,
+     CAFPROF_ALL                   = 0XFFFFFFFF
+} caf_prof_groups_t;
+
+
 #ifndef PCAF_INSTRUMENT
 
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)                        ((void) 1)
 #define PROFILE_FUNC_ENTRY(grp)                                      ((void) 1)
 
 #define PROFILE_REGION_EXIT(rname)                                   ((void) 1)
-#define PROFILE_FUNC_EXIT()                                          ((void) 1)
+#define PROFILE_FUNC_EXIT(grp)                                       ((void) 1)
 
 
 
@@ -84,13 +117,21 @@ extern int in_rma_region;
 extern int rma_prof_rid;
 extern int profiling_enabled;
 
+extern caf_prof_groups_t prof_groups;
+
+extern const char *CAFPROF_GRP;
+extern const char *CAFPROF_GRP_MEM;
+extern const char *CAFPROF_GRP_COMM;
+extern const char *CAFPROF_GRP_SYNC;
+extern const char *CAFPROF_GRP_COLL;
+
 extern void esd_enter(elg_ui4);
 extern void esd_exit(elg_ui4);
 
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)    \
     static int _##rname##_init = 0; \
     static elg_ui4 _##rname##_rid; \
-    if (profiling_enabled) { \
+    if (profiling_enabled && (prof_groups&(grp))) { \
         if (!_##rname##_init) { \
             int fid = esd_def_file(__FILE__); \
             _##rname##_rid = esd_def_region(#rname , fid, __LINE__, ELG_NO_LNO, \
@@ -103,23 +144,34 @@ extern void esd_exit(elg_ui4);
 #define PROFILE_FUNC_ENTRY(grp) \
     static int _prof_func_init = 0; \
     static elg_ui4 _prof_func_rid; \
-    if (profiling_enabled) { \
+    if (profiling_enabled && (prof_groups&(grp))) { \
         if (!_prof_func_init) { \
             int fid = esd_def_file(__FILE__); \
+            const char *group_name; \
+            if (CAFPROF_MEM_ALLOC & grp) \
+                group_name = CAFPROF_GRP_MEM; \
+            else if (CAFPROF_ONESIDED_COMM & grp) \
+                group_name = CAFPROF_GRP_COMM; \
+            else if (CAFPROF_SYNC & grp) \
+                group_name = CAFPROF_GRP_SYNC; \
+            else if (CAFPROF_COLLECTIVES & grp) \
+                group_name = CAFPROF_GRP_COLL; \
+            else \
+                group_name = CAFPROF_GRP; \
             _prof_func_rid = esd_def_region(__func__ , fid, __LINE__, ELG_NO_LNO, \
-                    "CAF" , ELG_FUNCTION); \
+                    group_name , ELG_FUNCTION); \
             _prof_func_init = 1; \
         } \
         esd_enter(_prof_func_rid); \
     }
 
-#define PROFILE_REGION_EXIT(rname)  \
-    if (profiling_enabled) { \
+#define PROFILE_REGION_EXIT(rname,grp)  \
+    if (profiling_enabled && (prof_groups&(grp))) { \
         esd_exit(_##rname##_rid); \
     }
 
-#define PROFILE_FUNC_EXIT()  \
-    if (profiling_enabled) { \
+#define PROFILE_FUNC_EXIT(grp)  \
+    if (profiling_enabled && (prof_groups&(grp))) { \
         esd_exit(_prof_func_rid); \
     }
 
@@ -215,8 +267,13 @@ void profile_rma_end_all_nbloads_to_proc(int proc);
 void profile_set_in_prof_region();
 void profile_unset_in_prof_region();
 
-void uhcaf_profile_suspend();
-void uhcaf_profile_resume();
+void uhcaf_profile_start();
+void uhcaf_profile_stop();
+
+void uhcaf_profile_set_events(caf_prof_groups_t *groups);
+void uhcaf_profile_reset_events();
+void uhcaf_profile_add_events(caf_prof_groups_t *groups);
+void uhcaf_profile_remove_events(caf_prof_groups_t *groups);
 
 #endif                          /* PCAF_INSTRUMENT */
 

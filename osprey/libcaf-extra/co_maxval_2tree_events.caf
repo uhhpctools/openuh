@@ -1,0 +1,3073 @@
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT1 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source, result
+           integer (kind=1), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:), result(:)
+           integer (kind=1), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:), result(:,:)
+           integer (kind=1), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:,:), result(:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT1_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=1) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT1_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT2 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source, result
+           integer (kind=2), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:), result(:)
+           integer (kind=2), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:), result(:,:)
+           integer (kind=2), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:,:), result(:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT2_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=2) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT2_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT4 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source, result
+           integer (kind=4), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:), result(:)
+           integer (kind=4), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:), result(:,:)
+           integer (kind=4), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:,:), result(:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT4_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=4) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT4_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT8 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source, result
+           integer (kind=8), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:), result(:)
+           integer (kind=8), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:), result(:,:)
+           integer (kind=8), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:,:), result(:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_INT8_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           integer (kind=8) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_INT8_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL4 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source, result
+           real (kind=4), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:), result(:)
+           real (kind=4), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:), result(:,:)
+           real (kind=4), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:,:), result(:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:,:,:), result(:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=4) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL4_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL8 CO_MAXVAL_2TREE_EVENTS
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_0(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source, result
+           real (kind=8), allocatable :: buf[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           allocate( ev(ne)[*] )
+           allocate( buf[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_0
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_1(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:), result(:)
+           real (kind=8), allocatable :: buf(:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_1
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_2(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:), result(:,:)
+           real (kind=8), allocatable :: buf(:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_2
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_3(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:,:), result(:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_3
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_4(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:,:,:), result(:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_4
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_5(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_5
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_6(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_6
+
+         subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_7(source, result)
+              type :: EVENT_TYPE
+                  integer(kind=8) :: e = 0
+              end type EVENT_TYPE
+           real (kind=8) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: l,k,ti,ni,li,ri,ne
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           type(event_type),allocatable :: ev(:)[:]
+           ti = this_image()
+           ni = num_images()
+           li = log2_images()
+           ri = rem_images()
+           ne = li
+           if (ri /= 0) ne = ne + 1
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( ev(ne)[*] )
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           k = 1
+           l = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       event wait(ev(l))
+                       buf = max( buf,buf(:,:,:,:,:,:,:)[ti+k])
+                   end if
+               else
+                   if ((ti-k)>=1) then
+                       event post(ev(l)[ti-k])
+                   end if
+               end if
+               k = k*2
+               l = l+1
+           end do
+           l = ne
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           event post(ev(l)[ti+k])
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           event wait(ev(l))
+                       end if
+                   end if
+               end if
+               k = k/2
+               l = l-1
+           end do
+           result = buf
+           deallocate(buf)
+           deallocate(ev)
+         end subroutine CO_MAXVAL_2TREE_EVENTS_REAL8_7
+
