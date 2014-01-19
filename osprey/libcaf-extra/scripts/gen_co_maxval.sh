@@ -214,9 +214,9 @@ write_2tree_syncimages()
     local ty1=$1
     local ty2="$2 $3"
     local indent="       "
-    echo -e "$indent   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo -e "$indent   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     echo -e "$indent   ! $ty1 CO_MAXVAL_2TREE_SYNCIMAGES"
-    echo -e "$indent   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo -e "$indent   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     echo ""
      for d in `seq 0 7`; do
         echo -e  "$indent  subroutine CO_MAXVAL_2TREE_SYNCIMAGES_"$ty1"_$d(source, result)"
@@ -280,13 +280,13 @@ write_2tree_syncimages()
         echo -n "[*] )"
         echo ""
         echo -e "$indent    buf = source"
-        echo -e "$indent    sync all"
         echo -e "$indent    k = 1"
 
         echo -e "$indent    do while (k < ni)"
         echo -e "$indent        if ( mod(ti-1,2*k)==0) then"
         echo -e "$indent            if ((ti+k)<=ni) then"
-        echo -n "$indent                buf = max( buf,buf"
+        echo -e "$indent                sync images(ti+k)"
+        echo -n "$indent                buf = max(buf, buf"
         if [ $d -gt 0 ]; then
             echo -n "(:"
         fi
@@ -296,16 +296,11 @@ write_2tree_syncimages()
         if [ $d -gt 0 ]; then
             echo -n ")"
         fi
-        echo -e "[ti+k] )"
+        echo -e "[ti+k])"
         echo -e "$indent            end if"
-        echo -e "$indent            if (mod(ti-1,4*k)==0) then"
-        echo -e "$indent                if ((ti+2*k)<=ni) then"
-        echo -e "$indent                    sync images(ti+2*k)"
-        echo -e "$indent                end if"
-        echo -e "$indent            else"
-        echo -e "$indent                if ((ti-2*k)>=1) then"
-        echo -e "$indent                    sync images(ti-2*k)"
-        echo -e "$indent                end if"
+        echo -e "$indent        else if (mod(ti-1,2*k)==k) then"
+        echo -e "$indent            if ((ti-k)>=1) then"
+        echo -e "$indent                sync images(ti-k)"
         echo -e "$indent            end if"
         echo -e "$indent        end if"
         echo -e "$indent        k = k*2"
@@ -448,7 +443,7 @@ write_2tree_events()
         fi
         echo -e "[ti+k])"
         echo -e "$indent            end if"
-        echo -e "$indent        else"
+        echo -e "$indent        else if (mod(ti-1,2*k)==k) then"
         echo -e "$indent            if ((ti-k)>=1) then"
         echo -e "$indent                event post(ev(l)[ti-k])"
         echo -e "$indent            end if"

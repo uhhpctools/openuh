@@ -148,8 +148,8 @@ void _CO_BCAST_I8(DopeVectorType * source, INTEGER8 * src_img_p)
         stride_levels = n_dim - 1 + k;
         for (i = 0; i < stride_levels; i++) {
             count[i + 1 + k] = source->dimension[i + 1].extent;
-            src_strides[i + k] = source->dimension[i + k].stride_mult;
-            dest_strides[i + k] = source->dimension[i + k].stride_mult;
+            src_strides[i + k] = elem_size*source->dimension[i + k].stride_mult;
+            dest_strides[i + k] = elem_size*source->dimension[i + k].stride_mult;
         }
         for (i = 1; i <= _num_images; i++) {
             if (_this_image != i) {

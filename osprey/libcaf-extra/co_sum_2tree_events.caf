@@ -30,7 +30,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -91,7 +91,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -153,7 +153,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -216,7 +216,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -280,7 +280,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -345,7 +345,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -411,7 +411,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -478,7 +478,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -542,7 +542,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -603,7 +603,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -665,7 +665,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -728,7 +728,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -792,7 +792,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -857,7 +857,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -923,7 +923,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -990,7 +990,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1054,7 +1054,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1115,7 +1115,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1177,7 +1177,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1240,7 +1240,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1304,7 +1304,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1369,7 +1369,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1435,7 +1435,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1502,7 +1502,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1566,7 +1566,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1627,7 +1627,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1689,7 +1689,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1752,7 +1752,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1816,7 +1816,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1881,7 +1881,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -1947,7 +1947,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2014,7 +2014,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2078,7 +2078,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2139,7 +2139,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2201,7 +2201,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2264,7 +2264,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2328,7 +2328,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2393,7 +2393,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2459,7 +2459,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2526,7 +2526,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2590,7 +2590,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2651,7 +2651,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2713,7 +2713,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2776,7 +2776,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2840,7 +2840,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2905,7 +2905,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -2971,7 +2971,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3038,7 +3038,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3102,7 +3102,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3163,7 +3163,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3225,7 +3225,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3288,7 +3288,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3352,7 +3352,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3417,7 +3417,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3483,7 +3483,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3550,7 +3550,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3614,7 +3614,7 @@
                        event wait(ev(l))
                        buf = buf + buf[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3675,7 +3675,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3737,7 +3737,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3800,7 +3800,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3864,7 +3864,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3929,7 +3929,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -3995,7 +3995,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if
@@ -4062,7 +4062,7 @@
                        event wait(ev(l))
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-               else
+               else if (mod(ti-1,2*k)==k) then
                    if ((ti-k)>=1) then
                        event post(ev(l)[ti-k])
                    end if

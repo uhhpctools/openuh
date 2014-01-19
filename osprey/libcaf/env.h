@@ -29,6 +29,25 @@
 #ifndef _ENV_H
 #define _ENV_H
 
+/* environment */
+
+#define ENV_GETCACHE                  "UHCAF_GETCACHE"
+#define ENV_PROGRESS_THREAD           "UHCAF_PROGRESS_THREAD"
+#define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
+#define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
+#define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
+#define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
+#define ENV_CO_REDUCE_ALGORITHM       "UHCAF_CO_REDUCE_ALGORITHM"
+#define ENV_SYNC_IMAGES_ALGORITHM     "UHCAF_SYNC_IMAGES_ALGORITHM"
+
+#define DEFAULT_ENABLE_GETCACHE           0
+#define DEFAULT_ENABLE_PROGRESS_THREAD    0
+#define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
+/* these will be overridden by the defaults in cafrun script */
+#define DEFAULT_GETCACHE_LINE_SIZE        65536L
+#define DEFAULT_IMAGE_HEAP_SIZE           31457280L
+#define DEFAULT_NB_XFER_LIMIT             16
+
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);
 

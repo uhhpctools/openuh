@@ -33,22 +33,6 @@
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
 
-/* environment */
-
-#define ENV_GETCACHE                  "UHCAF_GETCACHE"
-#define ENV_PROGRESS_THREAD           "UHCAF_PROGRESS_THREAD"
-#define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
-#define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
-#define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
-#define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
-
-#define DEFAULT_ENABLE_GETCACHE           0
-#define DEFAULT_ENABLE_PROGRESS_THREAD    0
-#define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
-/* these will be overridden by the defaults in cafrun script */
-#define DEFAULT_GETCACHE_LINE_SIZE        65536L
-#define DEFAULT_IMAGE_HEAP_SIZE           31457280L
-#define DEFAULT_NB_XFER_LIMIT             16
 
 #define MAX_NUM_IMAGES                    0x100000
 #define MAX_SHARED_MEMORY_SIZE            0x1000000000
@@ -65,6 +49,14 @@ enum {
     STAT_LOCKED_OTHER_IMAGE = 777,
     STAT_STOPPED_IMAGE = 778
 } status_codes;
+
+/* different types of sync images algorithms */
+typedef enum {
+  SYNC_COUNTER = 0,
+  SYNC_PING_PONG = 1,
+  SYNC_SENSE_REV = 2,
+  SYNC_IMAGES_DEFAULT = 2
+} sync_images_t;
 
 /* init */
 void comm_init();
@@ -157,6 +149,8 @@ void comm_barrier_all();
 
 void comm_sync(comm_handle_t hdl);
 
+void comm_fence(size_t proc);
+
 /* atomics */
 void comm_swap_request(void *target, void *value, size_t nbytes,
                        int proc, void *retval);
@@ -166,6 +160,7 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
                          int proc, void *retval);
 void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                        void *retval);
+void comm_add_request(void *target, void *value, size_t nbytes, int proc);
 
 /* progress */
 void comm_service();

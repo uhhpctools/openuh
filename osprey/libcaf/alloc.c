@@ -36,6 +36,7 @@
 #include "caf_rtl.h"
 #include "alloc.h"
 #include "comm.h"
+#include "env.h"
 
 #include "trace.h"
 #include "profile.h"

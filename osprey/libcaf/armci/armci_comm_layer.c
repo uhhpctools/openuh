@@ -73,7 +73,24 @@ static unsigned long static_symm_data_total_size_ = 0;
 extern unsigned long static_symm_data_total_size;
 
 /* sync images */
+
+#if OLD_SYNC_IMAGES
 static void **syncptr = NULL;   /* sync flags */
+#else
+/* NEW SYNC IMAGES */
+
+static sync_images_t sync_images_algorithm;
+typedef union {
+    int value; /* used for counter and ping-pong */
+    struct {
+        short sense;
+        short val;
+    } t; /* used for sense reversing */
+} sync_flag_t;
+static sync_flag_t *sync_flags = NULL;
+
+#endif /* NEW SYNC IMAGES */
+
 
 /* Shared memory management:
  * coarray_start_all_images stores the shared memory start address of all
@@ -162,6 +179,12 @@ static inline armci_hdl_t *get_next_armci_handle(access_type_t
 static inline void return_armci_handle(armci_handle_x_t * handle,
                                        access_type_t access_type);
 
+static void comm_sync_images_counter(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len);
+static void comm_sync_images_ping_pong(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len);
+static void comm_sync_images_sense_rev(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len);
 
 
 
@@ -405,6 +428,28 @@ void comm_init()
         }
     }
 
+    /* which sync images to use */
+    char *si_alg;
+    si_alg = getenv(ENV_SYNC_IMAGES_ALGORITHM);
+    sync_images_algorithm = SYNC_IMAGES_DEFAULT;
+
+    if (si_alg != NULL) {
+        if (strncasecmp(si_alg, "counter", 7) == 0) {
+            sync_images_algorithm = SYNC_COUNTER;
+        } else if (strncasecmp(si_alg, "ping_pong", 9) == 0) {
+            sync_images_algorithm = SYNC_PING_PONG;
+        } else if (strncasecmp(si_alg, "sense_reversing", 15 ) == 0) {
+            sync_images_algorithm = SYNC_SENSE_REV;
+        } else if (strncasecmp(si_alg, "default", 7 ) == 0) {
+            sync_images_algorithm = SYNC_IMAGES_DEFAULT;
+        } else {
+            if (my_proc == 0) {
+                Warning("SYNC_IMAGES_ALGORITHM %s is not supported. "
+                        "Using default", si_alg);
+            }
+        }
+    }
+
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE, DEFAULT_ENABLE_GETCACHE);
     getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
@@ -420,10 +465,13 @@ void comm_init()
      * called only once per image
      */
     ARMCI_Create_mutexes(num_procs + 1);
+
+#ifdef OLD_SYNC_IMAGES
     syncptr = malloc(num_procs * sizeof(void *));
     ARMCI_Malloc((void **) syncptr, num_procs * sizeof(int));
     for (i = 0; i < num_procs; i++)
         ((int *) (syncptr[my_proc]))[i] = 0;
+#endif
 
     critical_mutex = num_procs; /* last mutex reserved for critical sections */
 
@@ -541,6 +589,13 @@ void comm_init()
     mem_info->max_heap_usage = sizeof(*mem_info);
     mem_info->reserved_heap_usage =
         caf_shared_memory_size - static_symm_data_total_size;
+
+#ifndef OLD_SYNC_IMAGES
+    /* allocate flags for p2p synchronization via sync images */
+    sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
+            num_procs * sizeof(sync_flag_t));
+    memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
+#endif /* !defined(OLD_SYNC_IMAGES) */
 
     /* allocate space for recording image termination */
     stopped_image_exists =
@@ -1134,6 +1189,55 @@ static void wait_on_all_pending_accesses()
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+/* wait on all pending accesses to complete */
+static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
+{
+    struct handle_list *handle_node, *node_to_delete;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    /* ensures all non-blocking puts have completed */
+    ARMCI_Fence(proc);
+    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
+
+    handle_node = nb_mgr[PUTS].handles[proc];
+    /* clear out entire handle list */
+    while (handle_node) {
+        /* return armci handle to free list */
+        return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                PUTS);
+        node_to_delete = handle_node;
+        handle_node = handle_node->next;
+        /* for puts */
+        comm_lcb_free(node_to_delete->local_buf);
+        comm_free(node_to_delete);
+        nb_mgr[PUTS].num_handles--;
+    }
+    nb_mgr[PUTS].handles[proc] = 0;
+    nb_mgr[PUTS].min_nb_address[proc] = 0;
+    nb_mgr[PUTS].max_nb_address[proc] = 0;
+
+    handle_node = nb_mgr[GETS].handles[proc];
+    /* clear out entire handle list */
+    while (handle_node) {
+        ARMCI_Wait(handle_node->handle);
+        PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
+
+        /* return armci handle to free list */
+        return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                GETS);
+        node_to_delete = handle_node;
+        handle_node = handle_node->next;
+        comm_free(node_to_delete);
+        nb_mgr[GETS].num_handles--;
+    }
+    nb_mgr[GETS].handles[proc] = 0;
+    nb_mgr[GETS].min_nb_address[proc] = 0;
+    nb_mgr[GETS].max_nb_address[proc] = 0;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
 
 /*****************************************************************
  *                  Shared Memory Management
@@ -1224,8 +1328,10 @@ void comm_memory_free()
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
+#ifdef OLD_SYNC_IMAGES
     if (syncptr != NULL)
         comm_free(syncptr);
+#endif
 
     if (coarray_start_all_images) {
         coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
@@ -1349,6 +1455,23 @@ void comm_end_critical()
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+/* wait for any pending communication to specified proc to complete. Use value
+ * < 0 if we want to wait on all procs to complete. */
+void comm_fence(size_t proc)
+{
+    LIBCAF_TRACE(LIBCAF_LONG_SYNC, "entry");
+
+    if (proc < 0) {
+        wait_on_all_pending_accesses();
+    } else {
+        wait_on_all_pending_accesses_to_proc((unsigned long)proc);
+    }
+
+    LOAD_STORE_FENCE();
+
+    LIBCAF_TRACE(LIBCAF_LONG_SYNC, "exit");
+}
+
 void comm_barrier_all()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
@@ -1439,6 +1562,7 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+#ifdef OLD_SYNC_IMAGES
 void comm_sync_images(int *image_list, int image_count, int *status,
                       int stat_len, char *errmsg, int errmsg_len)
 {
@@ -1514,8 +1638,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
             }
         }
 
-        /* user usleep to wait at least 1 OS time slice before checking
-         * flag again  */
+        /* user usleep to wait before checking flag again  */
         while (!(*check_flag)) {
             usleep(50);
             LOAD_STORE_FENCE();
@@ -1542,6 +1665,206 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 
 }
+
+/* OLD_SYNC_IMAGES */
+
+#else /* NEW SYNC IMAGES */
+
+void comm_sync_images(int *image_list, int image_count, int *status,
+                      int stat_len, char *errmsg, int errmsg_len)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    wait_on_all_pending_accesses();
+
+    switch (sync_images_algorithm) {
+        case SYNC_COUNTER:
+            comm_sync_images_counter(image_list, image_count, status,
+                                     stat_len, errmsg, errmsg_len);
+            break;
+        case SYNC_PING_PONG:
+            comm_sync_images_ping_pong(image_list, image_count, status,
+                                     stat_len, errmsg, errmsg_len);
+            break;
+        case SYNC_SENSE_REV:
+            comm_sync_images_sense_rev(image_list, image_count, status,
+                                     stat_len, errmsg, errmsg_len);
+            break;
+        default:
+            comm_sync_images_sense_rev(image_list, image_count, status,
+                                     stat_len, errmsg, errmsg_len);
+            break;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+static void comm_sync_images_counter(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    int i;
+    for (i = 0; i < image_count; i++) {
+        int q = image_list[i] - 1;
+        if (my_proc != q) {
+            int inc = 1;
+            /* increment counter */
+            comm_add_request(&sync_flags[my_proc].value, &inc,
+                             sizeof(inc), q);
+        }
+    }
+    for (i = 0; i < image_count; i++) {
+        short image_has_stopped;
+        int q = image_list[i] - 1;
+
+        if (q == my_proc)
+            continue;
+
+        if (status != NULL) {
+            image_has_stopped = 0;
+            comm_read(q, this_image_stopped, &image_has_stopped,
+                    sizeof(image_has_stopped));
+            LOAD_STORE_FENCE();
+            if (image_has_stopped && !sync_flags[q].value) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                LOAD_STORE_FENCE();
+                return;
+            }
+        }
+
+        while (sync_flags[q].value == 0) {
+            comm_service();
+            LOAD_STORE_FENCE();
+        }
+
+        /* atomically decrement counter */
+        SYNC_FETCH_AND_ADD((int *)&sync_flags[q].value, (int)-1);
+
+        if (enable_get_cache)
+            refetch_cache(q);
+    }
+}
+
+static void comm_sync_images_ping_pong(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    int i;
+    int images_to_check;
+    char check_images[image_count];
+
+    images_to_check = image_count;
+    for (i = 0; i < image_count; i++) {
+        int q = image_list[i] - 1;
+        check_images[i] = 1;
+        if (my_proc == q) {
+            images_to_check--;
+            check_images[i] = 0;
+        }
+        if (my_proc < q) {
+            int flag_set = 1;
+            comm_write(q, &sync_flags[my_proc].value, &flag_set,
+                       sizeof(flag_set), 1, NULL);
+        }
+    }
+
+    while (images_to_check != 0) {
+        for (i = 0; i < image_count; i++) {
+            short image_has_stopped;
+            int q = image_list[i] - 1;
+
+            if (check_images[i] == 0) continue;
+
+            if (status != NULL && *stopped_image_exists) {
+                /* check if q has stopped */
+                image_has_stopped = 0;
+                comm_read(q, this_image_stopped, &image_has_stopped,
+                        sizeof(image_has_stopped));
+                LOAD_STORE_FENCE();
+                if (image_has_stopped && !sync_flags[q].value) {
+                    /* q has stopped without a matching sync images */
+                    *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                    LOAD_STORE_FENCE();
+                    return;
+                }
+            }
+
+            if (sync_flags[q].value == 1) {
+                sync_flags[q].value = 0;
+                check_images[i] = 0;
+                images_to_check--;
+                if (q < my_proc) {
+                    int flag_set = 1;
+                    comm_write(q, &sync_flags[my_proc].value, &flag_set,
+                            sizeof(flag_set), 1, NULL);
+                }
+            }
+            if (enable_get_cache)
+                refetch_cache(q);
+        }
+        comm_service();
+    }
+}
+
+static void comm_sync_images_sense_rev(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    int i;
+    for (i = 0; i < image_count; i++) {
+        int q = image_list[i] - 1;
+        if (my_proc != q) {
+            short sense = sync_flags[q].t.sense % 2 + 1;
+            sync_flags[q].t.sense = sense;
+            comm_write(q, &sync_flags[my_proc].t.val, &sense,
+                    sizeof(sense), 1, NULL);
+        }
+    }
+
+    for (i = 0; i < image_count; i++) {
+        short image_has_stopped;
+        int q = image_list[i] - 1;
+
+        if (my_proc == q)
+            continue;
+
+        if (status != NULL) {
+            image_has_stopped = 0;
+            comm_read(q, this_image_stopped, &image_has_stopped,
+                    sizeof(image_has_stopped));
+            LOAD_STORE_FENCE();
+            if (image_has_stopped && !sync_flags[q].t.val) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                LOAD_STORE_FENCE();
+                return;
+            }
+        }
+
+        while (sync_flags[q].t.val == 0) {
+            comm_service();
+            LOAD_STORE_FENCE();
+        }
+
+        short x;
+        x = (short) SYNC_SWAP((short *)&sync_flags[q].t.val, 0);
+        if (x != sync_flags[q].t.sense) {
+            /* already received the next notification */
+            sync_flags[q].t.val = x;
+        }
+
+        if (enable_get_cache)
+            refetch_cache(q);
+    }
+}
+
+
+
+#endif /* NEW SYNC IMAGES */
 
 /***************************************************************
  *                        ATOMICS
@@ -1585,19 +1908,39 @@ void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
     long long old;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     check_remote_address(proc + 1, target);
-    memmove(&old, value, nbytes);
     if (nbytes == sizeof(int)) {
         int ret;
         void *remote_address = get_remote_address(target, proc);
         ret = ARMCI_Rmw(ARMCI_FETCH_AND_ADD, retval,
                         remote_address, *(int *) value, proc);
-        memmove(value, &old, nbytes);
     } else if (nbytes == sizeof(long)) {
         long ret;
         void *remote_address = get_remote_address(target, proc);
         ret = ARMCI_Rmw(ARMCI_FETCH_AND_ADD_LONG, retval,
                         remote_address, *(int *) value, proc);
-        memmove(value, &old, nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%lu) in comm_fadd_request",
+                (unsigned long) nbytes);
+        Error(msg);
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_add_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    check_remote_address(proc + 1, target);
+    if (nbytes == sizeof(int)) {
+        int ret;
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw(ARMCI_FETCH_AND_ADD, &ret,
+                  remote_address, *(int *) value, proc);
+    } else if (nbytes == sizeof(long)) {
+        long ret;
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw(ARMCI_FETCH_AND_ADD_LONG, &ret,
+                   remote_address, *(int *) value, proc);
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_fadd_request",
@@ -1689,7 +2032,14 @@ void comm_free(void *ptr)       //To make it sync with gasnet
 
 void comm_service()
 {
-    /* does nothing currently */
+    /* does nothing much right now */
+
+    /* in case this is call in a spin-loop, sleep every SLEEP_INTERVAL calls
+     */
+    const unsigned long  SLEEP_INTERVAL = 1000000;
+    static unsigned long count = 0;
+    if (count % SLEEP_INTERVAL == 0) usleep(1);
+    count++;
 }
 
 
