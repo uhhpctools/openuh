@@ -44,10 +44,10 @@ enum {
     STAT_SUCCESS = 0,
     /* these should correspond to the same values define in
      * ../libfi/mathlb/iso_fortran_env.F90 */
-    STAT_LOCKED = 775,
-    STAT_UNLOCKED = 776,
-    STAT_LOCKED_OTHER_IMAGE = 777,
-    STAT_STOPPED_IMAGE = 778
+    STAT_LOCKED = 101,
+    STAT_UNLOCKED = 102,
+    STAT_LOCKED_OTHER_IMAGE = 103,
+    STAT_STOPPED_IMAGE = 104
 } status_codes;
 
 /* different types of sync images algorithms */

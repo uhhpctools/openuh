@@ -97,7 +97,7 @@ static void free_next_slots_recursively(struct shared_memory_slot *slot);
  * Normal fortan allocation calls are intercepted to check whether they
  * are for coarrays or asymmetric data. If yes, the following functions
  * are called which are defined below.
- *  void* coarray_allocatable_allocate_(unsigned long var_size);
+ *  void* coarray_allocatable_allocate_(unsigned long var_size, int *statvar);
  *  void* coarray_asymmetric_allocate_(unsigned long var_size);
  * Since allocatable coarrays must have symmetric address, a seperate heap
  * must be created for asymmetric data. To avoid wasting memory space by
@@ -220,7 +220,7 @@ static void *split_empty_shared_memory_slot_from_bottom
  * It finds empty slot from the shared memory list (common_slot & above)
  * and then splits the slot from top
  * Note: there is barrier as it is a collective operation*/
-void *coarray_allocatable_allocate_(unsigned long var_size)
+void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
 {
     struct shared_memory_slot *empty_slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
@@ -240,8 +240,11 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
         if (mem_info->max_heap_usage < current_size)
             mem_info->max_heap_usage = current_size;
     }
+
     // implicit barrier in case of allocatable.
-    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_barrier_all);
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_all, statvar, sizeof(int),
+                         NULL, 0);
+
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
@@ -257,6 +260,7 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+
     return retval;
 }
 
@@ -467,7 +471,7 @@ static void empty_shared_memory_slot(struct shared_memory_slot *slot)
  * It finds the slot from the shared memory list, set full-empty-bit to 0,
  * and then merge the slot with neighboring empty slots (if found)
  * Note: there is implicit barrier for allocatable coarrays*/
-void coarray_deallocate_(void *var_address)
+void coarray_deallocate_(void *var_address, int* statvar)
 {
     struct shared_memory_slot *slot;
 
@@ -477,7 +481,8 @@ void coarray_deallocate_(void *var_address)
     slot = find_shared_memory_slot_above(common_slot, var_address);
     if (slot) {
         // implicit barrier for allocatable
-        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_barrier_all);
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_all, statvar, sizeof(int),
+                NULL, 0);
     } else
         slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {

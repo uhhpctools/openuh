@@ -6246,12 +6246,6 @@ void lock_stmt_semantics (void)
    else
        IR_LIST_CNT_R(call_idx) = 5;
 
-   gen_sh(Before, Call_Stmt, line, col,
-           FALSE, FALSE, TRUE);
-
-   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
-   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-
 
    exp_desc = init_exp_desc;
    COPY_OPND(IL_OPND(list_idx), IR_OPND_L((ir_idx)));
@@ -6556,6 +6550,12 @@ void lock_stmt_semantics (void)
 
    }
 
+   gen_sh(Before, Call_Stmt, line, col,
+           FALSE, FALSE, TRUE);
+
+   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
    curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
    SH_NEXT_IDX(curr_stmt_sh_idx) =
        SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
@@ -6684,13 +6684,6 @@ void event_stmt_semantics (void)
            IR_LIST_CNT_R(call_idx) = 4;
        else
            IR_LIST_CNT_R(call_idx) = 2;
-
-       gen_sh(Before, Call_Stmt, line, col,
-               FALSE, FALSE, TRUE);
-
-       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
-       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-
 
        exp_desc = init_exp_desc;
        COPY_OPND(IL_OPND(list_idx), IR_OPND_L((ir_idx)));
@@ -6821,6 +6814,13 @@ void event_stmt_semantics (void)
            IL_LINE_NUM(list4_idx) = IR_LINE_NUM(call_idx);
            IL_COL_NUM(list4_idx) = IR_COL_NUM(call_idx);
        }
+
+       gen_sh(Before, Call_Stmt, line, col,
+               FALSE, FALSE, TRUE);
+
+       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
 
        curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
        SH_NEXT_IDX(curr_stmt_sh_idx) =

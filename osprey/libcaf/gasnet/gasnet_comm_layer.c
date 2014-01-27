@@ -148,8 +148,11 @@ static void *everything_heap_start;
 static gasnet_nodeinfo_t *nodeinfo_table;
 
 /* image stoppage info */
-static unsigned short *stopped_image_exists = NULL;
-static unsigned short *this_image_stopped = NULL;
+static int *error_stopped_image_exists = NULL;
+static int *this_image_stopped = NULL;
+static char *stopped_image_exists = NULL;
+static int in_error_termination = 0;
+static int in_normal_termination = 0;
 
 /*sync images*/
 static sync_images_t sync_images_algorithm;
@@ -188,6 +191,7 @@ gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 
 /* forward declarations */
 
+static inline void check_for_error_stop();
 static inline int address_in_symmetric_mem(void *addr);
 static inline int address_in_shared_mem(void *addr);
 static inline void sync_on_handle(struct handle_list *handle);
@@ -756,6 +760,8 @@ comm_swap_request(void *target, void *value, size_t nbytes,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
 
@@ -853,6 +859,8 @@ comm_cswap_request(void *target, void *cond, void *value,
                    size_t nbytes, int proc, void *retval)
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
 
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
@@ -963,6 +971,8 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
 
@@ -1062,6 +1072,8 @@ comm_fstore_request(void *target, void *value, size_t nbytes, int proc,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     long long old;
+
+    check_for_error_stop();
 
     memmove(&old, value, nbytes);
     comm_swap_request(target, value, nbytes, proc, retval);
@@ -1289,7 +1301,8 @@ void comm_init()
     _rem_images = rem_procs;
 
     LIBCAF_TRACE_INIT();
-    LIBCAF_TRACE(LIBCAF_LOG_INIT, "_num_images = %ld, _log2_images = %ld, _rem_images = %ld",
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "_num_images = %ld, _log2_images = %ld, "
+                 "_rem_images = %ld",
                   _num_images, _log2_images, _rem_images);
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "after gasnet_init");
 
@@ -1316,7 +1329,8 @@ void comm_init()
             co_reduce_algorithm = CO_REDUCE_2TREE_EVENTS;
         } else {
             if (my_proc == 0) {
-                Warning("CO_REDUCE_ALGORITHM %s is not supported. Using default", alg);
+                Warning("CO_REDUCE_ALGORITHM %s is not supported. "
+                        "Using default", alg);
             }
         }
     }
@@ -1496,9 +1510,22 @@ void comm_init()
 
     shared_memory_size = caf_shared_memory_size;
 
+    /* allocate space for recording image termination */
+    error_stopped_image_exists =
+        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
+    this_image_stopped =
+        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
+    *error_stopped_image_exists = 0;
+    *this_image_stopped = 0;
+
+    stopped_image_exists = (char *) coarray_allocatable_allocate_(
+                     (num_procs+1) * sizeof(char), NULL);
+
+    memset(stopped_image_exists, 0, (num_procs+1) * sizeof(char));
+
     /* allocate space in symmetric heap for memory usage info */
     mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(*mem_info));
+        coarray_allocatable_allocate_(sizeof(*mem_info), NULL);
     mem_info->current_heap_usage = sizeof(*mem_info);
     mem_info->max_heap_usage = sizeof(*mem_info);
     mem_info->reserved_heap_usage =
@@ -1509,23 +1536,14 @@ void comm_init()
      * critical section in the program, but for now we'll keep this simple.
      */
     critical_lock =
-        (lock_t *) coarray_allocatable_allocate_(sizeof(lock_t));
+        (lock_t *) coarray_allocatable_allocate_(sizeof(lock_t), NULL);
 
     /* allocate flags for p2p synchronization via sync images */
     if (sync_images_algorithm != SYNC_COUNTER) {
         sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
-                num_procs * sizeof(sync_flag_t));
+                num_procs * sizeof(sync_flag_t), NULL);
         memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
     }
-
-    /* allocate space for recording image termination */
-    stopped_image_exists =
-        (short *) coarray_allocatable_allocate_(sizeof(short));
-    this_image_stopped =
-        (short *) coarray_allocatable_allocate_(sizeof(short));
-
-    *stopped_image_exists = 0;
-    *this_image_stopped = 0;
 
     /* start progress thread */
     comm_service_init();
@@ -1969,7 +1987,6 @@ static void wait_on_pending_accesses(unsigned long proc,
     struct handle_list **handles = nb_mgr[access_type].handles;
     struct handle_list *handle_node = handles[proc];
 
-
     if (handle_node &&
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
@@ -1998,6 +2015,8 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
     struct handle_list *handle_node, *node_to_delete;
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     handle_node = nb_mgr[PUTS].handles[proc];
     while (handle_node) {
@@ -2040,6 +2059,8 @@ static inline void wait_on_all_pending_accesses()
 {
     int i;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     for (i = 0; i < num_procs; i++) {
         wait_on_all_pending_accesses_to_proc(i);
@@ -2172,10 +2193,22 @@ void comm_finalize(int exit_code)
     int p;
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
-    comm_service();
+    /*
+     * NORMAL TERMINATION STEPS:
+     * (1) Initiation
+     * (2) Synchronization
+     * (3) Completion
+     */
 
-    *this_image_stopped = 1;
-    *stopped_image_exists = 1;
+    /* Initiation */
+
+    in_normal_termination = 1;
+
+    int stopped_image_already_exists = stopped_image_exists[num_procs];
+
+    *this_image_stopped = 1; /* 1 means normal stopped */
+    stopped_image_exists[my_proc] = 1;
+    stopped_image_exists[num_procs] = 1;
 
     /* broadcast to every image that this image has stopped.
      * TODO: Other images should be able to detect this image has stopped when
@@ -2183,12 +2216,27 @@ void comm_finalize(int exit_code)
      * barriers.
      */
     for (p = 0; p < num_procs; p++) {
-        comm_write(p, stopped_image_exists,
-                   stopped_image_exists, sizeof(*stopped_image_exists), 1,
-                   NULL);
+        if (p == my_proc) continue;
+
+        if (!stopped_image_already_exists) {
+            /* this indicates at least one image has stopped, allowing for
+             * quicker check for barrier synchronization */
+            char stopped = 1;
+            comm_write(p, &stopped_image_exists[num_procs],
+                       &stopped, sizeof(char), 1, NULL);
+        }
+
+        comm_write(p, &stopped_image_exists[my_proc],
+                   &stopped_image_exists[my_proc], sizeof(char), 1, NULL);
     }
 
+
+    /* Synchronization */
+
     comm_barrier_all();
+
+    /* Completion */
+
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to gasnet_exit"
                  " with status 0.");
@@ -2204,22 +2252,37 @@ void comm_finalize(int exit_code)
 void comm_exit(int status)
 {
     int p;
+    int error_stopped_already_detected;
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
-    comm_service();
-
-    *this_image_stopped = 1;
-    *stopped_image_exists = 1;
-
-    /* broadcast to every image that this image has stopped.
-     * TODO: Other images should be able to detect this image has stopped when
-     * they try to synchronize with it. Requires custom implementation of
-     * barriers.
+    /*
+     * ERROR TERMINATION
+     *
+     * Notify other images that this image has started error termination
      */
-    for (p = 0; p < num_procs; p++) {
-        comm_write(p, stopped_image_exists,
-                   stopped_image_exists, sizeof(*stopped_image_exists), 1,
-                   NULL);
+
+    in_error_termination = 1;
+
+    if (status == 0)
+        Warning("Image %d is exiting without a set error code", my_proc+1);
+
+    *this_image_stopped = 2; /* 2 means error stopped */
+
+    if (*error_stopped_image_exists == 0 && status != 0) {
+        *error_stopped_image_exists = status;
+
+        /* broadcast to every image that this image has stopped.
+         * TODO: Other images should be able to detect this image has stopped
+         * when they try to synchronize with it. Requires custom
+         * implementation of barriers.
+         */
+        for (p = 0; p < num_procs; p++) {
+            if (p == my_proc) continue;
+            comm_write(p, error_stopped_image_exists,
+                       error_stopped_image_exists,
+                       sizeof(*error_stopped_image_exists),
+                       1, NULL);
+        }
     }
 
     LOAD_STORE_FENCE();
@@ -2231,6 +2294,13 @@ void comm_exit(int status)
 
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
     gasnet_exit(status);
+}
+
+static inline void check_for_error_stop()
+{
+    if (!in_error_termination && error_stopped_image_exists != NULL &&
+        *error_stopped_image_exists != 0)
+        comm_exit(*error_stopped_image_exists);
 }
 
 /***************************************************************
@@ -2246,6 +2316,8 @@ void comm_critical()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
+    check_for_error_stop();
+
     comm_lock(critical_lock, 1, NULL, 0);
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -2254,6 +2326,8 @@ void comm_critical()
 void comm_end_critical()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     comm_unlock(critical_lock, 1, NULL, 0);
 
@@ -2264,7 +2338,9 @@ void comm_end_critical()
  * < 0 if we want to wait on all procs to complete. */
 void comm_fence(size_t proc)
 {
-    LIBCAF_TRACE(LIBCAF_LONG_SYNC, "entry");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     if (proc < 0) {
         wait_on_all_pending_accesses();
@@ -2274,7 +2350,7 @@ void comm_fence(size_t proc)
 
     LOAD_STORE_FENCE();
 
-    LIBCAF_TRACE(LIBCAF_LONG_SYNC, "exit");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 
@@ -2282,7 +2358,10 @@ void comm_barrier_all()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
+    check_for_error_stop();
+
     wait_on_all_pending_accesses();
+
     gasnet_barrier_notify(barcount, barflag);
     gasnet_barrier_wait(barcount, barflag);
 
@@ -2312,6 +2391,8 @@ void comm_sync(comm_handle_t hdl)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
+    check_for_error_stop();
+
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
@@ -2329,6 +2410,8 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
+    check_for_error_stop();
+
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
         *((INT2 *) status) = STAT_SUCCESS;
@@ -2340,9 +2423,18 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
     wait_on_all_pending_accesses();
 
     LOAD_STORE_FENCE();
-    if (status != NULL && *stopped_image_exists == 1) {
-        *((INT2 *) status) = STAT_STOPPED_IMAGE;
-        /* no barrier */
+
+    /* TODO: need to check for stopped image during the execution of the
+     * barrier, instead of just at the beginning */
+    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
+        if (status != NULL) {
+            *((INT2 *) status) = STAT_STOPPED_IMAGE;
+        } else {
+            Error("Image %d attempted to synchronize with stopped image",
+                  _this_image);
+            /* doesn't reach */
+        }
     } else {
         gasnet_barrier_notify(barcount, barflag);
         gasnet_barrier_wait(barcount, barflag);
@@ -2360,6 +2452,8 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -2383,6 +2477,8 @@ void comm_sync_images(int *image_list, int image_count, int *status,
                       int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -2432,25 +2528,35 @@ static void comm_sync_images_counter(int *image_list, int image_count,
         }
     }
     for (i = 0; i < image_count; i++) {
-        short image_has_stopped;
         int q = image_list[i] - 1;
 
         if (q == my_proc)
             continue;
 
-        if (status != NULL) {
-            image_has_stopped = 0;
-            comm_read(q, this_image_stopped, &image_has_stopped,
-                    sizeof(image_has_stopped));
-            LOAD_STORE_FENCE();
-            if (image_has_stopped && !sync_flags[q].value) {
-                *((INT2 *) status) = STAT_STOPPED_IMAGE;
-                LOAD_STORE_FENCE();
-                return;
+        check_for_error_stop();
+
+        while (!sync_flags[q].value) {
+            comm_service();
+            GASNET_BLOCKUNTIL(sync_flags[q].value ||
+                              *error_stopped_image_exists ||
+                              stopped_image_exists[q]);
+
+            check_for_error_stop();
+
+            if (stopped_image_exists[q]) {
+                /* q has stopped */
+                if (status != NULL) {
+                    *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                    LOAD_STORE_FENCE();
+                    return;
+                } else {
+                    /* error termination */
+                    Error("Image %d attempted to synchronize with "
+                          "stopped image %d.", _this_image, q+1);
+                    /* doesn't reach */
+                }
             }
         }
-
-        GASNET_BLOCKUNTIL(sync_flags[q].value);
 
         gasnet_hsl_lock(&sync_lock);
         sync_flags[q].value--;
@@ -2484,22 +2590,23 @@ static void comm_sync_images_ping_pong(int *image_list, int image_count,
 
     while (images_to_check != 0) {
         for (i = 0; i < image_count; i++) {
-            short image_has_stopped;
             int q = image_list[i] - 1;
 
             if (check_images[i] == 0) continue;
 
-            if (status != NULL && *stopped_image_exists) {
-                /* check if q has stopped */
-                image_has_stopped = 0;
-                comm_read(q, this_image_stopped, &image_has_stopped,
-                        sizeof(image_has_stopped));
-                LOAD_STORE_FENCE();
-                if (image_has_stopped && !sync_flags[q].value) {
-                    /* q has stopped without a matching sync images */
+            check_for_error_stop();
+
+            if (stopped_image_exists[q]) {
+                /* q has stopped */
+                if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
                     LOAD_STORE_FENCE();
                     return;
+                } else {
+                    /* error termination */
+                    Error("Image %d attempted to synchronize with stopped "
+                          "image %d.", _this_image, q+1);
+                    /* doesn't reach */
                 }
             }
 
@@ -2512,9 +2619,10 @@ static void comm_sync_images_ping_pong(int *image_list, int image_count,
                     comm_write(q, &sync_flags[my_proc].value, &flag_set,
                             sizeof(short), 1, NULL);
                 }
+
+                if (enable_get_cache)
+                    refetch_cache(q);
             }
-            if (enable_get_cache)
-                refetch_cache(q);
         }
         comm_service();
     }
@@ -2535,25 +2643,35 @@ static void comm_sync_images_sense_rev(int *image_list, int image_count,
     }
 
     for (i = 0; i < image_count; i++) {
-        short image_has_stopped;
         int q = image_list[i] - 1;
 
         if (my_proc == q)
             continue;
 
-        if (status != NULL) {
-            image_has_stopped = 0;
-            comm_read(q, this_image_stopped, &image_has_stopped,
-                    sizeof(image_has_stopped));
-            LOAD_STORE_FENCE();
-            if (image_has_stopped && !sync_flags[q].t.val) {
-                *((INT2 *) status) = STAT_STOPPED_IMAGE;
-                LOAD_STORE_FENCE();
-                return;
+        check_for_error_stop();
+
+        while (!sync_flags[q].t.val) {
+            comm_service();
+            GASNET_BLOCKUNTIL(sync_flags[q].t.val ||
+                              *error_stopped_image_exists ||
+                              stopped_image_exists[q]);
+
+            check_for_error_stop();
+
+            if (stopped_image_exists[q]) {
+                /* q has stopped */
+                if (status != NULL) {
+                    *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                    LOAD_STORE_FENCE();
+                    return;
+                } else {
+                    /* error termination */
+                    Error("Image %d attempted to synchronize with stopped "
+                          "image %d.", _this_image, q+1);
+                    /* doesn't reach */
+                }
             }
         }
-
-        GASNET_BLOCKUNTIL(sync_flags[q].t.val);
 
         char x;
         x = (char) SYNC_SWAP((char *)&sync_flags[q].t.val, 0);
@@ -2578,6 +2696,8 @@ void *comm_lcb_malloc(size_t size)
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
+    check_for_error_stop();
+
     ptr = coarray_asymmetric_allocate_if_possible_(size);
     if (!ptr) {
         if (size >= LARGE_COMM_BUF_SIZE) {
@@ -2600,6 +2720,8 @@ void *comm_lcb_malloc(size_t size)
 void comm_lcb_free(void *ptr)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
+    check_for_error_stop();
 
     if (!ptr) {
         LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -2697,6 +2819,8 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
     PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
 
     /* get the buffer size and chop off control structure */
@@ -2779,6 +2903,8 @@ comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
     PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
     /* get the buffer size and chop off control structure */
@@ -2829,6 +2955,7 @@ comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
 
 void comm_service()
 {
+    check_for_error_stop();
     GASNET_Safe(gasnet_AMPoll());
 }
 
@@ -2840,6 +2967,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
     void *remote_src;
     int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
+
+    check_for_error_stop();
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     int try_local_copy = (!src_in_shared_mem || nbytes <= SMALL_XFER_SIZE);
@@ -2954,6 +3083,8 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     void *remote_src;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
         memcpy(dest, src, nbytes);
@@ -2991,6 +3122,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 {
     void *remote_dest;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
 
     int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
@@ -3125,6 +3258,8 @@ void comm_write(size_t proc, void *dest, void *src,
     void *remote_dest;
     int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
+    check_for_error_stop();
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc
         && (!dest_in_shared_mem || nbytes <= SMALL_XFER_SIZE)) {
@@ -3256,6 +3391,8 @@ void comm_strided_nbread(size_t proc,
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;
     size_t nbytes = 1;
@@ -3369,6 +3506,8 @@ void comm_strided_read(size_t proc,
     void *remote_src;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    check_for_error_stop();
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
         /* local copy */
@@ -3422,6 +3561,8 @@ void comm_strided_write_from_lcb(size_t proc,
 {
     void *remote_dest;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;
@@ -3569,6 +3710,8 @@ void comm_strided_write(size_t proc,
 {
     void *remote_dest;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;

@@ -273,7 +273,7 @@ _fcd	s;
 
     /* get the stop code from msg */
     strtod(msg, &p);
-    if (*p == '\0') {
+    if (len != 0 && *p == '\0') {
         stop_code = (int) atoi(msg);
     } else {
         stop_code = 128; /* non-zero for error termination */
