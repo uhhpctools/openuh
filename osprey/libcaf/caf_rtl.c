@@ -86,6 +86,8 @@ void __caf_init()
     /* common slot is initialized in comm_init */
     CALLSITE_TIMED_TRACE(INIT, INIT, comm_init);
 
+    PROFILE_STATS_INIT();
+
     /* initialize the openmp runtime library, if it exists */
     if (__ompc_init_rtl)
         __ompc_init_rtl(0);
@@ -102,6 +104,8 @@ void __caf_finalize(int exit_code)
 
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
+
+    PROFILE_STATS_DUMP();
 
     CALLSITE_TRACE(EXIT, comm_finalize, exit_code);
 

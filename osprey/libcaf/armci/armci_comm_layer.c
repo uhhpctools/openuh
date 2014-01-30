@@ -204,6 +204,12 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
+/* must call comm_init() first */
+size_t comm_get_node_id(size_t proc)
+{
+    return (size_t) armci_domain_id(ARMCI_DOMAIN_SMP, (int)proc);
+}
+
 /**************************************************************
  *       Shared (RMA) Memory Segment Address Ranges
  **************************************************************/

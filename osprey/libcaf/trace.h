@@ -27,6 +27,7 @@
 */
 
 #include <stdio.h>
+#include "env.h"
 
 #ifndef _TRACE_H
 #define _TRACE_H
@@ -34,7 +35,7 @@
 #ifndef TRACE
 
 #define LIBCAF_TRACE_INIT()   {\
-    if (_this_image == 1 && getenv("UHCAF_TRACE") != NULL) \
+    if (_this_image == 1 && getenv(ENV_DIAG_TRACE) != NULL) \
        Warning("Tracing support is not enabled"); \
 }
 
@@ -74,8 +75,8 @@ extern int trace_callstack_level;
     trace_callstack_level--; \
     LIBCAF_TRACE(LIBCAF_LOG_##level, "LEFT " #f);
 
-#define LIBCAF_TRACE_SUSPEND  uhcaf_trace_suspend
-#define LIBCAF_TRACE_RESUME   uhcaf_trace_resume
+#define LIBCAF_TRACE_SUSPEND  uhcaf_dtrace_suspend
+#define LIBCAF_TRACE_RESUME   uhcaf_dtrace_resume
 
 typedef enum {
     LIBCAF_LOG_FATAL = 0,       /* unrecoverable problem */
@@ -121,10 +122,10 @@ void __stop_timer(__timer_type_t type);
 
 FILE *__trace_log_stream();
 
-void uhcaf_tracedump_shared_mem_alloc(char *str);
+void uhcaf_dtrace_print_rma_segment(char *str, int len);
 
-void uhcaf_trace_suspend();
-void uhcaf_trace_resume();
+void uhcaf_dtrace_suspend();
+void uhcaf_dtrace_resume();
 
 #endif                          /* TRACE */
 

@@ -71,6 +71,8 @@ void comm_end_critical();
 size_t comm_get_proc_id();
 size_t comm_get_num_procs();
 
+size_t comm_get_node_id(size_t proc);
+
 /* non-strided (contiguous) read and write operations */
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl);
