@@ -26,9 +26,11 @@
  http://www.cs.uh.edu/~hpctools
 */
 
-
 #ifndef _COMM_H
 #define _COMM_H
+
+
+#include "uthash.h"
 
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
@@ -57,6 +59,11 @@ typedef enum {
   SYNC_SENSE_REV = 2,
   SYNC_IMAGES_DEFAULT = 2
 } sync_images_t;
+
+typedef struct {
+    int image_id;
+    UT_hash_handle hh;
+} hashed_image_list_t;
 
 /* init */
 void comm_init();
@@ -141,8 +148,9 @@ void comm_lcb_free(void *ptr);
 /* barriers */
 void comm_sync_all(int *status, int stat_len, char *errmsg,
                    int errmsg_len);
-void comm_sync_images(int *image_list, int image_count, int *status,
-                      int stat_len, char *errmsg, int errmsg_len);
+void comm_sync_images(hashed_image_list_t *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg,
+                      int errmsg_len);
 void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len);
 

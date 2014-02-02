@@ -275,12 +275,15 @@ static void update_cache(size_t node, void *remote_address,
 static void local_strided_copy(void *src, const size_t src_strides[],
                                void *dest, const size_t dest_strides[],
                                const size_t count[], size_t stride_levels);
-static void comm_sync_images_counter(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len);
-static void comm_sync_images_ping_pong(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len);
-static void comm_sync_images_sense_rev(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len);
+static void comm_sync_images_counter(hashed_image_list_t *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
+static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
+static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
 
 
 /* must call comm_init() first */
@@ -2487,8 +2490,8 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-void comm_sync_images(int *image_list, int image_count, int *status,
-                      int stat_len, char *errmsg, int errmsg_len)
+void comm_sync_images(hashed_image_list_t *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
@@ -2526,12 +2529,23 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-static void comm_sync_images_counter(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len)
+static void comm_sync_images_counter(hashed_image_list_t *image_list,
+                                     int image_count, int *status,
+                                     int stat_len, char *errmsg,
+                                     int errmsg_len)
 {
+    hashed_image_list_t *list_item;
     int i;
-    for (i = 0; i < image_count; i++) {
-        int q = image_list[i] - 1;
+    for (list_item = image_list, i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (list_item != NULL) {
+            q = list_item->image_id - 1;
+            list_item = list_item->hh.next;
+        } else {
+            q = i;
+        }
+
         if (my_proc != q) {
             int ret;
             ret = gasnet_AMRequestShort1
@@ -2541,8 +2555,15 @@ static void comm_sync_images_counter(int *image_list, int image_count,
             }
         }
     }
-    for (i = 0; i < image_count; i++) {
-        int q = image_list[i] - 1;
+    for (list_item = image_list, i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (list_item != NULL) {
+            q = list_item->image_id - 1;
+            list_item = list_item->hh.next;
+        } else {
+            q = i;
+        }
 
         if (q == my_proc)
             continue;
@@ -2580,16 +2601,27 @@ static void comm_sync_images_counter(int *image_list, int image_count,
     }
 }
 
-static void comm_sync_images_ping_pong(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len)
+static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
+                                     int image_count, int *status,
+                                     int stat_len, char *errmsg,
+                                     int errmsg_len)
 {
     int i;
     int images_to_check;
+    hashed_image_list_t *list_item;
     char check_images[image_count];
 
     images_to_check = image_count;
-    for (i = 0; i < image_count; i++) {
-        int q = image_list[i] - 1;
+    for (list_item = image_list, i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (list_item != NULL) {
+            q = list_item->image_id - 1;
+            list_item = list_item->hh.next;
+        } else {
+            q = i;
+        }
+
         check_images[i] = 1;
         if (my_proc == q) {
             images_to_check--;
@@ -2603,8 +2635,15 @@ static void comm_sync_images_ping_pong(int *image_list, int image_count,
     }
 
     while (images_to_check != 0) {
-        for (i = 0; i < image_count; i++) {
-            int q = image_list[i] - 1;
+        for (list_item = image_list, i = 0; i < image_count; i++) {
+            int q;
+            /* if image_list is NULL, we sync with all images */
+            if (list_item != NULL) {
+                q = list_item->image_id - 1;
+                list_item = list_item->hh.next;
+            } else {
+                q = i;
+            }
 
             if (check_images[i] == 0) continue;
 
@@ -2642,12 +2681,24 @@ static void comm_sync_images_ping_pong(int *image_list, int image_count,
     }
 }
 
-static void comm_sync_images_sense_rev(int *image_list, int image_count,
-                      int *status, int stat_len, char *errmsg, int errmsg_len)
+static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
+                                     int image_count, int *status,
+                                     int stat_len, char *errmsg,
+                                     int errmsg_len)
 {
     int i;
-    for (i = 0; i < image_count; i++) {
-        int q = image_list[i] - 1;
+    hashed_image_list_t *list_item;
+
+    for (list_item = image_list, i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (list_item != NULL) {
+            q = list_item->image_id - 1;
+            list_item = list_item->hh.next;
+        } else {
+            q = i;
+        }
+
         if (my_proc != q) {
             char sense = sync_flags[q].t.sense % 2 + 1;
             sync_flags[q].t.sense = sense;
@@ -2656,8 +2707,15 @@ static void comm_sync_images_sense_rev(int *image_list, int image_count,
         }
     }
 
-    for (i = 0; i < image_count; i++) {
-        int q = image_list[i] - 1;
+    for (list_item = image_list, i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (list_item != NULL) {
+            q = list_item->image_id - 1;
+            list_item = list_item->hh.next;
+        } else {
+            q = i;
+        }
 
         if (my_proc == q)
             continue;
