@@ -60,7 +60,7 @@ LCDEFS += -DGASNET_ALLOW_OPTIMIZED_DEBUG
 ifeq ($(BUILD_OPTIMIZE),DEBUG)
 LCDEFS += -DCAFRT_DEBUG
 endif
-ifeq ($(CAFRT_ENABLE_TRACES), YES)
+ifeq ($(CAFRT_ENABLE_DTRACES), YES)
 LCDEFS += -DTRACE
 endif
 ifeq ($(CAFRT_ENABLE_PROFILES), YES)
@@ -71,6 +71,8 @@ LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
 LCINCS += -I$(BUILD_BASE)/../uthash
 LCINCS += -I$(EPIK_ROOT)/include
+
+LCINCS += -I$(UHCAF_MPI_INCLUDE)
 
 CFLAGS += -DTARG_$(BUILD_TARGET)
 
@@ -84,7 +86,7 @@ CFILES = \
 	env.c \
 	util.c
 
-ifeq ($(CAFRT_ENABLE_TRACES), YES)
+ifeq ($(CAFRT_ENABLE_DTRACES), YES)
 CFILES += trace.c
 endif
 
@@ -107,7 +109,6 @@ LCDEFS += -DGASNET_CONDUIT_GEMINI
 endif
 ifeq ($(GASNET_CONDUIT),mpi)
 LCDEFS += -DGASNET_CONDUIT_MPI
-LCINCS += -I$(MPI_INCLUDE)
 ifneq ($(BUILD_TYPE), NONSHARED)
 LCOPTS += -fPIC
 endif

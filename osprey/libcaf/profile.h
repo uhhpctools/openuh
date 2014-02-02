@@ -67,6 +67,11 @@ typedef enum caf_prof_groups {
 
 #ifndef PCAF_INSTRUMENT
 
+/* existence of esd_open means episode and epilog library should be available
+ * */
+extern int esd_open();
+#pragma weak esd_open
+
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)                        ((void) 1)
 #define PROFILE_FUNC_ENTRY(grp)                                      ((void) 1)
 
@@ -75,13 +80,10 @@ typedef enum caf_prof_groups {
 
 
 
-#define PROFILE_INIT()   {\
-    if (_this_image == 1 && esd_open != NULL) \
-      Warning("Profiling support is not enabled"); \
-}
+#define PROFILE_INIT()                                               ((void) 1)
 
 #define PROFILE_STATS_INIT()   {\
-    if (_this_image == 1 && getenv(ENV_STATS) != NULL) \
+    if (_this_image == 1 && (esd_open != NULL || getenv(ENV_STATS) != NULL)) \
       Warning("Profiling support is not enabled"); \
 }
 

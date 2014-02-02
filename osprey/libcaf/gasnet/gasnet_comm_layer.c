@@ -79,6 +79,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
+#include "mpi.h"
 #include "caf_rtl.h"
 #include "alloc.h"
 #include "comm.h"
@@ -306,6 +307,55 @@ size_t comm_get_node_id(size_t proc)
 #else
     return 0;
 #endif
+}
+
+static int mpi_initialized_by_gasnet = 0;
+
+int MPI_Init(int *argc, char ***argv)
+{
+    int ret = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_gasnet) {
+        ret = PMPI_Init(argc, argv);
+    }
+
+    return ret;
+}
+
+void mpi_init_(int *ierr)
+{
+    int argc;
+    char **argv;
+    int flag;
+    *ierr = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_gasnet) {
+        argc = ARGC;
+        argv = ARGV;
+        *ierr = PMPI_Init(&argc, &argv);
+    }
+}
+
+int MPI_Finalize()
+{
+    int ret = MPI_SUCCESS;
+    if (!mpi_initialized_by_gasnet ||
+        in_error_termination || in_normal_termination) {
+        ret = PMPI_Finalize();
+    }
+
+    return ret;
+}
+
+void mpi_finalize_(int *ierr)
+{
+    int flag;
+    *ierr = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_gasnet ||
+        in_error_termination || in_normal_termination) {
+        *ierr = PMPI_Finalize();
+    }
 }
 
 /**************************************************************
@@ -1493,6 +1543,10 @@ void comm_init()
     ret = gasnet_getNodeInfo(nodeinfo_table, num_procs);
     if (ret != GASNET_OK) {
         Error("GASNET getNodeInfo failed");
+    }
+
+    if (MPI_Initialized(&mpi_initialized_by_gasnet) != MPI_SUCCESS) {
+        Error("MPI_Initialized check failed");
     }
 
     for (i = 0; i < num_procs; i++) {

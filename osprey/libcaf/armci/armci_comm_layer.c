@@ -205,6 +205,55 @@ size_t comm_get_node_id(size_t proc)
     return (size_t) armci_domain_id(ARMCI_DOMAIN_SMP, (int)proc);
 }
 
+static int mpi_initialized_by_armci = 0;
+
+int MPI_Init(int *argc, char ***argv)
+{
+    int ret = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_armci) {
+        ret = PMPI_Init(argc, argv);
+    }
+
+    return ret;
+}
+
+void mpi_init_(int *ierr)
+{
+    int argc;
+    char **argv;
+    int flag;
+    *ierr = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_armci) {
+        argc = ARGC;
+        argv = ARGV;
+        *ierr = PMPI_Init(&argc, &argv);
+    }
+}
+
+int MPI_Finalize()
+{
+    int ret = MPI_SUCCESS;
+    if (!mpi_initialized_by_armci ||
+        in_error_termination || in_normal_termination) {
+        ret = PMPI_Finalize();
+    }
+
+    return ret;
+}
+
+void mpi_finalize_(int *ierr)
+{
+    int flag;
+    *ierr = MPI_SUCCESS;
+
+    if (!mpi_initialized_by_armci ||
+        in_error_termination || in_normal_termination) {
+        *ierr = PMPI_Finalize();
+    }
+}
+
 /**************************************************************
  *       Shared (RMA) Memory Segment Address Ranges
  **************************************************************/
@@ -377,6 +426,8 @@ void comm_init()
     if (ret != 0) {
         Error("ARMCI init error");
     }
+
+    mpi_initialized_by_armci = 1;
 
     MPI_Comm_rank(MPI_COMM_WORLD, (int *) &my_proc);
     MPI_Comm_size(MPI_COMM_WORLD, (int *) &num_procs);

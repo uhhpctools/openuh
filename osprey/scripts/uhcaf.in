@@ -31,7 +31,7 @@
 
 progname="`basename $0`"
 
-tracing_enabled=@CAFRT_ENABLE_TRACES@
+tracing_enabled=@CAFRT_ENABLE_DTRACES@
 GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 ARMCI_HOME=@ARMCI_HOME@
@@ -41,6 +41,7 @@ CC=uhcc
 FC=uhf90
 CAF_FLAGS="-coarray -fno-second-underscore"
 CAF_LDFLAGS="-coarray"
+MPI_LDFLAGS=""
 ENVIRONMENT="-----------------------\n"
 
 uhcaf_usage()
@@ -56,11 +57,7 @@ Where options are
                         gasnet-<conduit>, where <conduit> may be one of: @GASNET_CONDUITS@
                         armci
 
-  --gasnet-path=G   G is the path to a specified GASNet installation
-                          Currently set to: $GASNET_HOME
-
-  --armci-path=A    A is the path to a specified ARMCI source directory
-                          Currently set to: $ARMCI_HOME
+  --mpi             Compile CAF+MPI programs
 
   --static-libcaf   Force use of the static libcaf-* archive
 
@@ -76,18 +73,25 @@ Where options are
 
   --keep, -k        Keep any temporary files in current directory
 
+  --gasnet-path=G   G is the path to a specified GASNet installation
+                          Currently set to: $GASNET_HOME
+
+  --armci-path=A    A is the path to a specified ARMCI source directory
+                          Currently set to: $ARMCI_HOME
+
 Environment Variables:
-   MPI_LIB          Specify path to MPI libs, if uhcaf can't figure it out on
-                    its own. Should be compatible with GASNet or ARMCI
-                    installation being used.
-                        Currently: $MPI_LIB
+   UHCAF_MPI_FCFLAGS
+                    Specify Fortran compiler options for MPI
+                        Currently: $UHCAF_MPI_FCFLAGS
 
-   MPI_LD_LIBS      Explicitly specify MPI libs to link in. E.g. -L$MPI_LIB -lmpi
-                        Currently: $MPI_LD_LIBS
+   UHCAF_MPI_LDFLAGS
+                    Specify linker options for MPI
+                        Currently: $UHCAF_MPI_LDFLAGS
 
-   AUX_LD_LIBS      Optionally specify additional libraries that should be linked
+   UHCAF_EXTRA_LDFLAGS
+                    Optionally specify additional libraries that should be linked
                     in.
-                        Currently: $AUX_LD_LIBS
+                        Currently: $UHCAF_EXTRA_LDFLAGS
 
 _EOT_
 
@@ -140,12 +144,12 @@ print_compile_link_info()
       LAYER_INSTALLATION_PATH=$GASNET_HOME
       UHCAF_NETWORK=$GASNET_CONDUIT
       if [ "$GASNET_CONDUIT" != "smp" ]; then
-          MSG_LAYER=$MPI_LIB
+          MSG_LAYER=$UHCAF_MPI_LDFLAGS
       fi
   elif [ "$COMM_LAYER" == "armci" ]; then
       LAYER_INSTALLATION_PATH=$ARMCI_HOME
       UHCAF_NETWORK=$ARMCI_NETWORK
-      MSG_LAYER=$MPI_LIB
+      MSG_LAYER=$UHCAF_MPI_LDFLAGS
   fi
 
   if [ -n "`$FC -V 2>&1 | grep -i \" --with-build-optimize=debug\"`" ]; then
@@ -234,9 +238,24 @@ if [ $# -eq 0 ]; then
   uhcaf_usage
 fi
 
+# set UHCAF_MPI_FCFLAGS if it isn't set
+if [ -z "$UHCAF_MPI_FCFLAGS" ]; then
+  set_env UHCAF_MPI_FCFLAGS "@UHCAF_MPI_FCFLAGS@"
+else
+  add_to_env_list UHCAF_MPI_FCFLAGS
+fi
+
+# set UHCAF_MPI_LDFLAGS if it isn't set
+if [ -z "$UHCAF_MPI_LDFLAGS" ]; then
+  set_env UHCAF_MPI_LDFLAGS "@UHCAF_MPI_LDFLAGS@"
+else
+  add_to_env_list UHCAF_MPI_LDFLAGS
+fi
+
 show_info='n'
 verbose='n'
 keep='n'
+support_mpi='n'
 all_args=("$@")
 arg_num=0
 link='y'
@@ -311,6 +330,12 @@ for arg in "$@" ;  do
           use_static_libcaf='y'
           pass_arg=no
           ;;
+        --mpi)
+          support_mpi='y'
+          CAF_FLAGS="$CAF_FLAGS $UHCAF_MPI_FCFLAGS"
+          MPI_LDFLAGS="$UHCAF_MPI_LDFLAGS"
+          pass_arg=no
+          ;;
         --show|--show-info)
           show_info='y'
           pass_arg=no
@@ -359,6 +384,10 @@ if [ $COMM_LAYER == gasnet ]; then
      print_error "No gasnet conduit set."
   fi
 
+  if [ "$GASNET_CONDUIT" == "smp" ]; then
+      print_error "CAF+MPI programs not supported when using GASNet smp conduit."
+  fi
+
   # get necessary linker args from appropriate GASNet *.mak file
 
   if [ "$keep" == "y" ]; then
@@ -401,55 +430,23 @@ if [ $COMM_LAYER == gasnet ]; then
   fi
 
 elif [ $COMM_LAYER == armci ]; then
-  # TODO: ideally, we should use same MPI used for ARMCI installation
-
-  if [ ! -d "$MPI_LIB" ]; then
-    # check if mpicc exists in the path. If so, set MPI_LIB accordingly.
-    mpi_ld_path=`which mpicc 2> /dev/null`
-    if [ -f "$mpi_ld_path" ]; then
-        MPI_LIB=`dirname $mpi_ld_path`/../lib
-    else
-        print_error "MPI_LIB needs to be set to valid path."
-    fi
-  fi
-
-  if [ -z "$MPI_LD_LIBS" ]; then
-      # MPI lib path was given, but can we figure out the necessary linker
-      # args?
-      if [ ! -f $MPI_LIB/../bin/mpicc ]; then
-          print_error "Can't determine what to link in from $MPI_LIB"
-      fi
-
-      mpi_ld=$MPI_LIB/../bin/mpicc
-
-      # does -showme:link work ?
-      MPI_LD_LIBS=`eval $mpi_ld -showme:link 2> /dev/null`
-      if [ "$?" != "0" ]; then
-          # does -link-info work?
-          ld_opt=`eval $mpi_ld -link-info 2> /dev/null`
-          if [ "$?" != "0" ]; then
-              print_error "MPI_LD_LIBS needs to be set"
-          fi
-          MPI_LD_LIBS=${ld_opt#*-L* }
-      fi
-      MPI_LD_LIBS="-L$MPI_LIB $MPI_LD_LIBS"
-  fi
+  # TODO We should use same MPI used for ARMCI installation, but not sure how to
+  # check for this. So using UHCAF_MPI_LDFLAGS instead and trusting that it is
+  # for the same MPI.
 
   # need to link in ARMCI and MPI libs as well.
   COMM_LIBS="-L$ARMCI_HOME/lib -Wl,-rpath,$ARMCI_HOME/lib -larmci $ARMCI_NETWORK_LIBS"
-  COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
+  COMM_LIBS="$COMM_LIBS $UHCAF_MPI_LDFLAGS"
+
   if [ "$use_static_libcaf" == "y" ]; then
       LIBCAF="-l:libcaf-armci.a"
   else
       LIBCAF="-lcaf-armci"
   fi
-
-  add_to_env_list "MPI_LIB"
-  add_to_env_list "MPI_LD_LIBS"
 fi
 
-if [ -n "$AUX_LD_LIBS" ]; then
-  add_to_env_list "AUX_LD_LIBS"
+if [ -n "$EXTRA_LDFLAGS" ]; then
+  add_to_env_list "EXTRA_LDFLAGS"
 fi
 
 # display information for uhcaf
@@ -616,7 +613,7 @@ else
                   $OBJECTS2 $compiler_args   \
                   $link_instructions.o $set_static_symm_data.o  \
                   $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
-                  $AUX_LD_LIBS
+                  $MPI_LDFLAGS $EXTRA_LDFLAGS
           stat=$?
       else
           # link command
@@ -624,7 +621,7 @@ else
                   $OBJECTS2 $compiler_args   \
                   $link_instructions.o  \
                   $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
-                  $AUX_LD_LIBS
+                  $MPI_LDFLAGS $EXTRA_LDFLAGS
           stat=$?
       fi
   else

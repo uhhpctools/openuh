@@ -87,12 +87,12 @@ if test "$ENABLE_COARRAYS" = "NO"; then
 fi
 
 # Set whether CAF runtime will be built
-AC_ARG_ENABLE([cafrt-traces],
-  AS_HELP_STRING([--enable-cafrt-traces],
-                 [Enable CAF Runtime Tracing Functionality]),
-                  CAFRT_ENABLE_TRACES="YES")
+AC_ARG_ENABLE([cafrt-dtraces],
+  AS_HELP_STRING([--enable-cafrt-dtraces],
+                 [Enable CAF Runtime Diagnostic Tracing Functionality]),
+                  CAFRT_ENABLE_DTRACES="YES")
 
-AS_IF([test "x$enable_cafrt_traces" != "xyes"], [ CAFRT_ENABLE_TRACES="NO" ])
+AS_IF([test "x$enable_cafrt_dtraces" != "xyes"], [ CAFRT_ENABLE_DTRACES="NO" ])
 
 # Set whether CAF runtime will be built
 AC_ARG_ENABLE([cafrt-profiles],
@@ -141,7 +141,7 @@ DEFAULT_CAF_HEAP_SIZE="$with_default_caf_heap_size",
 DEFAULT_CAF_HEAP_SIZE="30M")
 
 # set bash path
-BASH_PATH=`which bash`
+AC_PATH_PROG([BASH_PATH], [bash])
 
 if test -z "${BASH_PATH}"; then
   AC_MSG_ERROR([Could not find bash on system])
@@ -186,17 +186,8 @@ if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOM
 fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
-    if test ! -f "${MPI_INCLUDE}/mpi.h"; then
-        if test -n "`which mpicc 2>/dev/null`"; then
-            d=`which mpicc 2>/dev/null`
-            MPI_INCLUDE=`dirname $d`/../include
-        fi
-        if test ! -f "${MPI_INCLUDE}/mpi.h"; then
-            AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
-        fi
-    fi
     if test ! -d "${ARMCI_HOME}"; then
-        AC_MSG_ERROR([Specified --with-armci-root=<path> doesn't look right. Check path.])
+        AC_MSG_ERROR([Specified --with-armci-root=<path> does not look right. Check path.])
     fi
 fi
 
@@ -204,15 +195,27 @@ if test -n "${ARMCI_NETWORK_LIBS}" -a -z "${ARMCI_HOME}"; then
     AC_MSG_ERROR([--with-armci-root=<path> must be specified if you want to use ARMCI])
 fi
 
+if test "${BUILD_CAF_RUNTIME}" = "YES"; then
+    AC_PATH_PROG([MPICC_PATH], [mpicc])
+    if test ! -f "${UHCAF_MPI_INCLUDE}/mpi.h"; then
+        UHCAF_MPI_INCLUDE=`dirname ${MPICC_PATH}`/../include
+        if test ! -f "${UHCAF_MPI_INCLUDE}/mpi.h"; then
+            AC_MSG_ERROR([Environment variable UHCAF_MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays])
+        else
+            AC_MSG_NOTICE([Using $UHCAF_MPI_INCLUDE for compiling CAF runtime])
+        fi
+    fi
+fi
+
 
 if test -n "${GASNET_HOME}"; then
   if test ! -d "${GASNET_HOME}"; then
-      AC_MSG_ERROR([Specified --with-gasnet-root=<path> doesn't look right. Check path.])
+      AC_MSG_ERROR([Specified --with-gasnet-root=<path> does not look right. Check path.])
   fi
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
   if test  "${GASNET_CONDUITS}" = "*"; then
-      AC_MSG_ERROR([Specified --with-gasnet-root=<path> doesn't look right. Check path.])
+      AC_MSG_ERROR([Specified --with-gasnet-root=<path> does not look right. Check path.])
   fi
 fi
 
@@ -657,20 +660,21 @@ AC_SUBST([DRAGON_SUPPORT])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([BUILD_GNU4])
-AC_SUBST([ENABLE_COARRAYS])
-AC_SUBST([BUILD_CAF_RUNTIME])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
+AC_SUBST([ENABLE_COARRAYS])
+AC_SUBST([BUILD_CAF_RUNTIME])
+AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
 AC_SUBST([GASNET_HOME])
+AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([ARMCI_HOME])
 AC_SUBST([ARMCI_NETWORK_LIBS])
-AC_SUBST([GASNET_CONDUITS])
-AC_SUBST([DEFAULT_COMM])
-AC_SUBST([BASH_PATH])
-AC_SUBST([MPI_INCLUDE])
-AC_SUBST([CAFRT_ENABLE_TRACES])
+AC_SUBST([CAFRT_ENABLE_DTRACES])
 AC_SUBST([CAFRT_ENABLE_PROFILES])
-AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
+AC_SUBST([DEFAULT_COMM])
+AC_SUBST([UHCAF_MPI_INCLUDE])
+AC_SUBST([UHCAF_MPI_FCFLAGS])
+AC_SUBST([UHCAF_MPI_LDFLAGS])
 AC_SUBST([BUILD_LIBUHINSTR])
 AC_SUBST([TAU_ROOT])
 AC_SUBST([TAU_LIBS])
@@ -946,7 +950,7 @@ AS_IF([test "${ENABLE_COARRAYS}" = "YES"], [
 AC_MSG_NOTICE([   BUILD_CAF_RUNTIME              = $BUILD_CAF_RUNTIME])
 ])
 AS_IF([test "${BUILD_CAF_RUNTIME}" = "YES"], [
-AC_MSG_NOTICE([   CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES])
+AC_MSG_NOTICE([   CAFRT_ENABLE_DTRACES           = $CAFRT_ENABLE_DTRACES])
 AC_MSG_NOTICE([   CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES])
 AS_IF([test "${CAFRT_ENABLE_PROFILES}" = "YES"], [
 AC_MSG_NOTICE([   EPIK_ROOT                      = $EPIK_ROOT])
@@ -957,7 +961,9 @@ AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])
 AC_MSG_NOTICE([   GASNET_CONDUITS                = $GASNET_CONDUITS])
 AC_MSG_NOTICE([   ARMCI_HOME                     = $ARMCI_HOME])
 AC_MSG_NOTICE([   ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS])
-AC_MSG_NOTICE([   MPI_INCLUDE                    = $MPI_INCLUDE])
+AC_MSG_NOTICE([   UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE])
+AC_MSG_NOTICE([   UHCAF_MPI_FCFLAGS              = $UHCAF_MPI_FCFLAGS])
+AC_MSG_NOTICE([   UHCAF_MPI_LDFLAGS              = $UHCAF_MPI_LDFLAGS])
 ])
 AS_IF([test "${BUILD_LIBUHINSTR}" = "YES"], [
 AC_MSG_NOTICE([   BUILD_LIBUHINSTR               = $BUILD_LIBUHINSTR])
