@@ -462,7 +462,10 @@ static void uhcaf_trace_fprint_rma_segment(FILE * f, char *str, int len)
     const int width = 70;
     int i, j;
     char label[width];
+    char desc[len+1];
 
+    memset(desc, 0, len+1);
+    strncpy(desc, str, len);
     memset(label, 0, width);
 
     /* print header */
@@ -479,8 +482,8 @@ static void uhcaf_trace_fprint_rma_segment(FILE * f, char *str, int len)
     for (i = 0; i < width - (j + strlen(label)); i++)
         fprintf(f, " ");
     fprintf(f, "|\n");
-    if (str != NULL && len > 0) {
-        sprintf(label, "(%lu) %s", _this_image, str);
+    if (desc != NULL && len > 0) {
+        sprintf(label, "(%lu) %s", _this_image, desc);
         j = (width - strlen(label)) / 2;
         fprintf(f, "|");
         for (i = 0; i < j; i++)

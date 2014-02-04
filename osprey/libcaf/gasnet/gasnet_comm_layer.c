@@ -1313,6 +1313,11 @@ void comm_init()
      * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
      * accordingly.
      */
+    if (static_symm_data_total_size % SYMM_MEM_ALIGNMENT) {
+        static_symm_data_total_size =
+            (static_symm_data_total_size/SYMM_MEM_ALIGNMENT+1)*
+              SYMM_MEM_ALIGNMENT;
+    }
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
                                    DEFAULT_IMAGE_HEAP_SIZE);
@@ -1615,6 +1620,7 @@ void comm_init()
                 num_procs * sizeof(sync_flag_t), NULL);
         memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
     }
+
 
     /* start progress thread */
     comm_service_init();
@@ -2854,7 +2860,7 @@ void comm_lcb_free(void *ptr)
         return;
     }
 
-    if (ptr < coarray_start_all_images[my_proc].addr &&
+    if (ptr < coarray_start_all_images[my_proc].addr ||
         ptr >=
         (coarray_start_all_images[my_proc].addr + shared_memory_size)) {
         gasnet_hold_interrupts();
@@ -3951,7 +3957,7 @@ void comm_strided_write(size_t proc,
 
             if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
                 struct handle_list *handle_node =
-                    get_next_handle(proc, NULL, src, 0, PUTS);
+                    get_next_handle(proc, NULL, NULL, 0, PUTS);
                 handle_node->handle = handle;
                 handle_node->next = 0;
 

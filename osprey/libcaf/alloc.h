@@ -34,6 +34,8 @@
 #include "lock.h"
 #include "dopevec.h"
 
+static const int SYMM_MEM_ALIGNMENT = 4;
+
 /* SHARED MEMORY MANAGEMENT */
 struct shared_memory_slot {
     void *addr;
