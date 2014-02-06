@@ -111,6 +111,8 @@ extern int rma_prof_rid;
  * asymmetric data.  */
 extern shared_memory_slot_t *common_slot;
 
+extern int out_of_segment_rma_enabled;
+
 /*
  * Static variable declarations
  */
@@ -185,10 +187,10 @@ static struct cache **cache_all_images;
 static size_t shared_memory_size;
 
 /* mutex for critical sections */
-lock_t *critical_lock;
+static lock_t *critical_lock;
 
 /* mutex for atomic ops  -- using a single one for now. */
-gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
+static gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 
 /* forward declarations */
 
@@ -1429,6 +1431,9 @@ void comm_init()
     getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
                                       DEFAULT_GETCACHE_LINE_SIZE);
 
+    out_of_segment_rma_enabled = get_env_flag(ENV_OUT_OF_SEGMENT_RMA,
+                                       DEFAULT_ENABLE_OUT_OF_SEGMENT_RMA);
+
     nb_xfer_limit = get_env_size(ENV_NB_XFER_LIMIT, DEFAULT_NB_XFER_LIMIT);
 
     /* malloc data structures for nb-put, get-cache */
@@ -1958,6 +1963,7 @@ static struct handle_list *get_next_handle(unsigned long proc,
     handle_node->rmaid = 0;
 #endif
     handle_node->access_type = access_type;
+    handle_node->state = INTERNAL;
     handle_node->final_dest = NULL;
     handle_node->next = 0;      //Just in case there is a sync before the put
     nb_mgr[access_type].num_handles++;
@@ -2010,6 +2016,12 @@ static void delete_node(unsigned long proc, struct handle_list *node,
     struct handle_list **handles = nb_mgr[access_type].handles;
     void *node_address;
 
+    if (node->state == STALE) {
+        comm_free(node);
+        return;
+        /* does not reach */
+    }
+
     nb_mgr[access_type].num_handles--;
 
     if (node->prev) {
@@ -2029,13 +2041,21 @@ static void delete_node(unsigned long proc, struct handle_list *node,
         max_nb_address[proc] = 0;
         if (access_type == PUTS)
             comm_lcb_free(node->local_buf);
-        comm_free(node);
+        if (node->state == INTERNAL) {
+            comm_free(node);
+        } else {
+            node->state = STALE;
+        }
         return;
     }
     node_address = node->address;
     if (access_type == PUTS)
         comm_lcb_free(node->local_buf);
-    comm_free(node);
+    if (node->state == INTERNAL) {
+        comm_free(node);
+    } else {
+        node->state = STALE;
+    }
     if (node_address == min_nb_address[proc])
         reset_min_nb_address(proc, access_type);
     if ((node_address + node->size) == max_nb_address[proc])
@@ -2104,7 +2124,11 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
         handle_node = handle_node->next;
         /* for puts */
         comm_lcb_free(node_to_delete->local_buf);
-        comm_free(node_to_delete);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            node_to_delete->state = STALE;
+        }
         nb_mgr[PUTS].num_handles--;
     }
     handle_node = nb_mgr[GETS].handles[proc];
@@ -2118,7 +2142,11 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
                      handle_node);
         node_to_delete = handle_node;
         handle_node = handle_node->next;
-        comm_free(node_to_delete);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            node_to_delete->state = STALE;
+        }
         nb_mgr[GETS].num_handles--;
     }
 
@@ -2286,6 +2314,9 @@ void comm_finalize(int exit_code)
     *this_image_stopped = 1; /* 1 means normal stopped */
     stopped_image_exists[my_proc] = 1;
     stopped_image_exists[num_procs] = 1;
+
+    /* wait on all pendings remote accesses to complete */
+    wait_on_all_pending_accesses();
 
     /* broadcast to every image that this image has stopped.
      * TODO: Other images should be able to detect this image has stopped when
@@ -2473,6 +2504,20 @@ void comm_sync(comm_handle_t hdl)
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
+
+        if (((struct handle_list *)hdl)->state == STALE) {
+            comm_free(hdl);
+            return;
+            /* does not reach */
+        } else if (((struct handle_list *)hdl)->state == INTERNAL) {
+            Error("Attempted to wait on invalid handle");
+            /* does not reach */
+        }
+
+        /* the handle state should be EXPOSED here. Set it to INTERNAL so that
+         * it gets fully deleted */
+        ((struct handle_list *)hdl)->state = INTERNAL;
+
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
         sync_on_handle(hdl);
         delete_node(((struct handle_list *) hdl)->proc,
@@ -2638,7 +2683,7 @@ static void comm_sync_images_counter(hashed_image_list_t *image_list,
 
             check_for_error_stop();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].value) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -2709,7 +2754,7 @@ static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
 
             check_for_error_stop();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].value) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -2736,6 +2781,7 @@ static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
                 if (enable_get_cache)
                     refetch_cache(q);
             }
+
         }
         comm_service();
     }
@@ -2790,7 +2836,7 @@ static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
 
             check_for_error_stop();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].t.val) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -3155,7 +3201,7 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         }
 
 #if GASNET_PSHM
-        if (node_info->supernode == nodeinfo_table[my_proc].supernode
+        else if (node_info->supernode == nodeinfo_table[my_proc].supernode
             && try_local_copy) {
             ssize_t ofst = node_info->offset;
             remote_src = (void *) ((uintptr_t) remote_src + ofst);
@@ -3192,12 +3238,19 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                          remote_src, proc + 1, temp_dest, nbytes,
                          handle_node->handle, dest);
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_LOAD_DEFERRED_END(proc);
         } else {
             /* get has completed */
+
+            if (temp_dest != dest) {
+                memcpy(dest, temp_dest, nbytes);
+                coarray_asymmetric_deallocate_(temp_dest);
+            }
 
             if (hdl != NULL) {
                 *hdl = NULL;
@@ -3309,8 +3362,10 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             handle_node->next = 0;
             update_nb_address_block(remote_dest, proc, nbytes, PUTS);
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3348,8 +3403,10 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             handle_node->handle = handle;
             handle_node->next = 0;
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3449,8 +3506,10 @@ void comm_write(size_t proc, void *dest, void *src,
             handle_node->next = 0;
             update_nb_address_block(remote_dest, proc, nbytes, PUTS);
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3487,8 +3546,10 @@ void comm_write(size_t proc, void *dest, void *src,
             handle_node->next = 0;
             update_nb_address_block(remote_dest, proc, nbytes, PUTS);
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3532,17 +3593,15 @@ void comm_strided_nbread(size_t proc,
         for (i = 0; i <= stride_levels; i++) {
             nbytes = nbytes * count[i];
         }
-        if (nbytes <= SMALL_XFER_SIZE) {
-            /* local copy */
-            local_strided_copy(src, src_strides, dest, dest_strides,
-                               count, stride_levels);
-            if (hdl != NULL)
-                *hdl = NULL;
+        /* local copy */
+        local_strided_copy(src, src_strides, dest, dest_strides,
+                count, stride_levels);
+        if (hdl != NULL)
+            *hdl = NULL;
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-            return;
-            /* does not reach */
-        }
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+        /* does not reach */
     }
 #endif
     {
@@ -3567,10 +3626,12 @@ void comm_strided_nbread(size_t proc,
 
 #if GASNET_PSHM && !(defined(GASNET_CONDUIT_UDP))
             const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+            int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
             /* NOTE: doing a strided local copy instead of using GASNet's VIS
              * interface seems to have a performance benefit for the SMP/MPI
              * conduits, but not the UDP conduit with local spawn. */
-            if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+            if (src_in_shared_mem &&
+                node_info->supernode == nodeinfo_table[my_proc].supernode) {
 
                 ssize_t ofst = node_info->offset;
                 remote_src = (void *) ((uintptr_t) remote_src + ofst);
@@ -3613,8 +3674,10 @@ void comm_strided_nbread(size_t proc,
                              remote_src, proc + 1, dest, stride_levels,
                              handle_node->handle);
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_LOAD_DEFERRED_END(proc);
             } else if (hdl != NULL) {
@@ -3750,8 +3813,10 @@ void comm_strided_write_from_lcb(size_t proc,
                 handle_node->next = 0;
                 update_nb_address_block(remote_dest, proc, size, PUTS);
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3798,8 +3863,10 @@ void comm_strided_write_from_lcb(size_t proc,
                 handle_node->handle = handle;
                 handle_node->next = 0;
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {
@@ -3917,12 +3984,16 @@ void comm_strided_write(size_t proc,
                 handle_node->next = 0;
                 update_nb_address_block(remote_dest, proc, size, PUTS);
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
+                comm_lcb_free(new_src);
+
                 if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
@@ -3930,6 +4001,8 @@ void comm_strided_write(size_t proc,
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
+
+                comm_lcb_free(new_src);
 
                 PROFILE_RMA_STORE_END(proc);
             }
@@ -3961,8 +4034,10 @@ void comm_strided_write(size_t proc,
                 handle_node->handle = handle;
                 handle_node->next = 0;
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == GASNET_INVALID_HANDLE) {

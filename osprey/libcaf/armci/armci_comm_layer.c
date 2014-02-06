@@ -105,8 +105,8 @@ static int in_normal_termination = 0;
  * writes to finish when a new read/write adrress overlaps any one of
  * them.  */
 static struct nb_handle_manager nb_mgr[2];
-static armci_handle_x_t *armci_nbput_handles;
-static armci_handle_x_t *armci_nbget_handles;
+static armci_handle_x_t *armci_nbput_handles = NULL;
+static armci_handle_x_t *armci_nbget_handles = NULL;
 
 static size_t nb_xfer_limit;
 
@@ -519,6 +519,12 @@ void comm_init()
 
     nb_xfer_limit = get_env_size(ENV_NB_XFER_LIMIT, DEFAULT_NB_XFER_LIMIT);
 
+    if (nb_xfer_limit < 1) {
+        if (my_proc == 0) {
+            Error("%s needs to be set to at least 1", ENV_NB_XFER_LIMIT);
+        }
+    }
+
     /* Create flags and mutex for sync_images and critical regions
      * For every image, we create num_procs mutexes and one additional
      * mutex for the critical region. This needs to be changed to
@@ -581,26 +587,32 @@ void comm_init()
     nb_mgr[PUTS].num_handles = 0;
     nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
-    armci_nbput_handles = malloc(nb_xfer_limit * sizeof(armci_handle_x_t));
-    p = armci_nbput_handles;
-    for (i = 0; i < nb_xfer_limit - 1; i++) {
-        p[i].next = &p[i + 1];
+    if (nb_xfer_limit > 0) {
+        armci_nbput_handles = malloc(nb_xfer_limit *
+                                     sizeof(armci_handle_x_t));
+        p = armci_nbput_handles;
+        for (i = 0; i < nb_xfer_limit - 1; i++) {
+            p[i].next = &p[i + 1];
+        }
+        p[nb_xfer_limit - 1].next = NULL;
+        nb_mgr[PUTS].free_armci_handles = armci_nbput_handles;
     }
-    p[nb_xfer_limit - 1].next = NULL;
-    nb_mgr[PUTS].free_armci_handles = armci_nbput_handles;
 
     nb_mgr[GETS].handles = (struct handle_list **) malloc
         (num_procs * sizeof(struct handle_list *));
     nb_mgr[GETS].num_handles = 0;
     nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
-    armci_nbget_handles = malloc(nb_xfer_limit * sizeof(armci_handle_x_t));
-    p = armci_nbget_handles;
-    for (i = 0; i < nb_xfer_limit - 1; i++) {
-        p[i].next = &p[i + 1];
+    if (nb_xfer_limit > 0) {
+        armci_nbget_handles = malloc(nb_xfer_limit *
+                                     sizeof(armci_handle_x_t));
+        p = armci_nbget_handles;
+        for (i = 0; i < nb_xfer_limit - 1; i++) {
+            p[i].next = &p[i + 1];
+        }
+        p[nb_xfer_limit - 1].next = NULL;
+        nb_mgr[GETS].free_armci_handles = armci_nbget_handles;
     }
-    p[nb_xfer_limit - 1].next = NULL;
-    nb_mgr[GETS].free_armci_handles = armci_nbget_handles;
 
     /* initialize data structures to 0 */
     for (i = 0; i < num_procs; i++) {
@@ -1018,6 +1030,7 @@ static struct handle_list *get_next_handle(unsigned long proc,
     handle_node->size = size;
     handle_node->proc = proc;
     handle_node->access_type = access_type;
+    handle_node->state = INTERNAL;
     handle_node->next = 0;      //Just in case there is a sync before the put
     nb_mgr[access_type].num_handles++;
     return handle_node;
@@ -1071,6 +1084,12 @@ static void delete_node(unsigned long proc, struct handle_list *node,
     struct handle_list **handles = nb_mgr[access_type].handles;
     void *node_address;
 
+    if (node->state == STALE) {
+        comm_free(node);
+        return;
+        /* does not reach */
+    }
+
     nb_mgr[access_type].num_handles--;
 
     /* return armci handle to free list */
@@ -1093,14 +1112,24 @@ static void delete_node(unsigned long proc, struct handle_list *node,
         max_nb_address[proc] = 0;
         if (access_type = PUTS)
             comm_lcb_free(node->local_buf);
-        comm_free(node);
+        if (node->state == INTERNAL) {
+            comm_free(node);
+        } else {
+            node->handle = NULL;
+            node->state = STALE;
+        }
         return;
     }
     node_address = node->address;
     if (access_type == PUTS)
         comm_lcb_free(node->local_buf);
 
-    comm_free(node);
+    if (node->state == INTERNAL) {
+        comm_free(node);
+    } else {
+        node->handle = NULL;
+        node->state = STALE;
+    }
     if (node_address == min_nb_address[proc])
         reset_min_nb_address(proc, access_type);
     if ((node_address + node->size) == max_nb_address[proc])
@@ -1184,7 +1213,14 @@ static void wait_on_pending_puts(size_t proc)
         node_to_delete = handle_node;
         handle_node = handle_node->next;
         comm_lcb_free(node_to_delete->local_buf);
-        comm_free(node_to_delete);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            /* will delete node_to_delete later */
+            node_to_delete->handle = NULL;
+            node_to_delete->state = STALE;
+        }
+        nb_mgr[PUTS].num_handles--;
     }
     handles[proc] = 0;
     min_nb_address[proc] = 0;
@@ -1218,7 +1254,13 @@ static void wait_on_all_pending_accesses()
             handle_node = handle_node->next;
             /* for puts */
             comm_lcb_free(node_to_delete->local_buf);
-            comm_free(node_to_delete);
+            if (node_to_delete->state == INTERNAL) {
+                comm_free(node_to_delete);
+            } else {
+                /* will delete node_to_delete later */
+                node_to_delete->handle = NULL;
+                node_to_delete->state = STALE;
+            }
             nb_mgr[PUTS].num_handles--;
         }
         nb_mgr[PUTS].handles[i] = 0;
@@ -1236,7 +1278,13 @@ static void wait_on_all_pending_accesses()
                                 GETS);
             node_to_delete = handle_node;
             handle_node = handle_node->next;
-            comm_free(node_to_delete);
+            if (node_to_delete->state == INTERNAL) {
+                comm_free(node_to_delete);
+            } else {
+                /* will delete node_to_delete later */
+                node_to_delete->handle = NULL;
+                node_to_delete->state = STALE;
+            }
             nb_mgr[GETS].num_handles--;
         }
         nb_mgr[GETS].handles[i] = 0;
@@ -1270,7 +1318,13 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
         handle_node = handle_node->next;
         /* for puts */
         comm_lcb_free(node_to_delete->local_buf);
-        comm_free(node_to_delete);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            /* will delete node_to_delete later */
+            node_to_delete->handle = NULL;
+            node_to_delete->state = STALE;
+        }
         nb_mgr[PUTS].num_handles--;
     }
     nb_mgr[PUTS].handles[proc] = 0;
@@ -1288,7 +1342,13 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
                 GETS);
         node_to_delete = handle_node;
         handle_node = handle_node->next;
-        comm_free(node_to_delete);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            /* will delete node_to_delete later */
+            node_to_delete->handle = NULL;
+            node_to_delete->state = STALE;
+        }
         nb_mgr[GETS].num_handles--;
     }
     nb_mgr[GETS].handles[proc] = 0;
@@ -1482,6 +1542,9 @@ void comm_finalize(int exit_code)
     stopped_image_exists[my_proc] = 1;
     stopped_image_exists[num_procs] = 1;
 
+    /* wait on all pendings remote accesses to complete */
+    wait_on_all_pending_accesses();
+
     /* broadcast to every image that this image has stopped.
      * TODO: Other images should be able to detect this image has stopped when
      * they try to synchronize with it. Requires custom implementation of
@@ -1591,9 +1654,24 @@ void comm_sync(comm_handle_t hdl)
 
     check_for_error_stop();
 
-    if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
+    if (hdl == (comm_handle_t) - 1) {
+        /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
+
+        if (((struct handle_list *)hdl)->state == STALE) {
+            comm_free(hdl);
+            return;
+            /* does not reach */
+        } else if (((struct handle_list *)hdl)->state == INTERNAL) {
+            Error("Attempted to wait on invalid handle");
+            /* does not reach */
+        }
+
+        /* the handle state should be EXPOSED here. Set it to INTERNAL so that
+         * it gets fully deleted */
+        ((struct handle_list *)hdl)->state = INTERNAL;
+
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
 
         if (((struct handle_list *)hdl)->access_type == PUTS) {
@@ -1760,7 +1838,7 @@ static void comm_sync_images_counter(hashed_image_list_t *image_list,
             comm_service();
             LOAD_STORE_FENCE();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].value) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -1831,7 +1909,7 @@ static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
 
             check_for_error_stop();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].value) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -1908,7 +1986,7 @@ static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
             comm_service();
             LOAD_STORE_FENCE();
 
-            if (stopped_image_exists[q]) {
+            if (stopped_image_exists[q] && !sync_flags[q].t.val) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -2193,8 +2271,10 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
             handle_node->handle = handle;
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_LOAD_DEFERRED_END(proc);
         } else if (hdl != NULL) {
@@ -2340,8 +2420,10 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             handle_node->handle = handle;
             handle_node->next = 0;
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == NULL) {
@@ -2443,8 +2525,10 @@ void comm_write(size_t proc, void *dest, void *src,
             handle_node->handle = handle;
             handle_node->next = 0;
 
-            if (hdl != NULL)
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
                 *hdl = handle_node;
+            }
 
             PROFILE_RMA_STORE_END(proc);
         } else if (handle == NULL) {
@@ -2498,20 +2582,15 @@ void comm_strided_nbread(size_t proc,
 #if defined(ENABLE_LOCAL_MEMCPY)
     size_t nbytes = 1;
     if (my_proc == proc) {
-        for (i = 0; i <= stride_levels; i++) {
-            nbytes = nbytes * count[i];
-        }
-        if (nbytes <= SMALL_XFER_SIZE) {
-            /* local copy */
-            local_strided_copy(src, src_strides, dest, dest_strides,
-                               count, stride_levels);
-            if (hdl != NULL)
-                *hdl = NULL;
+        /* local copy */
+        local_strided_copy(src, src_strides, dest, dest_strides,
+                count, stride_levels);
+        if (hdl != NULL)
+            *hdl = NULL;
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-            return;
-            /* does not reach */
-        }
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+        /* does not reach */
     }
 #endif
     {
@@ -2558,8 +2637,10 @@ void comm_strided_nbread(size_t proc,
 
                 handle_node->handle = handle;
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_LOAD_DEFERRED_END(proc);
             } else if (hdl != NULL) {
@@ -2762,8 +2843,10 @@ void comm_strided_write_from_lcb(size_t proc,
                 handle_node->handle = handle;
                 handle_node->next = 0;
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == NULL) {
@@ -2904,8 +2987,10 @@ void comm_strided_write(size_t proc,
                 handle_node->handle = handle;
                 handle_node->next = 0;
 
-                if (hdl != NULL)
+                if (hdl != NULL) {
+                    handle_node->state = EXPOSED;
                     *hdl = handle_node;
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == NULL) {

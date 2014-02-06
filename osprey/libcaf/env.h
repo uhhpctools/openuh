@@ -42,6 +42,7 @@
 #define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
 #define ENV_CO_REDUCE_ALGORITHM       "UHCAF_CO_REDUCE_ALGORITHM"
 #define ENV_SYNC_IMAGES_ALGORITHM     "UHCAF_SYNC_IMAGES_ALGORITHM"
+#define ENV_OUT_OF_SEGMENT_RMA        "UHCAF_OUT_OF_SEGMENT_RMA"
 
 #define DEFAULT_ENABLE_STATS              0
 #define DEFAULT_ENABLE_GETCACHE           0
@@ -51,6 +52,7 @@
 #define DEFAULT_GETCACHE_LINE_SIZE        65536L
 #define DEFAULT_IMAGE_HEAP_SIZE           31457280L
 #define DEFAULT_NB_XFER_LIMIT             16
+#define DEFAULT_ENABLE_OUT_OF_SEGMENT_RMA 0
 
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);

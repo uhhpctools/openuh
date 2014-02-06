@@ -434,6 +434,10 @@ elif [ $COMM_LAYER == armci ]; then
   # check for this. So using UHCAF_MPI_LDFLAGS instead and trusting that it is
   # for the same MPI.
 
+  if [ -z "$UHCAF_MPI_LDFLAGS" ]; then
+      print_error "compiling with ARMCI requires UHCAF_MPI_LDFLAGS to be given"
+  fi
+
   # need to link in ARMCI and MPI libs as well.
   COMM_LIBS="-L$ARMCI_HOME/lib -Wl,-rpath,$ARMCI_HOME/lib -larmci $ARMCI_NETWORK_LIBS"
   COMM_LIBS="$COMM_LIBS $UHCAF_MPI_LDFLAGS"

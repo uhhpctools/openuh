@@ -38,6 +38,12 @@ typedef enum {
     GETS = 1
 } access_type_t;
 
+typedef enum {
+    INTERNAL = 0,
+    EXPOSED = 1,
+    STALE = 2
+} handle_state_t;
+
 struct handle_list {
     armci_hdl_t *handle;
     int rmaid;
@@ -45,6 +51,7 @@ struct handle_list {
     void *local_buf;
     unsigned long size;
     unsigned long proc;
+    handle_state_t state;
     access_type_t access_type;
     struct handle_list *prev;
     struct handle_list *next;

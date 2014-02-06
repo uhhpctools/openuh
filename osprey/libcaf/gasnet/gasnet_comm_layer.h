@@ -80,11 +80,16 @@ typedef enum {
     nonsymmetric_coarray,
 } memory_segment_type;
 
-
 typedef enum {
     PUTS = 0,
     GETS = 1
 } access_type_t;
+
+typedef enum {
+    INTERNAL = 0,
+    EXPOSED = 1,
+    STALE = 2
+} handle_state_t;
 
 struct handle_list {
     gasnet_handle_t handle;
@@ -95,6 +100,7 @@ struct handle_list {
     access_type_t access_type;
     void *final_dest;
     int rmaid;
+    handle_state_t state;
     struct handle_list *prev;
     struct handle_list *next;
 };

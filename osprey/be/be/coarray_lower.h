@@ -66,7 +66,8 @@ extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 #define COARRAY_STRIDED_READ                "__coarray_strided_read"
 #define COARRAY_STRIDED_WRITE_FROM_LCB      "__coarray_strided_write_from_lcb"
 #define COARRAY_STRIDED_WRITE               "__coarray_strided_write"
-#define COARRAY_SYNC                        "__coarray_sync"
+#define COARRAY_WAIT                        "__coarray_wait"
+#define COARRAY_WAIT_ALL                    "__coarray_wait_all"
 
 #endif /* caf_lower_h_included */
 
