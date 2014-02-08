@@ -86,19 +86,10 @@ Environment Variables:
                       of remotely-accessible data
                          Can be set with --image-heap
 
-   UHCAF_STATS        Enable statistical collection
-                         Can be set with --stats
-
-   UHCAF_DTRACE       Specifies trace levels for runtime.
-                         Can be set with --dtrace
-
-   UHCAF_DTRACE_DIR   Specifies dir to store runtime traces
-                         Can be set with --dtrace-dir
-
    UHCAF_PROGRESS_THREAD
-                      Set to 1 to enable progress thread in CAF runtime.
-                      Note: This is only used for GASNet to ensure progress of
-                      Active Messages (AMs).
+                      Set to 1 to enable progress thread for CAF runtime. By
+                      default it is 0.  Note: This is only used for GASNet to
+                      ensure progress of Active Messages (AMs).
 
    UHCAF_PROGRESS_THREAD_INTERVAL
                       Set the time interval (ns) between AM serving by progress
@@ -119,18 +110,62 @@ Environment Variables:
                       counter, ping_pong, or sense_reversing.  By default it
                       is sense_reversing.
 
+   UHCAF_ALLOC_BYTE_ALIGNMENT
+                      Specifies the byte alignment for allocations out of the
+                      remote-accessible data segment. By default it is 8.
+
+   UHCAF_SHARED_MEM_RMA_BYPASS
+                      Specifies that the runtime should try to bypass
+                      invocation of the communication layer's API for remote
+                      memory access when its possible to directly access the
+                      location within the shared memory. By default it is 1.
+
+   UHCAF_LOCAL_PACK_NONCONTIG_PUT
+                      Specifies that runtime should try to do local packing of
+                      source buffer when performing a non-contiguous put. It is
+                      used currently only for the GASNet layer to ensure local
+                      completion of non-contiguous puts without having to wait
+                      for remote completion. The overhead of the packing may
+                      be greater than the gains, so by default it is 0.
+
+   ---------------------------------------------------------------------------
+   Profiling (requires compiler to be configured with profiling enabled)
+   ---------------------------------------------------------------------------
+
+   UHCAF_PROFILE      Turn on profiling at start of program. User may
+                      optionally turn profiling on or off by calling
+                      uhcaf_profile_start and uhcaf_profile_stop respectively.
+                      By default, this setting is 0.
+
+   UHCAF_STATS        Enable some statistical collection while profiling is
+                      on.
+                         Can be set with --stats
+   ---------------------------------------------------------------------------
+   Diagnostics (requires compiler to be configured with dtrace enabled)
+   ---------------------------------------------------------------------------
+
+   UHCAF_DTRACE       Specifies diagnostic trace levels for runtime.
+                         Can be set with --dtrace
+
+   UHCAF_DTRACE_DIR   Specifies dir to store diagnostic traces
+                         Can be set with --dtrace-dir
+
    -------------
    EXPERIMENTAL:
    -------------
 
    UHCAF_GETCACHE
                       Set to 1 to enable getcache runtime optimization.
-                      EXPERIMENTAL.
 
-   UHCAF_GETCACHE_LINE_SIZE
-                      Specifies the size (in bytes) of the cache line used by
-                      getcache optimizer. By default it is 64KB.
+   UHCAF_GETCACHE_BLOCK_SIZE
+                      Specifies the size (in bytes) of the cache block used by
+                      get-cache optimizer. By default it is 64KB.
 
+   UHCAF_GETCACHE_SYNC_REFETCH
+                      This enables refetch of cached blocks at image control
+                      statements that wait on other images. If set to 0, then
+                      all blocks in the cache are invalidated and only
+                      refetched on demand. By default, it is set to 1.
 
    UHCAF_OUT_OF_SEGMENT_RMA
                       Set to 1 to enable out-of-segment remote memory access
@@ -158,16 +193,6 @@ Where OPTIONS are:
                       K, M, G which indicates size in kilobytes, megabytes,
                       and gigabytes, respectively.
 
-  --dtrace=L          Sets diagnostic trace levels for runtime.
-                      L=all or trace levels delimited by ':'.
-                        Available trace levels:
-                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
-                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
-
-  --dtrace-dir=D      D is name of directory to store diagnostic traces
-
-  --stats             Turn on statistical collection
-
   --verbose,-v        Verbose output
 
   --show              Display launch settings and command, but does not run
@@ -181,6 +206,24 @@ Where OPTIONS are:
                       runtime environment and exits
 
   --version,-V        Print version of cafrun and exits
+
+   ---------------------------------------------------------------------------
+   Profiling (requires compiler to be configured with profiling enabled)
+   ---------------------------------------------------------------------------
+
+  --stats             Turn on statistical collection
+
+   ---------------------------------------------------------------------------
+   Diagnostics (requires compiler to be configured with dtrace enabled)
+   ---------------------------------------------------------------------------
+
+  --dtrace=L          Sets diagnostic trace levels for runtime.
+                      L=all or trace levels delimited by ':'.
+                        Available trace levels:
+                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
+                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
+
+  --dtrace-dir=D      D is name of directory to store diagnostic traces
 
 _EOT_
 
@@ -210,19 +253,86 @@ set_env()
 
   cmd="$var=\"$val\"; export $var"
   eval $cmd
+}
 
-  add_to_env_list $var $val
+add_uhcaf_envs_to_list()
+{
+    if [ -n "$UHCAF_LAUNCHER" ]; then
+        add_to_env_list UHCAF_LAUNCHER
+    fi
+    if [ -n "$UHCAF_LAUNCHER_OPTS" ]; then
+        add_to_env_list UHCAF_LAUNCHER_OPTS
+    fi
+    if [ -n "$UHCAF_NUM_IMAGES" ]; then
+        add_to_env_list UHCAF_NUM_IMAGES
+    fi
+    if [ -n "$UHCAF_IMAGE_HEAP_SIZE" ]; then
+        add_to_env_list UHCAF_IMAGE_HEAP_SIZE
+    fi
+    if [ -n "$UHCAF_PROGRESS_THREAD" ]; then
+        add_to_env_list UHCAF_PROGRESS_THREAD
+    fi
+    if [ -n "$UHCAF_PROGRESS_THREAD_INTERVAL" ]; then
+        add_to_env_list UHCAF_PROGRESS_THREAD_INTERVAL
+    fi
+    if [ -n "$UHCAF_NB_XFER_LIMIT" ]; then
+        add_to_env_list UHCAF_NB_XFER_LIMIT
+    fi
+    if [ -n "$UHCAF_CO_REDUCE_ALGORITHM" ]; then
+        add_to_env_list UHCAF_CO_REDUCE_ALGORITHM
+    fi
+    if [ -n "$UHCAF_SYNC_IMAGES_ALGORITHM" ]; then
+        add_to_env_list UHCAF_SYNC_IMAGES_ALGORITHM
+    fi
+    if [ -n "$UHCAF_ALLOC_BYTE_ALIGNMENT" ]; then
+        add_to_env_list UHCAF_ALLOC_BYTE_ALIGNMENT
+    fi
+    if [ -n "$UHCAF_SHARED_MEM_RMA_BYPASS" ]; then
+        add_to_env_list UHCAF_SHARED_MEM_RMA_BYPASS
+    fi
+    if [ -n "$UHCAF_LOCAL_PACK_NONCONTIG_PUT" ]; then
+        add_to_env_list UHCAF_LOCAL_PACK_NONCONTIG_PUT
+    fi
+    if [ -n "$UHCAF_PROFILE" ]; then
+        add_to_env_list UHCAF_PROFILE
+    fi
+    if [ -n "$UHCAF_STATS" ]; then
+        add_to_env_list UHCAF_STATS
+    fi
+    if [ -n "$UHCAF_DTRACE" ]; then
+        add_to_env_list UHCAF_DTRACE
+    fi
+    if [ -n "$UHCAF_DTRACE_DIR" ]; then
+        add_to_env_list UHCAF_DTRACE_DIR
+    fi
+    if [ -n "$UHCAF_GETCACHE" ]; then
+        add_to_env_list UHCAF_GETCACHE
+    fi
+    if [ -n "$UHCAF_GETCACHE_BLOCK_SIZE" ]; then
+        add_to_env_list UHCAF_GETCACHE_BLOCK_SIZE
+    fi
+    if [ -n "$UHCAF_GETCACHE_SYNC_REFETCH" ]; then
+        add_to_env_list UHCAF_GETCACHE_SYNC_REFETCH
+    fi
+    if [ -n "$UHCAF_OUT_OF_SEGMENT_RMA" ]; then
+        add_to_env_list UHCAF_OUT_OF_SEGMENT_RMA
+    fi
 }
 
 print_error()
 {
-  echo -e "Error: $*" >&2
+  echo -e "\nERROR: $*\n" | fmt -w 80 >&2
   exit 1
 }
 
 print_warning()
 {
-  echo -e "Warning: $*" >&2
+  echo -e "\nWARNING: $*\n" | fmt -w 80 >&2
+}
+
+print_notice()
+{
+  echo -e "\nNOTE: $*\n" | fmt -w 80 >&2
 }
 
 
@@ -498,7 +608,6 @@ fi
 if [ -n "$num_images" ]; then
   set_env UHCAF_NUM_IMAGES $num_images
 elif [ -n "$UHCAF_NUM_IMAGES" ]; then
-  add_to_env_list UHCAF_NUM_IMAGES
   num_images=$UHCAF_NUM_IMAGES
 else
   set_env UHCAF_NUM_IMAGES 1
@@ -517,10 +626,38 @@ if [ $COMM_LAYER == gasnet ]; then
   # enable packing of non-contiguous put/get
   if [ -z "$GASNET_VIS_AMPIPE" ]; then
       set_env GASNET_VIS_AMPIPE 1
+  else
+      add_to_env_list GASNET_VIS_AMPIPE
   fi
 
-  if [ "$GASNET_CONDUIT" = "ibv" -a -z "$GASNET_IB_SPAWNER" ]; then
-      set_env GASNET_IB_SPAWNER mpi
+  # some ibv-conduit specific settings
+  if [ "$GASNET_CONDUIT" = "ibv" ]; then
+      # set spawner to mpi by default
+      if [ -z "$GASNET_IB_SPAWNER" ]; then
+          set_env GASNET_IB_SPAWNER mpi
+      else
+          add_to_env_list GASNET_IB_SPAWNER
+      fi
+      # issue notice for use of GASNET_VIS_AMPIPE
+      if [ "$GASNET_VIS_AMPIPE" = "1" ]; then
+         print_notice "GASNET_VIS_AMPIPE=1 is experimental and it is " \
+                      "known to cause issues with ibv-conduit. You may " \
+                      "want to consider setting it to 0 (with performance " \
+                      "penalty) if your program doesn't work."
+      fi
+      shopt -s nocasematch
+      if [ \( "$UHCAF_PROGRESS_THREAD" = "1" -o \
+              "$UHCAF_PROGRESS_THREAD" = "YES" -o \
+              "$UHCAF_PROGRESS_THREAD" = "y" -o \
+              "$UHCAF_PROGRESS_THREAD" = "on" \) ]; then
+         print_notice "Enabling GASNET_RCV_THREAD=1. Use " \
+                      "GASNET_RCV_THREAD_RATE to set AM checks per " \
+                      "second (UHCAF_PROGRESS_THREAD_INTERVAL is " \
+                      "ignored)."
+
+         set_env GASNET_RCV_THREAD 1
+      fi
+      shopt -u nocasematch
   fi
 
   # CAF runtime will set this variable to a sufficient value
@@ -541,8 +678,6 @@ else
     print_error "Could not locate a launcher program. Specify with UHCAF_LAUNCHER variable"
   fi
 
-  add_to_env_list "UHCAF_LAUNCHER"
-
   launcher_name=`basename $UHCAF_LAUNCHER`
 
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
@@ -555,8 +690,6 @@ else
       UHCAF_LAUNCHER_OPTS=" -n 1 $UHCAF_LAUNCHER_OPTS"
     fi
   fi
-
-  add_to_env_list "UHCAF_LAUNCHER_OPTS"
 
   if [ "$GASNET_CONDUIT" = "udp" ]; then
     set_env GASNET_SPAWNFN "C"
@@ -578,6 +711,7 @@ if [ -n "$UHCAF_DTRACE" ]; then
     fi
 fi
 
+add_uhcaf_envs_to_list
 ENVIRONMENT+="-----------------------\n"
 case $verbose in
   yes)
@@ -591,7 +725,7 @@ case $verbose in
     echo "$this environment:" >&2
     echo -e "$ENVIRONMENT" >&2
     echo "" >&2
-    echo "command: $command" >&2
+    echo "Executing: $command" >&2
     echo "" >&2
     ;;
   *)

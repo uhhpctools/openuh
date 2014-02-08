@@ -33,26 +33,37 @@
 
 #define ENV_DTRACE                    "UHCAF_DTRACE"
 #define ENV_DTRACE_DIR                "UHCAF_DTRACE_DIR"
+#define ENV_PROFILE                   "UHCAF_PROFILE"
 #define ENV_STATS                     "UHCAF_STATS"
 #define ENV_GETCACHE                  "UHCAF_GETCACHE"
+#define ENV_GETCACHE_SYNC_REFETCH     "UHCAF_GETCACHE_SYNC_REFETCH"
 #define ENV_PROGRESS_THREAD           "UHCAF_PROGRESS_THREAD"
 #define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
-#define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
+#define ENV_GETCACHE_BLOCK_SIZE       "UHCAF_GETCACHE_BLOCK_SIZE"
 #define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
 #define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
 #define ENV_CO_REDUCE_ALGORITHM       "UHCAF_CO_REDUCE_ALGORITHM"
 #define ENV_SYNC_IMAGES_ALGORITHM     "UHCAF_SYNC_IMAGES_ALGORITHM"
 #define ENV_OUT_OF_SEGMENT_RMA        "UHCAF_OUT_OF_SEGMENT_RMA"
+#define ENV_ALLOC_BYTE_ALIGNMENT      "UHCAF_ALLOC_BYTE_ALIGNMENT"
+#define ENV_LOCAL_PACK_NONCONTIG_PUT  "UHCAF_LOCAL_PACK_NONCONTIG_PUT"
+#define ENV_SHARED_MEM_RMA_BYPASS     "UHCAF_SHARED_MEM_RMA_BYPASS"
 
-#define DEFAULT_ENABLE_STATS              0
-#define DEFAULT_ENABLE_GETCACHE           0
-#define DEFAULT_ENABLE_PROGRESS_THREAD    0
-#define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
-/* these will be overridden by the defaults in cafrun script */
-#define DEFAULT_GETCACHE_LINE_SIZE        65536L
-#define DEFAULT_IMAGE_HEAP_SIZE           31457280L
-#define DEFAULT_NB_XFER_LIMIT             16
-#define DEFAULT_ENABLE_OUT_OF_SEGMENT_RMA 0
+#define DEFAULT_ENABLE_PROFILE                  0
+#define DEFAULT_ENABLE_STATS                    0
+#define DEFAULT_ENABLE_GETCACHE                 0
+#define DEFAULT_ENABLE_GETCACHE_SYNC_REFETCH    1
+#define DEFAULT_ENABLE_PROGRESS_THREAD          0
+#define DEFAULT_PROGRESS_THREAD_INTERVAL        1000L /* ns */
+#define DEFAULT_GETCACHE_BLOCK_SIZE             65536L
+#define DEFAULT_NB_XFER_LIMIT                   16
+#define DEFAULT_ENABLE_OUT_OF_SEGMENT_RMA       0
+#define DEFAULT_ALLOC_BYTE_ALIGNMENT            8
+#define DEFAULT_ENABLE_LOCAL_PACK_NONCONTIG_PUT 0
+#define DEFAULT_ENABLE_SHARED_MEM_RMA_BYPASS    1
+
+/* these should be overridden by the defaults in cafrun script */
+#define DEFAULT_IMAGE_HEAP_SIZE                 31457280L
 
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);

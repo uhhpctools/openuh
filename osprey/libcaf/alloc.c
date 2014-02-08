@@ -42,6 +42,9 @@
 #include "profile.h"
 #include "util.h"
 
+/* byte alignment for allocations */
+size_t alloc_byte_alignment = DEFAULT_ALLOC_BYTE_ALIGNMENT;
+
 /* flag for whether we are enabled out-of-segment rma accesses */
 int out_of_segment_rma_enabled = 0;
 
@@ -228,8 +231,8 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
-    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
-        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    if (var_size % alloc_byte_alignment != 0) {
+        var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
 
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
@@ -282,8 +285,8 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
-    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
-        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    if (var_size % alloc_byte_alignment != 0) {
+        var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
 
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
@@ -353,8 +356,8 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
-    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
-        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    if (var_size % alloc_byte_alignment != 0) {
+        var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
 
     empty_slot = find_empty_shared_memory_slot_below(common_slot,

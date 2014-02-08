@@ -54,6 +54,7 @@ extern unsigned long _num_images;
 extern unsigned long _log2_images;
 extern unsigned long _rem_images;
 extern mem_usage_info_t *mem_info;
+extern size_t alloc_byte_alignment;
 
 extern int rma_prof_rid;
 
@@ -113,7 +114,8 @@ static size_t nb_xfer_limit;
 
 /* GET CACHE OPTIMIZATION */
 static int enable_get_cache;    /* set by env variable */
-static unsigned long getCache_line_size;        /* set by env var. */
+static int get_cache_sync_refetch; /* set by env variable */
+static unsigned long getcache_block_size;        /* set by env var. */
 /* Instead of making the cache_all_image an array of struct cache, I
  * make it an array of pointer to struct cache. This will make it easy
  * to add more cache lines in the future by making it 2D array */
@@ -129,9 +131,9 @@ static inline void check_for_error_stop();
 static void *get_remote_address(void *src, size_t img);
 static void clear_all_cache();
 static void clear_cache(size_t node);
-static void cache_check_and_get(size_t node, void *remote_address,
+static int cache_check_and_get(size_t node, void *remote_address,
                                 size_t nbytes, void *local_address);
-static void cache_check_and_get_strided(void *remote_src,
+static int cache_check_and_get_strided(void *remote_src,
                                         int src_strides[],
                                         void *local_dest,
                                         int dest_strides[], int count[],
@@ -175,13 +177,13 @@ static inline armci_hdl_t *get_next_armci_handle(access_type_t
 static inline void return_armci_handle(armci_handle_x_t * handle,
                                        access_type_t access_type);
 
-static void comm_sync_images_counter(hashed_image_list_t *image_list,
+static void sync_images_counter(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
-static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
+static void sync_images_ping_pong(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
-static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
+static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
 
@@ -412,10 +414,12 @@ void comm_init()
      * add that as well (treat is as part of save coarray memory).
      */
     static_symm_data_total_size += sizeof(void *);
-    if (static_symm_data_total_size % SYMM_MEM_ALIGNMENT) {
+    alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
+                                   DEFAULT_ALLOC_BYTE_ALIGNMENT);
+    if (static_symm_data_total_size % alloc_byte_alignment) {
         static_symm_data_total_size =
-            (static_symm_data_total_size/SYMM_MEM_ALIGNMENT+1)*
-              SYMM_MEM_ALIGNMENT;
+            (static_symm_data_total_size/alloc_byte_alignment+1)*
+              alloc_byte_alignment;
     }
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
@@ -514,8 +518,10 @@ void comm_init()
 
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE, DEFAULT_ENABLE_GETCACHE);
-    getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
-                                      DEFAULT_GETCACHE_LINE_SIZE);
+    getcache_block_size = get_env_size(ENV_GETCACHE_BLOCK_SIZE,
+                                      DEFAULT_GETCACHE_BLOCK_SIZE);
+    get_cache_sync_refetch = get_env_flag(ENV_GETCACHE_SYNC_REFETCH,
+                                      DEFAULT_ENABLE_GETCACHE_SYNC_REFETCH);
 
     nb_xfer_limit = get_env_size(ENV_NB_XFER_LIMIT, DEFAULT_NB_XFER_LIMIT);
 
@@ -632,9 +638,12 @@ void comm_init()
             cache_all_images[i] =
                 (struct cache *) malloc(sizeof(struct cache));
             cache_all_images[i]->remote_address = 0;
-            cache_all_images[i]->handle = 0;
+            cache_all_images[i]->handle = malloc(sizeof(armci_hdl_t));
+            ARMCI_INIT_HANDLE(cache_all_images[i]->handle);
+            if (ARMCI_Test(cache_all_images[i]->handle) == 0) {
+            }
             cache_all_images[i]->cache_line_address =
-                malloc(getCache_line_size);
+                malloc(getcache_block_size);
         }
     }
 
@@ -689,6 +698,43 @@ void comm_init()
  *                      GET CACHE Support
  *****************************************************************/
 
+static void clear_all_cache()
+{
+    int i;
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
+    for (i = 0; i < num_procs; i++) {
+        if (cache_all_images[i]->remote_address) {
+            /* wait on pending get, if necessary */
+            if (ARMCI_Test(cache_all_images[i]->handle) == 0) {
+              ARMCI_Wait(cache_all_images[i]->handle);
+              ARMCI_INIT_HANDLE(cache_all_images[i]->handle);
+            }
+            /* throw away the result! */
+            cache_all_images[i]->remote_address = NULL;
+        }
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
+}
+
+static void clear_cache(size_t node)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
+    if (cache_all_images[node]->remote_address) {
+      /* wait on pending get, if necessary */
+      if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
+        ARMCI_Wait(cache_all_images[node]->handle);
+        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
+      }
+      /* throw away the result! */
+      cache_all_images[node]->remote_address = NULL;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
+}
+
 static void refetch_all_cache()
 {
     int i;
@@ -698,7 +744,7 @@ static void refetch_all_cache()
         if (cache_all_images[i]->remote_address) {
             ARMCI_NbGet(cache_all_images[i]->remote_address,
                         cache_all_images[i]->cache_line_address,
-                        getCache_line_size, i,
+                        getcache_block_size, i,
                         cache_all_images[i]->handle);
         }
     }
@@ -712,63 +758,92 @@ static void refetch_cache(unsigned long node)
     if (cache_all_images[node]->remote_address) {
         ARMCI_NbGet(cache_all_images[node]->remote_address,
                     cache_all_images[node]->cache_line_address,
-                    getCache_line_size, node,
+                    getcache_block_size, node,
                     cache_all_images[node]->handle);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
-static void cache_check_and_get(size_t node, void *remote_address,
+static int cache_check_and_get(size_t node, void *remote_address,
                                 size_t nbytes, void *local_address)
 {
+    int retval;
     LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
 
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
-    /* data in cache */
-    if (cache_address > 0 && remote_address >= cache_address &&
-        remote_address + nbytes <= cache_address + getCache_line_size) {
-        start_offset = remote_address - cache_address;
-        if (cache_all_images[node]->handle) {
-            ARMCI_Wait(cache_all_images[node]->handle);
-            cache_all_images[node]->handle = 0;
-        }
-        memcpy(local_address, cache_line_address + start_offset, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Address %p on"
-                     " image %lu found in cache.", remote_address,
-                     node + 1);
-    } else {                    /*data not in cache */
 
-        /* data NOT from end of shared segment OR bigger than cacheline */
-        if (((remote_address + getCache_line_size) <=
-             (coarray_start_all_images[node] + shared_memory_size))
-            && (nbytes <= getCache_line_size)) {
-            ARMCI_Get(remote_address, cache_line_address,
-                      getCache_line_size, node);
+    /* wait on any pending get into the cache to complete */
+    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
+                     "node %ld .. waiting", (long)node);
+        ARMCI_Wait(cache_all_images[node]->handle);
+        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
+    }
+
+    if (cache_address != NULL &&
+        (remote_address >= cache_address) &&
+        (remote_address+nbytes <= cache_address+getcache_block_size) ) {
+        /* the data is contained in the cache */
+        PROFILE_GET_CACHE_HIT((int)node);
+
+        start_offset = remote_address - cache_address;
+
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache hit for data from node %ld --  "
+                     "loading from %ld bytes from cache",
+                     (long)node, (long)nbytes);
+        memcpy(local_address, cache_line_address + start_offset, nbytes);
+
+        retval = 1;
+    } else {
+        /* data was not fully in cache. Simplistic strategy right now is to
+         * just invalidate the current cache line and bring in a new one if
+         * the request was complete miss. If its a partial miss, then we
+         * return 0.
+         */
+        PROFILE_GET_CACHE_MISS((int)node);
+
+        if (nbytes <= getcache_block_size &&
+            ( cache_address == NULL ||
+              (remote_address >= (cache_address+getcache_block_size)) ||
+              (remote_address+nbytes < cache_address)) ) {
+            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld --  "
+                    "getting new cache line (%ld bytes) into cache",
+                    (long)node, (long)getcache_block_size);
+
+            PROFILE_RMA_LOAD_BEGIN((int)node, nbytes);
+
             cache_all_images[node]->remote_address = remote_address;
-            cache_all_images[node]->handle = 0;
+            ARMCI_Get(remote_address, cache_line_address,
+                      getcache_block_size, node);
             memcpy(local_address, cache_line_address, nbytes);
+
+            PROFILE_RMA_LOAD_END((int)node);
+            retval = 1;
         } else {
-            ARMCI_Get(remote_address, local_address, nbytes, node);
+            /* partial miss or requested data doesn't fit into cache. */
+            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld "
+                         "(%ld bytes) --  bypassing cache",
+                    (long)node, (long)nbytes);
+            retval = 0;
         }
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Address %p on"
-                     " image %lu NOT found in cache.", remote_address,
-                     node + 1);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
+    return retval;
 }
 
 
 
-static void cache_check_and_get_strided(void *remote_src,
+static int cache_check_and_get_strided(void *remote_src,
                                         int src_strides[],
                                         void *local_dest,
                                         int dest_strides[], int count[],
                                         size_t stride_levels, size_t node)
 {
+    int retval;
     LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
 
     void *cache_address = cache_all_images[node]->remote_address;
@@ -780,53 +855,69 @@ static void cache_check_and_get_strided(void *remote_src,
     size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
         + count[0];
 
-    /* data in cache */
-    if (cache_address > 0 && remote_src >= cache_address &&
-        remote_src + size <= cache_address + getCache_line_size) {
+    /* wait on any pending get into the cache to complete */
+    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
+                     "node %ld .. waiting", (long)node);
+        ARMCI_Wait(cache_all_images[node]->handle);
+        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
+    }
+
+    if (cache_address != NULL &&
+        (remote_src >= cache_address) &&
+        (remote_src+size <= cache_address+getcache_block_size) ) {
+        /* data is contained in the cache */
+        PROFILE_GET_CACHE_HIT((int)node);
+
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
                      "Address %p on image %lu found in cache.", remote_src,
                      node + 1);
         start_offset = remote_src - cache_address;
-        if (cache_all_images[node]->handle) {
-            ARMCI_Wait(cache_all_images[node]->handle);
-            cache_all_images[node]->handle = 0;
-        }
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache hit for data from node %ld --  "
+                     "doing strided get from cache", (long)node);
 
         local_strided_copy(cache_line_address + start_offset,
                            src_strides, local_dest, dest_strides,
                            count, stride_levels);
 
+        retval = 1;
+    } else {
+        /* data was not fully in cache. Simplistic strategy right now is to
+         * just invalidate the current cache line and bring in a new one if
+         * the request was complete miss. If its a partial miss, then we
+         * return 0.
+         */
+        PROFILE_GET_CACHE_MISS((int)node);
 
-    } else {                    /*data not in cache */
+        if (size <= getcache_block_size &&
+            ( cache_address == NULL ||
+              (remote_src >= (cache_address+getcache_block_size)) ||
+              (remote_src+size < cache_address)) ) {
+            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld --  "
+                    "getting new cache line (%ld bytes) into cache",
+                    (long)node, (long)getcache_block_size);
 
-        /* data NOT from end of shared segment OR bigger than cacheline */
-        if (((remote_src + getCache_line_size) <=
-             (coarray_start_all_images[node] + shared_memory_size))
-            && (size <= getCache_line_size)) {
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                         "Data for Address %p on image %lu NOT found in cache.",
-                         remote_src, node + 1);
+            PROFILE_RMA_LOAD_BEGIN((int)node, getcache_block_size);
 
-            ARMCI_Get(remote_src, cache_line_address, getCache_line_size,
-                      node);
             cache_all_images[node]->remote_address = remote_src;
-            cache_all_images[node]->handle = 0;
-
+            ARMCI_Get(remote_src, cache_line_address, getcache_block_size,
+                      node);
             local_strided_copy(cache_line_address,
                                src_strides, local_dest, dest_strides,
                                count, stride_levels);
-        } else {
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
-                         " %p on image %lu to %p (stride_levels= %u)",
-                         remote_src, node + 1, local_dest, stride_levels);
 
-            ARMCI_GetS(remote_src, src_strides,
-                       local_dest, dest_strides,
-                       count, stride_levels, node);
+            PROFILE_RMA_LOAD_END((int)node);
+            retval = 1;
+        } else {
+            /* partial miss or requested data doesn't fit into cache. */
+            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld "
+                         "bypassing cache", (long)node);
+            retval = 0;
         }
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
+    return retval;
 }
 
 
@@ -839,8 +930,19 @@ static void update_cache(size_t node, void *remote_address,
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
+
+    /* wait on any pending get into the cache to complete */
+    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
+                     "node %ld .. waiting", (long)node);
+        ARMCI_Wait(cache_all_images[node]->handle);
+        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
+    }
+
     if (cache_address > 0 && remote_address >= cache_address &&
-        remote_address + nbytes <= cache_address + getCache_line_size) {
+        remote_address + nbytes <= cache_address + getcache_block_size) {
+        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
+
         start_offset = remote_address - cache_address;
         memcpy(cache_line_address + start_offset, local_address, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
@@ -848,9 +950,11 @@ static void update_cache(size_t node, void *remote_address,
                      remote_address, node + 1);
     } else if (cache_address > 0 &&
                remote_address >= cache_address &&
-               remote_address <= cache_address + getCache_line_size) {
+               remote_address <= cache_address + getcache_block_size) {
+        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
+
         start_offset = remote_address - cache_address;
-        nbytes = getCache_line_size - start_offset;
+        nbytes = getcache_block_size - start_offset;
         memcpy(cache_line_address + start_offset, local_address, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
                      " image %lu partially updated in cache (write conflict).",
@@ -858,7 +962,9 @@ static void update_cache(size_t node, void *remote_address,
     } else if (cache_address > 0 &&
                remote_address + nbytes >= cache_address &&
                remote_address + nbytes <=
-               cache_address + getCache_line_size) {
+               cache_address + getcache_block_size) {
+        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
+
         start_offset = cache_address - remote_address;
         nbytes = nbytes - start_offset;
         memcpy(cache_line_address, local_address + start_offset, nbytes);
@@ -891,7 +997,9 @@ static void update_cache_strided(void *remote_dest_address,
 
     /* New data completely fit into cache */
     if (cache_address > 0 && remote_dest_address >= cache_address &&
-        remote_dest_address + size <= cache_address + getCache_line_size) {
+        remote_dest_address + size <= cache_address + getcache_block_size) {
+        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
+
         start_offset = remote_dest_address - cache_address;
 
         local_strided_copy(local_src_address, src_strides,
@@ -906,10 +1014,10 @@ static void update_cache_strided(void *remote_dest_address,
     else if (cache_address > 0 &&
              ((remote_dest_address + size > cache_address &&
                remote_dest_address + size <
-               cache_address + getCache_line_size)
+               cache_address + getcache_block_size)
               || (remote_dest_address > cache_address
                   && remote_dest_address <
-                  cache_address + getCache_line_size)
+                  cache_address + getcache_block_size)
              )) {
         //make it invalid
         cache_all_images[node]->remote_address = 0;
@@ -1571,6 +1679,9 @@ void comm_finalize(int exit_code)
 
     /* Completion */
 
+    if (enable_get_cache)
+      clear_all_cache();
+
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Finalize");
     ARMCI_Finalize();
@@ -1600,6 +1711,7 @@ void comm_critical()
     check_for_error_stop();
 
     ARMCI_Lock(critical_mutex, 0);
+    comm_new_exec_segment();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -1610,13 +1722,14 @@ void comm_end_critical()
 
     check_for_error_stop();
 
+    wait_on_all_pending_accesses();
+
     ARMCI_Unlock(critical_mutex, 0);
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-/* wait for any pending communication to specified proc to complete. Use value
- * < 0 if we want to wait on all procs to complete. */
+/* wait for any pending communication to specified proc to complete. */
 void comm_fence(size_t proc)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
@@ -1634,6 +1747,35 @@ void comm_fence(size_t proc)
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+void comm_fence_all()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    check_for_error_stop();
+
+    wait_on_all_pending_accesses();
+
+    LOAD_STORE_FENCE();
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+/* start of a new execution segment. All we do here is ensure any cached
+ * copies of remote data is either thrown away or refreshed */
+void comm_new_exec_segment()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    if (enable_get_cache) {
+        if (get_cache_sync_refetch) {
+            refetch_all_cache();
+        } else {
+            clear_all_cache();
+        }
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+
 void comm_barrier_all()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
@@ -1642,8 +1784,6 @@ void comm_barrier_all()
 
     wait_on_all_pending_accesses();
     ARMCI_Barrier();
-    if (enable_get_cache)
-        refetch_all_cache();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -1711,7 +1851,6 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
     /* TODO: need to check for stopped image during the execution of the
      * barrier, instead of just at the beginning */
     if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
         if (status != NULL) {
             *((INT2 *) status) = STAT_STOPPED_IMAGE;
         } else {
@@ -1723,8 +1862,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         ARMCI_Barrier();
     }
 
-    if (enable_get_cache)
-        refetch_all_cache();
+    comm_new_exec_segment();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -1748,8 +1886,7 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
 
     wait_on_all_pending_accesses();
 
-    if (enable_get_cache)
-        refetch_all_cache();
+    comm_new_exec_segment();
 
     LOAD_STORE_FENCE();
 
@@ -1775,30 +1912,32 @@ void comm_sync_images(hashed_image_list_t *image_list, int image_count,
 
     switch (sync_images_algorithm) {
         case SYNC_COUNTER:
-            comm_sync_images_counter(image_list, image_count, status,
-                                     stat_len, errmsg, errmsg_len);
+            sync_images_counter(image_list, image_count, status,
+                                stat_len, errmsg, errmsg_len);
             break;
         case SYNC_PING_PONG:
-            comm_sync_images_ping_pong(image_list, image_count, status,
-                                     stat_len, errmsg, errmsg_len);
+            sync_images_ping_pong(image_list, image_count, status,
+                                  stat_len, errmsg, errmsg_len);
             break;
         case SYNC_SENSE_REV:
-            comm_sync_images_sense_rev(image_list, image_count, status,
-                                     stat_len, errmsg, errmsg_len);
+            sync_images_sense_rev(image_list, image_count, status,
+                                  stat_len, errmsg, errmsg_len);
             break;
         default:
-            comm_sync_images_sense_rev(image_list, image_count, status,
-                                     stat_len, errmsg, errmsg_len);
+            sync_images_sense_rev(image_list, image_count, status,
+                                  stat_len, errmsg, errmsg_len);
             break;
     }
+
+    comm_new_exec_segment();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-static void comm_sync_images_counter(hashed_image_list_t *image_list,
-                                     int image_count, int *status,
-                                     int stat_len, char *errmsg,
-                                     int errmsg_len)
+static void sync_images_counter(hashed_image_list_t *image_list,
+                                int image_count, int *status,
+                                int stat_len, char *errmsg,
+                                int errmsg_len)
 {
     hashed_image_list_t *list_item;
     int i;
@@ -1861,10 +2000,10 @@ static void comm_sync_images_counter(hashed_image_list_t *image_list,
     }
 }
 
-static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
-                                     int image_count, int *status,
-                                     int stat_len, char *errmsg,
-                                     int errmsg_len)
+static void sync_images_ping_pong(hashed_image_list_t *image_list,
+                                  int image_count, int *status,
+                                  int stat_len, char *errmsg,
+                                  int errmsg_len)
 {
     int i;
     int images_to_check;
@@ -1941,7 +2080,7 @@ static void comm_sync_images_ping_pong(hashed_image_list_t *image_list,
     }
 }
 
-static void comm_sync_images_sense_rev(hashed_image_list_t *image_list,
+static void sync_images_sense_rev(hashed_image_list_t *image_list,
                               int image_count, int *status, int stat_len,
                               char *errmsg, int errmsg_len)
 {
@@ -2247,48 +2386,62 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                      nb_mgr[PUTS].min_nb_address[proc],
                      nb_mgr[PUTS].max_nb_address[proc]);
     }
-    if (enable_get_cache)
-        cache_check_and_get(proc, remote_src, nbytes, dest);
-    else {
-        int in_progress = 0;
-        armci_hdl_t *handle;
 
-        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
-
-        handle = get_next_armci_handle(GETS);
-        ARMCI_INIT_HANDLE(handle);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "Before ARMCI_NbGet from %p on"
-                     " image %lu to %p size %lu",
-                     remote_src, proc + 1, dest, nbytes);
-        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
-
-        in_progress = (ARMCI_Test(handle) == 0);
-
-        if (in_progress == 1) {
-            struct handle_list *handle_node =
-                get_next_handle(proc, remote_src, dest, nbytes, GETS);
-
-            handle_node->handle = handle;
-
-            if (hdl != NULL) {
-                handle_node->state = EXPOSED;
-                *hdl = handle_node;
-            }
-
-            PROFILE_RMA_LOAD_DEFERRED_END(proc);
-        } else if (hdl != NULL) {
-            /* get has completed */
-            *hdl = NULL;
-            return_armci_handle((armci_handle_x_t *) handle, GETS);
-
-            PROFILE_RMA_LOAD_END(proc);
+    if (enable_get_cache) {
+        int completed_in_cache =
+            cache_check_and_get(proc, remote_src, nbytes, dest);
+        if (completed_in_cache) {
+            if (hdl != NULL)
+                *hdl = NULL;
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+            return;
+            /* does not reach */
         }
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "After ARMCI_NbGet from %p on"
-                     " image %lu to %p size %lu *hdl=%p",
-                     remote_src, proc + 1, dest, nbytes, *hdl);
     }
+
+    int in_progress = 0;
+    armci_hdl_t *handle;
+
+    PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
+
+    handle = get_next_armci_handle(GETS);
+    ARMCI_INIT_HANDLE(handle);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "Before ARMCI_NbGet from %p on"
+                 " image %lu to %p size %lu",
+                 remote_src, proc + 1, dest, nbytes);
+    ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
+
+    in_progress = (ARMCI_Test(handle) == 0);
+
+    if (in_progress == 1) {
+        struct handle_list *handle_node =
+            get_next_handle(proc, remote_src, dest, nbytes, GETS);
+
+        handle_node->handle = handle;
+
+        if (hdl != NULL) {
+            handle_node->state = EXPOSED;
+            *hdl = handle_node;
+        }
+
+        PROFILE_RMA_LOAD_DEFERRED_END(proc);
+    } else {
+        /* get has completed */
+
+        if (hdl != NULL) {
+            *hdl = NULL;
+        }
+
+        return_armci_handle((armci_handle_x_t *) handle, GETS);
+
+        PROFILE_RMA_LOAD_END(proc);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "After ARMCI_NbGet from %p on"
+                 " image %lu to %p size %lu *hdl=%p",
+                 remote_src, proc + 1, dest, nbytes, *hdl);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2327,13 +2480,20 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
                      nb_mgr[PUTS].min_nb_address[proc],
                      nb_mgr[PUTS].max_nb_address[proc]);
     }
-    if (enable_get_cache)
-        cache_check_and_get(proc, remote_src, nbytes, dest);
-    else {
-        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
-        ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
-        PROFILE_RMA_LOAD_END(proc);
+
+    if (enable_get_cache) {
+        int completed_in_cache =
+            cache_check_and_get(proc, remote_src, nbytes, dest);
+        if (completed_in_cache) {
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+            return;
+            /* does not reach */
+        }
     }
+
+    PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
+    ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
+    PROFILE_RMA_LOAD_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2426,7 +2586,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
-        } else if (handle == NULL) {
+        } else if (in_progress == 0) {
             /* put has completed */
             comm_lcb_free(src);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
@@ -2434,7 +2594,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                 *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
-        } else if (hdl == (void *) -1) {
+        } else { /* hdl == -1 */
             /* block until it remotely completes */
             wait_on_pending_puts(proc);
             comm_lcb_free(src);
@@ -2531,14 +2691,14 @@ void comm_write(size_t proc, void *dest, void *src,
             }
 
             PROFILE_RMA_STORE_END(proc);
-        } else if (handle == NULL) {
+        } else if (in_progress == 0) {
             /* put has completed */
             if (hdl != NULL && hdl != (void *)-1)
                 *hdl = NULL;
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
-        } else if (hdl == (void *) -1) {
+        } else { /* hdl == -1 */
             /* block until it remotely completes */
             wait_on_pending_puts(proc);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
@@ -2610,47 +2770,55 @@ void comm_strided_nbread(size_t proc,
         }
 
         if (enable_get_cache) {
+            int completed_in_cache =
+                cache_check_and_get_strided(remote_src, src_strides,
+                                            dest, dest_strides, count,
+                                            stride_levels, proc);
+            if (completed_in_cache) {
+                if (hdl != NULL)
+                    *hdl = NULL;
+                LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+                return;
+            /* does not reach */
+            }
+        }
 
-            cache_check_and_get_strided(remote_src, src_strides,
-                                        dest, dest_strides, count,
-                                        stride_levels, proc);
+        PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
 
-        } else {
+        int in_progress = 0;
+        armci_hdl_t *handle;
+        handle = get_next_armci_handle(GETS);
+        ARMCI_INIT_HANDLE(handle);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
+                     " %p on image %lu to %p (stride_levels= %u)",
+                     remote_src, proc + 1, dest, stride_levels);
+        ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
+                     count, stride_levels, proc, handle);
 
-            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+        in_progress = (ARMCI_Test(handle) == 0);
 
-            int in_progress = 0;
-            armci_hdl_t *handle;
-            handle = get_next_armci_handle(GETS);
-            ARMCI_INIT_HANDLE(handle);
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
-                         " %p on image %lu to %p (stride_levels= %u)",
-                         remote_src, proc + 1, dest, stride_levels);
-            ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
-                         count, stride_levels, proc, handle);
+        if (in_progress == 1) {
+            struct handle_list *handle_node =
+                get_next_handle(proc, remote_src, dest, size, GETS);
 
-            in_progress = (ARMCI_Test(handle) == 0);
+            handle_node->handle = handle;
 
-            if (in_progress == 1) {
-                struct handle_list *handle_node =
-                    get_next_handle(proc, remote_src, dest, size, GETS);
-
-                handle_node->handle = handle;
-
-                if (hdl != NULL) {
-                    handle_node->state = EXPOSED;
-                    *hdl = handle_node;
-                }
-
-                PROFILE_RMA_LOAD_DEFERRED_END(proc);
-            } else if (hdl != NULL) {
-                *hdl = NULL;
-                return_armci_handle((armci_handle_x_t *) handle, GETS);
-
-                PROFILE_RMA_LOAD_END(proc);
+            if (hdl != NULL) {
+                handle_node->state = EXPOSED;
+                *hdl = handle_node;
             }
 
+            PROFILE_RMA_LOAD_DEFERRED_END(proc);
+        } else {
+            /* completed */
+            if (hdl != NULL) {
+                *hdl = NULL;
+            }
+            return_armci_handle((armci_handle_x_t *) handle, GETS);
+
+            PROFILE_RMA_LOAD_END(proc);
         }
+
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -2707,20 +2875,25 @@ void comm_strided_read(size_t proc,
         }
 
         if (enable_get_cache) {
+            int completed_in_cache =
+                cache_check_and_get_strided(remote_src, src_strides,
+                                            dest, dest_strides, count,
+                                            stride_levels, proc);
+            if (completed_in_cache) {
+                LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+                return;
+                /* does not reach */
+            }
 
-            cache_check_and_get_strided(remote_src, src_strides,
-                                        dest, dest_strides, count,
-                                        stride_levels, proc);
-
-        } else {
-
-            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
-
-            ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
-                       stride_levels, proc);
-
-            PROFILE_RMA_LOAD_END(proc);
         }
+
+
+        PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
+        ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
+                   stride_levels, proc);
+
+        PROFILE_RMA_LOAD_END(proc);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -2849,7 +3022,7 @@ void comm_strided_write_from_lcb(size_t proc,
                 }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
-            } else if (handle == NULL) {
+            } else if (in_progress == 0) {
                 /* put has completed */
                 comm_lcb_free(src);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
@@ -2857,7 +3030,7 @@ void comm_strided_write_from_lcb(size_t proc,
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
-            } else if (hdl == (void *) -1) {
+            } else { /* hdl == -1 */
                 /* block until it remotely completes */
                 wait_on_pending_puts(proc);
                 comm_lcb_free(src);
@@ -2993,14 +3166,14 @@ void comm_strided_write(size_t proc,
                 }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
-            } else if (handle == NULL) {
+            } else if (in_progress == 0) {
                 /* put has completed */
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
                 if (hdl != NULL && hdl != (void *)-1)
                     *hdl = NULL;
 
                 PROFILE_RMA_STORE_END(proc);
-            } else if (hdl == (void *) -1) {
+            } else { /* hdl == -1 */
                 /* block until it remotely completes */
                 wait_on_pending_puts(proc);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
