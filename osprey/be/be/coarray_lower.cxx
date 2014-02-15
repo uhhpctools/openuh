@@ -602,6 +602,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     BOOL defer_sync_just_seen = FALSE;
     ST *handle_var = NULL;
     BOOL pragma_preamble_done = FALSE;
+    BOOL do_loop_start_node = FALSE;
+    WN *do_loop_stmt_node = NULL;
     WN *sync_blk = WN_CreateBlock();
     for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
         WN *insert_blk;
@@ -643,14 +645,29 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
               WN *sync_stmt = WN_first(sync_blk);
               while (sync_stmt) {
                   sync_stmt = WN_EXTRACT_FromBlock(sync_blk, sync_stmt);
-                  WN_INSERT_BlockBefore(blk_node, stmt_node, sync_stmt);
+                  if (!do_loop_start_node) {
+                      WN_INSERT_BlockBefore(blk_node, stmt_node, sync_stmt);
+                  } else {
+                      WN_INSERT_BlockBefore(blk_node, do_loop_stmt_node,
+                                            sync_stmt);
+                  }
                   sync_stmt = WN_first(sync_blk);
               }
           }
 
           stmt_node = wn;
           wn_arrayexp = NULL;
-          if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
+          if (WN_operator(parent) == OPR_BLOCK) {
+              blk_node = parent;
+          } else if (WN_operator(parent) == OPR_DO_LOOP &&
+              WN_start(parent) == stmt_node) {
+              /* working on initialization statement of a do-loop. */
+              do_loop_start_node = TRUE;
+              do_loop_stmt_node = parent;
+          } else if (WN_operator(parent) == OPR_DO_LOOP) {
+              /* no longer working on initialization statement of do-loop */
+              do_loop_start_node = FALSE;
+          }
         }
 
         /* need to move static initializers to coarray data past the call to
@@ -772,8 +789,15 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         elem_type = Ty_Table[coarray_type].u2.etype;
                     }
                     WN *RHS_wn = WN_kid0(stmt_node);
+                    BOOL RHS_is_preg = FALSE;
+
+                    if (WN_operator(RHS_wn) == OPR_LDID &&
+                        ST_sclass(WN_st(RHS_wn)) == SCLASS_REG) {
+                        RHS_is_preg = TRUE;
+                    }
 
                     if ( is_lvalue(RHS_wn) && !is_convert_operation(RHS_wn) &&
+                        !RHS_is_preg &&
                         (!get_inner_arrsection(coindexed_arr_ref) ||
                          get_inner_arrsection(RHS_wn)) &&
                           (is_vector_access(coindexed_arr_ref) ||
@@ -879,6 +903,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     BOOL LHS_is_coindexed  = FALSE;
                     BOOL LHS_has_arrsection = FALSE;
                     BOOL LHS_is_vector_access = FALSE;
+                    BOOL LHS_is_preg = FALSE;
 
                     if (WN_operator(stmt_node) == OPR_ISTORE ||
                         WN_operator(stmt_node) == OPR_MSTORE) {
@@ -889,12 +914,17 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         }
                         LHS_has_arrsection = get_inner_arrsection(LHS_wn) != NULL;
                         LHS_is_vector_access = (BOOL) is_vector_access(LHS_wn);
+                    } else if (WN_operator(stmt_node) == OPR_STID &&
+                            ST_sclass(WN_st(stmt_node)) == SCLASS_REG) {
+                        LHS_is_preg = TRUE;
                     }
 
                     if ( is_lvalue(RHS_wn) && !is_convert_operation(RHS_wn) &&
+                         !do_loop_start_node &&
                          (!LHS_has_arrsection ||
                           get_inner_arrsection(coindexed_arr_ref)) &&
                          !LHS_is_coindexed &&
+                         !LHS_is_preg &&
                          (is_vector_access(coindexed_arr_ref) ||
                           !LHS_is_vector_access) ) {
                         /* no LCB created */
@@ -923,7 +953,14 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                         WN_INSERT_BlockFirst( WN_else(if_local_wn),
                                 new_stmt_node);
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, if_local_wn);
+
+                        if (!do_loop_start_node) {
+                            WN_INSERT_BlockBefore(blk_node, stmt_node,
+                                                  if_local_wn);
+                        } else {
+                            WN_INSERT_BlockBefore(blk_node, do_loop_stmt_node,
+                                                  if_local_wn);
+                        }
 
 
                         /* insert sync for remote read if not deferred*/
@@ -984,7 +1021,14 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         insert_wnx = Generate_Call_acquire_lcb(
                                 xfer_sz_node,
                                 WN_Lda(Pointer_type, 0, LCB_st));
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
+
+                        if (!do_loop_start_node) {
+                            WN_INSERT_BlockBefore(blk_node, stmt_node,
+                                                  insert_wnx);
+                        } else {
+                            WN_INSERT_BlockBefore(blk_node, do_loop_stmt_node,
+                                                  insert_wnx);
+                        }
 
                         /* create "normalized" assignment from remote coarray */
                         num_codim = coindexed_arr_ref == direct_coarray_ref ?
@@ -1002,7 +1046,13 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         WN_INSERT_BlockFirst( WN_else(if_local_wn),
                                               new_stmt_node);
 
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, if_local_wn);
+                        if (!do_loop_start_node) {
+                            WN_INSERT_BlockBefore(blk_node, stmt_node,
+                                                  if_local_wn);
+                        } else {
+                            WN_INSERT_BlockBefore(blk_node, do_loop_stmt_node,
+                                                  if_local_wn);
+                        }
 
                         /* if no sync handle specified for this read, then
                          * create a temporary one */
@@ -1069,7 +1119,14 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         /* call to release LCB */
                         insert_wnx = Generate_Call_release_lcb(
                                 WN_Lda(Pointer_type, 0, LCB_st));
-                        WN_INSERT_BlockAfter(blk_node, stmt_node, insert_wnx);
+
+                        if (!do_loop_start_node) {
+                            WN_INSERT_BlockAfter(blk_node, stmt_node,
+                                                 insert_wnx);
+                        } else {
+                            WN_INSERT_BlockAfter(blk_node, do_loop_stmt_node,
+                                                 insert_wnx);
+                        }
 
                     }
 
@@ -1832,9 +1889,15 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         elem_type = Ty_Table[coarray_type].u2.etype;
                     }
                     WN *RHS_wn = WN_kid0(stmt_node);
+                    BOOL RHS_is_preg = FALSE;
+
+                    if (WN_operator(RHS_wn) == OPR_LDID &&
+                        ST_sclass(WN_st(RHS_wn)) == SCLASS_REG) {
+                        RHS_is_preg = TRUE;
+                    }
 
                     if ( !is_lvalue(RHS_wn)
-                         || is_convert_operation(RHS_wn)) {
+                         || RHS_is_preg || is_convert_operation(RHS_wn)) {
                         WN *new_stmt_node;
                         ST *LCB_st;
                         WN *xfer_sz_node;
@@ -1899,6 +1962,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                     WN *LHS_img;
                     TY_IDX LHS_coarray_type;
                     BOOL LHS_is_coindexed  = FALSE;
+                    BOOL LHS_is_preg = FALSE;
 
                     if (WN_operator(stmt_node) == OPR_ISTORE ||
                         WN_operator(stmt_node) == OPR_MSTORE) {
@@ -1907,10 +1971,13 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                             &LHS_coarray_type)) {
                             LHS_is_coindexed = TRUE;
                         }
+                    } else if (WN_operator(stmt_node) == OPR_STID &&
+                            ST_sclass(WN_st(stmt_node)) == SCLASS_REG) {
+                        LHS_is_preg = TRUE;
                     }
 
-
                     if ( !is_lvalue(RHS_wn) || LHS_is_coindexed
+                         || LHS_is_preg
                          || is_convert_operation(RHS_wn)) {
                         WN *new_stmt_node;
                         ST *LCB_st;
