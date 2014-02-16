@@ -175,7 +175,11 @@ typedef struct clist {
 /* local constants */
 
 #define OPC_UNKNOWN 0
+#ifndef _UH_COARRAYS
 #define MAX_ARY_DIMS 7
+#else
+#define MAX_ARY_DIMS 15
+#endif
 #define NUM_LOG_KINDS 4
 
 #define ANULL -1

@@ -1,0 +1,2641 @@
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT1 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_0(source, result)
+           integer (kind=1) :: source, result
+           integer (kind=1), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_1(source, result)
+           integer (kind=1) :: source(:), result(:)
+           integer (kind=1), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_2(source, result)
+           integer (kind=1) :: source(:,:), result(:,:)
+           integer (kind=1), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_3(source, result)
+           integer (kind=1) :: source(:,:,:), result(:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_4(source, result)
+           integer (kind=1) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_5(source, result)
+           integer (kind=1) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_6(source, result)
+           integer (kind=1) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_7(source, result)
+           integer (kind=1) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=1), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT1_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT2 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_0(source, result)
+           integer (kind=2) :: source, result
+           integer (kind=2), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_1(source, result)
+           integer (kind=2) :: source(:), result(:)
+           integer (kind=2), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_2(source, result)
+           integer (kind=2) :: source(:,:), result(:,:)
+           integer (kind=2), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_3(source, result)
+           integer (kind=2) :: source(:,:,:), result(:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_4(source, result)
+           integer (kind=2) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_5(source, result)
+           integer (kind=2) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_6(source, result)
+           integer (kind=2) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_7(source, result)
+           integer (kind=2) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=2), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT2_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT4 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_0(source, result)
+           integer (kind=4) :: source, result
+           integer (kind=4), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_1(source, result)
+           integer (kind=4) :: source(:), result(:)
+           integer (kind=4), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_2(source, result)
+           integer (kind=4) :: source(:,:), result(:,:)
+           integer (kind=4), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_3(source, result)
+           integer (kind=4) :: source(:,:,:), result(:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_4(source, result)
+           integer (kind=4) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_5(source, result)
+           integer (kind=4) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_6(source, result)
+           integer (kind=4) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_7(source, result)
+           integer (kind=4) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=4), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT4_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! INT8 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_0(source, result)
+           integer (kind=8) :: source, result
+           integer (kind=8), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_1(source, result)
+           integer (kind=8) :: source(:), result(:)
+           integer (kind=8), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_2(source, result)
+           integer (kind=8) :: source(:,:), result(:,:)
+           integer (kind=8), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_3(source, result)
+           integer (kind=8) :: source(:,:,:), result(:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_4(source, result)
+           integer (kind=8) :: source(:,:,:,:), result(:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_5(source, result)
+           integer (kind=8) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_6(source, result)
+           integer (kind=8) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_7(source, result)
+           integer (kind=8) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           integer (kind=8), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_INT8_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL4 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_0(source, result)
+           real (kind=4) :: source, result
+           real (kind=4), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_1(source, result)
+           real (kind=4) :: source(:), result(:)
+           real (kind=4), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_2(source, result)
+           real (kind=4) :: source(:,:), result(:,:)
+           real (kind=4), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_3(source, result)
+           real (kind=4) :: source(:,:,:), result(:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_4(source, result)
+           real (kind=4) :: source(:,:,:,:), result(:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_5(source, result)
+           real (kind=4) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_6(source, result)
+           real (kind=4) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_7(source, result)
+           real (kind=4) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           real (kind=4), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL4_7
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! REAL8 CO_MINVAL_2TREE_SYNCIMAGES
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_0(source, result)
+           real (kind=8) :: source, result
+           real (kind=8), allocatable :: buf[:]
+
+           integer :: k,ti,ni
+
+           ti = this_image()
+           ni = num_images()
+           allocate( buf[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_0
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_1(source, result)
+           real (kind=8) :: source(:), result(:)
+           real (kind=8), allocatable :: buf(:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           allocate( buf(1:x1)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_1
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_2(source, result)
+           real (kind=8) :: source(:,:), result(:,:)
+           real (kind=8), allocatable :: buf(:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           allocate( buf(1:x1,1:x2)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_2
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_3(source, result)
+           real (kind=8) :: source(:,:,:), result(:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           allocate( buf(1:x1,1:x2,1:x3)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_3
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_4(source, result)
+           real (kind=8) :: source(:,:,:,:), result(:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_4
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_5(source, result)
+           real (kind=8) :: source(:,:,:,:,:), result(:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_5
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_6(source, result)
+           real (kind=8) :: source(:,:,:,:,:,:), result(:,:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_6
+
+         subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_7(source, result)
+           real (kind=8) :: source(:,:,:,:,:,:,:), result(:,:,:,:,:,:,:)
+           real (kind=8), allocatable :: buf(:,:,:,:,:,:,:)[:]
+
+           integer :: k,ti,ni
+           integer :: x1,x2,x3,x4,x5,x6,x7
+           ti = this_image()
+           ni = num_images()
+           x1 = ubound(source,1)-lbound(source,1)+1
+           x2 = ubound(source,2)-lbound(source,2)+1
+           x3 = ubound(source,3)-lbound(source,3)+1
+           x4 = ubound(source,4)-lbound(source,4)+1
+           x5 = ubound(source,5)-lbound(source,5)+1
+           x6 = ubound(source,6)-lbound(source,6)+1
+           x7 = ubound(source,7)-lbound(source,7)+1
+           allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
+           buf = source
+           sync all
+           k = 1
+           do while (k < ni)
+               if ( mod(ti-1,2*k)==0) then
+                   if ((ti+k)<=ni) then
+                       buf = min( buf,buf(:,:,:,:,:,:,:)[ti+k] )
+                   end if
+                   if (mod(ti-1,4*k)==0) then
+                       if ((ti+2*k)<=ni) then
+                           sync images(ti+2*k)
+                       end if
+                   else
+                       if ((ti-2*k)>=1) then
+                           sync images(ti-2*k)
+                       end if
+                   end if
+               end if
+               k = k*2
+           end do
+           k = k/2
+           do while (k > 0)
+               if ( mod(ti-1,k)==0) then
+                   if ( mod(ti-1,2*k)==0) then
+                       if ((ti+k)<=ni) then
+                           buf(:,:,:,:,:,:,:)[ti+k] = buf
+                       end if
+                       if ((ti+k)<=ni) then
+                           sync images(ti+k)
+                       end if
+                   else
+                       if ((ti-k)>=1) then
+                           sync images(ti-k)
+                       end if
+                   end if
+               end if
+               k = k/2
+           end do
+           result = buf
+           deallocate(buf)
+         end subroutine CO_MINVAL_2TREE_SYNCIMAGES_REAL8_7
+

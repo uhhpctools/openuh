@@ -6351,7 +6351,11 @@ intrin_tbl_type         intrin_tbl[] =
    {"LOG10",5,1,1,0,0,0,0,0,0,0,Log10_Intrinsic,Real_4,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,REAL_MASK,0},
 {"LOG2_IMAGES",11,0,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
+#ifndef _UH_COARRAYS
    {"shmem_n_pes",11,0,1,0,0,0,0,0,1,0,Log2_Images_Intrinsic,Integer_4,0},
+#else
+   {"_LOG2_IMAGES",12,0,1,0,0,0,0,0,1,0,Log2_Images_Intrinsic,Integer_4,0},
+#endif
 {"LOGICAL",7,1,1,0,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
    {"LOGICAL",7,1,1,0,0,0,0,0,0,0,Logical_Intrinsic,Logical_4,0},
       {"L",1,0,0,0,0,0,0,0,0,0,0,LOGICAL_MASK,0},
@@ -13622,7 +13626,11 @@ intrin_tbl_type         intrin_tbl[] =
    {"REMOTE_WRITE_BARRIER",20,1,0,0,0,0,0,0,1,0,
                                Remote_Write_Barrier_Intrinsic,0,0},
 {"REM_IMAGES",10,0,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
+#ifndef _UH_COARRAYS
    {"shmem_n_pes",11,0,1,0,0,0,0,0,1,0,Rem_Images_Intrinsic,Integer_4,0},
+#else
+   {"_REM_IMAGES",11,0,1,0,0,0,0,0,1,0,Rem_Images_Intrinsic,Integer_4,0},
+#endif
 #ifdef KEY /* Bug 1683 */
 {"RENAME",6,0,1,0,1,0,0,1,0,1,0,0,PGI_FAMILY|G77_FAMILY},
    {"pathf90_rename",14,0,1,0,1,0,0,0,1,0,Pathf90_Intrinsic,Integer_4,0},

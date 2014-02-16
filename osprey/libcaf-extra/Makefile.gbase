@@ -50,10 +50,22 @@ OBJECTS = \
 	caf_reductions_1d.o \
 	caf_broadcasts.o \
 	caf_broadcasts_1d.o \
-	co_maxval.o \
-	co_minval.o \
-	co_sum.o \
-	co_product.o
+	co_maxval_all2all.o \
+	co_maxval_2tree_syncall.o \
+	co_maxval_2tree_syncimages.o \
+	co_maxval_2tree_events.o \
+	co_minval_all2all.o \
+	co_minval_2tree_syncall.o \
+	co_minval_2tree_syncimages.o \
+	co_minval_2tree_events.o \
+	co_product_all2all.o \
+	co_product_2tree_syncall.o \
+	co_product_2tree_syncimages.o \
+	co_product_2tree_events.o \
+	co_sum_all2all.o \
+	co_sum_2tree_syncall.o \
+	co_sum_2tree_syncimages.o \
+	co_sum_2tree_events.o
 
 default: $(TARGETS)
 

@@ -1,800 +1,801 @@
+
           !!!!!!!!!!!!!!!!!!!!!
-          ! INT1 CO_PRODUCT
+          ! INT1 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_INT1_0(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_0(source, result)
            integer (kind=1) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_0
+         end subroutine CO_SUM_ALL2ALL_INT1_0
 
-         subroutine CO_PRODUCT_INT1_1(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_1(source, result)
            integer (kind=1) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_1
+         end subroutine CO_SUM_ALL2ALL_INT1_1
 
-         subroutine CO_PRODUCT_INT1_2(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_2(source, result)
            integer (kind=1) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_2
+         end subroutine CO_SUM_ALL2ALL_INT1_2
 
-         subroutine CO_PRODUCT_INT1_3(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_3(source, result)
            integer (kind=1) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_3
+         end subroutine CO_SUM_ALL2ALL_INT1_3
 
-         subroutine CO_PRODUCT_INT1_4(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_4(source, result)
            integer (kind=1) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_4
+         end subroutine CO_SUM_ALL2ALL_INT1_4
 
-         subroutine CO_PRODUCT_INT1_5(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_5(source, result)
            integer (kind=1) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_5
+         end subroutine CO_SUM_ALL2ALL_INT1_5
 
-         subroutine CO_PRODUCT_INT1_6(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_6(source, result)
            integer (kind=1) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_6
+         end subroutine CO_SUM_ALL2ALL_INT1_6
 
-         subroutine CO_PRODUCT_INT1_7(source, result)
+         subroutine CO_SUM_ALL2ALL_INT1_7(source, result)
            integer (kind=1) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT1_7
+         end subroutine CO_SUM_ALL2ALL_INT1_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! INT2 CO_PRODUCT
+          ! INT2 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_INT2_0(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_0(source, result)
            integer (kind=2) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_0
+         end subroutine CO_SUM_ALL2ALL_INT2_0
 
-         subroutine CO_PRODUCT_INT2_1(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_1(source, result)
            integer (kind=2) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_1
+         end subroutine CO_SUM_ALL2ALL_INT2_1
 
-         subroutine CO_PRODUCT_INT2_2(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_2(source, result)
            integer (kind=2) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_2
+         end subroutine CO_SUM_ALL2ALL_INT2_2
 
-         subroutine CO_PRODUCT_INT2_3(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_3(source, result)
            integer (kind=2) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_3
+         end subroutine CO_SUM_ALL2ALL_INT2_3
 
-         subroutine CO_PRODUCT_INT2_4(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_4(source, result)
            integer (kind=2) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_4
+         end subroutine CO_SUM_ALL2ALL_INT2_4
 
-         subroutine CO_PRODUCT_INT2_5(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_5(source, result)
            integer (kind=2) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_5
+         end subroutine CO_SUM_ALL2ALL_INT2_5
 
-         subroutine CO_PRODUCT_INT2_6(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_6(source, result)
            integer (kind=2) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_6
+         end subroutine CO_SUM_ALL2ALL_INT2_6
 
-         subroutine CO_PRODUCT_INT2_7(source, result)
+         subroutine CO_SUM_ALL2ALL_INT2_7(source, result)
            integer (kind=2) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT2_7
+         end subroutine CO_SUM_ALL2ALL_INT2_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! INT4 CO_PRODUCT
+          ! INT4 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_INT4_0(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_0(source, result)
            integer (kind=4) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_0
+         end subroutine CO_SUM_ALL2ALL_INT4_0
 
-         subroutine CO_PRODUCT_INT4_1(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_1(source, result)
            integer (kind=4) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_1
+         end subroutine CO_SUM_ALL2ALL_INT4_1
 
-         subroutine CO_PRODUCT_INT4_2(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_2(source, result)
            integer (kind=4) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_2
+         end subroutine CO_SUM_ALL2ALL_INT4_2
 
-         subroutine CO_PRODUCT_INT4_3(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_3(source, result)
            integer (kind=4) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_3
+         end subroutine CO_SUM_ALL2ALL_INT4_3
 
-         subroutine CO_PRODUCT_INT4_4(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_4(source, result)
            integer (kind=4) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_4
+         end subroutine CO_SUM_ALL2ALL_INT4_4
 
-         subroutine CO_PRODUCT_INT4_5(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_5(source, result)
            integer (kind=4) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_5
+         end subroutine CO_SUM_ALL2ALL_INT4_5
 
-         subroutine CO_PRODUCT_INT4_6(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_6(source, result)
            integer (kind=4) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_6
+         end subroutine CO_SUM_ALL2ALL_INT4_6
 
-         subroutine CO_PRODUCT_INT4_7(source, result)
+         subroutine CO_SUM_ALL2ALL_INT4_7(source, result)
            integer (kind=4) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT4_7
+         end subroutine CO_SUM_ALL2ALL_INT4_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! INT8 CO_PRODUCT
+          ! INT8 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_INT8_0(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_0(source, result)
            integer (kind=8) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_0
+         end subroutine CO_SUM_ALL2ALL_INT8_0
 
-         subroutine CO_PRODUCT_INT8_1(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_1(source, result)
            integer (kind=8) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_1
+         end subroutine CO_SUM_ALL2ALL_INT8_1
 
-         subroutine CO_PRODUCT_INT8_2(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_2(source, result)
            integer (kind=8) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_2
+         end subroutine CO_SUM_ALL2ALL_INT8_2
 
-         subroutine CO_PRODUCT_INT8_3(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_3(source, result)
            integer (kind=8) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_3
+         end subroutine CO_SUM_ALL2ALL_INT8_3
 
-         subroutine CO_PRODUCT_INT8_4(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_4(source, result)
            integer (kind=8) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_4
+         end subroutine CO_SUM_ALL2ALL_INT8_4
 
-         subroutine CO_PRODUCT_INT8_5(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_5(source, result)
            integer (kind=8) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_5
+         end subroutine CO_SUM_ALL2ALL_INT8_5
 
-         subroutine CO_PRODUCT_INT8_6(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_6(source, result)
            integer (kind=8) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_6
+         end subroutine CO_SUM_ALL2ALL_INT8_6
 
-         subroutine CO_PRODUCT_INT8_7(source, result)
+         subroutine CO_SUM_ALL2ALL_INT8_7(source, result)
            integer (kind=8) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_INT8_7
+         end subroutine CO_SUM_ALL2ALL_INT8_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! REAL4 CO_PRODUCT
+          ! REAL4 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_REAL4_0(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_0(source, result)
            real (kind=4) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_0
+         end subroutine CO_SUM_ALL2ALL_REAL4_0
 
-         subroutine CO_PRODUCT_REAL4_1(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_1(source, result)
            real (kind=4) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_1
+         end subroutine CO_SUM_ALL2ALL_REAL4_1
 
-         subroutine CO_PRODUCT_REAL4_2(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_2(source, result)
            real (kind=4) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_2
+         end subroutine CO_SUM_ALL2ALL_REAL4_2
 
-         subroutine CO_PRODUCT_REAL4_3(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_3(source, result)
            real (kind=4) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_3
+         end subroutine CO_SUM_ALL2ALL_REAL4_3
 
-         subroutine CO_PRODUCT_REAL4_4(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_4(source, result)
            real (kind=4) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_4
+         end subroutine CO_SUM_ALL2ALL_REAL4_4
 
-         subroutine CO_PRODUCT_REAL4_5(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_5(source, result)
            real (kind=4) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_5
+         end subroutine CO_SUM_ALL2ALL_REAL4_5
 
-         subroutine CO_PRODUCT_REAL4_6(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_6(source, result)
            real (kind=4) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_6
+         end subroutine CO_SUM_ALL2ALL_REAL4_6
 
-         subroutine CO_PRODUCT_REAL4_7(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL4_7(source, result)
            real (kind=4) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL4_7
+         end subroutine CO_SUM_ALL2ALL_REAL4_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! REAL8 CO_PRODUCT
+          ! REAL8 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_REAL8_0(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_0(source, result)
            real (kind=8) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_0
+         end subroutine CO_SUM_ALL2ALL_REAL8_0
 
-         subroutine CO_PRODUCT_REAL8_1(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_1(source, result)
            real (kind=8) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_1
+         end subroutine CO_SUM_ALL2ALL_REAL8_1
 
-         subroutine CO_PRODUCT_REAL8_2(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_2(source, result)
            real (kind=8) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_2
+         end subroutine CO_SUM_ALL2ALL_REAL8_2
 
-         subroutine CO_PRODUCT_REAL8_3(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_3(source, result)
            real (kind=8) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_3
+         end subroutine CO_SUM_ALL2ALL_REAL8_3
 
-         subroutine CO_PRODUCT_REAL8_4(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_4(source, result)
            real (kind=8) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_4
+         end subroutine CO_SUM_ALL2ALL_REAL8_4
 
-         subroutine CO_PRODUCT_REAL8_5(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_5(source, result)
            real (kind=8) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_5
+         end subroutine CO_SUM_ALL2ALL_REAL8_5
 
-         subroutine CO_PRODUCT_REAL8_6(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_6(source, result)
            real (kind=8) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_6
+         end subroutine CO_SUM_ALL2ALL_REAL8_6
 
-         subroutine CO_PRODUCT_REAL8_7(source, result)
+         subroutine CO_SUM_ALL2ALL_REAL8_7(source, result)
            real (kind=8) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_REAL8_7
+         end subroutine CO_SUM_ALL2ALL_REAL8_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! C4 CO_PRODUCT
+          ! C4 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_C4_0(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_0(source, result)
            complex (kind=4) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_0
+         end subroutine CO_SUM_ALL2ALL_C4_0
 
-         subroutine CO_PRODUCT_C4_1(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_1(source, result)
            complex (kind=4) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_1
+         end subroutine CO_SUM_ALL2ALL_C4_1
 
-         subroutine CO_PRODUCT_C4_2(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_2(source, result)
            complex (kind=4) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_2
+         end subroutine CO_SUM_ALL2ALL_C4_2
 
-         subroutine CO_PRODUCT_C4_3(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_3(source, result)
            complex (kind=4) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_3
+         end subroutine CO_SUM_ALL2ALL_C4_3
 
-         subroutine CO_PRODUCT_C4_4(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_4(source, result)
            complex (kind=4) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_4
+         end subroutine CO_SUM_ALL2ALL_C4_4
 
-         subroutine CO_PRODUCT_C4_5(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_5(source, result)
            complex (kind=4) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_5
+         end subroutine CO_SUM_ALL2ALL_C4_5
 
-         subroutine CO_PRODUCT_C4_6(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_6(source, result)
            complex (kind=4) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_6
+         end subroutine CO_SUM_ALL2ALL_C4_6
 
-         subroutine CO_PRODUCT_C4_7(source, result)
+         subroutine CO_SUM_ALL2ALL_C4_7(source, result)
            complex (kind=4) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C4_7
+         end subroutine CO_SUM_ALL2ALL_C4_7
 
           !!!!!!!!!!!!!!!!!!!!!
-          ! C8 CO_PRODUCT
+          ! C8 CO_SUM_ALL2ALL
           !!!!!!!!!!!!!!!!!!!!!
 
-         subroutine CO_PRODUCT_C8_0(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_0(source, result)
            complex (kind=8) :: source[*], result
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source[i]
+             result = result + source[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_0
+         end subroutine CO_SUM_ALL2ALL_C8_0
 
-         subroutine CO_PRODUCT_C8_1(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_1(source, result)
            complex (kind=8) :: source(:)[*], result(:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:)[i]
+             result = result + source(:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_1
+         end subroutine CO_SUM_ALL2ALL_C8_1
 
-         subroutine CO_PRODUCT_C8_2(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_2(source, result)
            complex (kind=8) :: source(:,:)[*], result(:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:)[i]
+             result = result + source(:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_2
+         end subroutine CO_SUM_ALL2ALL_C8_2
 
-         subroutine CO_PRODUCT_C8_3(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_3(source, result)
            complex (kind=8) :: source(:,:,:)[*], result(:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:)[i]
+             result = result + source(:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_3
+         end subroutine CO_SUM_ALL2ALL_C8_3
 
-         subroutine CO_PRODUCT_C8_4(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_4(source, result)
            complex (kind=8) :: source(:,:,:,:)[*], result(:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:)[i]
+             result = result + source(:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_4
+         end subroutine CO_SUM_ALL2ALL_C8_4
 
-         subroutine CO_PRODUCT_C8_5(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_5(source, result)
            complex (kind=8) :: source(:,:,:,:,:)[*], result(:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_5
+         end subroutine CO_SUM_ALL2ALL_C8_5
 
-         subroutine CO_PRODUCT_C8_6(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_6(source, result)
            complex (kind=8) :: source(:,:,:,:,:,:)[*], result(:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_6
+         end subroutine CO_SUM_ALL2ALL_C8_6
 
-         subroutine CO_PRODUCT_C8_7(source, result)
+         subroutine CO_SUM_ALL2ALL_C8_7(source, result)
            complex (kind=8) :: source(:,:,:,:,:,:,:)[*], result(:,:,:,:,:,:,:)
            integer :: i
 
            sync all
-           result=1
+           result=0
            do i=1,num_images()
-             result = result * source(:,:,:,:,:,:,:)[i]
+             result = result + source(:,:,:,:,:,:,:)[i]
            end do
            sync all
-         end subroutine CO_PRODUCT_C8_7
+         end subroutine CO_SUM_ALL2ALL_C8_7
 

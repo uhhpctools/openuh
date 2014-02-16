@@ -49,6 +49,14 @@ int profiling_enabled = 0;
 int in_rma_region = 0;
 int rma_prof_rid = 0;
 
+caf_prof_groups_t prof_groups = CAFPROF_DEFAULT;
+
+const char* CAFPROF_GRP       = "CAF";
+const char* CAFPROF_GRP_MEM   = "CAF_MEM";
+const char* CAFPROF_GRP_COMM  = "CAF_COMM";
+const char* CAFPROF_GRP_SYNC  = "CAF_SYNC";
+const char* CAFPROF_GRP_COLL  = "CAF_COLL";
+
 static int rmaid_cmp(rma_node_t * a, rma_node_t * b)
 {
     return (a->rmaid - b->rmaid);
@@ -65,7 +73,7 @@ void profile_init()
 
 void profile_rma_store_begin(int proc, int nelem)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
     if (in_rma_region)
         Error("profile_rma_store_begin called within active rma region");
@@ -79,7 +87,7 @@ void profile_rma_store_begin(int proc, int nelem)
 
 void profile_rma_store_end(int proc)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
@@ -95,7 +103,7 @@ void profile_rma_store(int proc, int nelem)
 
 void profile_rma_load_begin(int proc, int nelem)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
     if (in_rma_region)
         Error("profile_rma_load_begin called within active rma region");
@@ -108,7 +116,7 @@ void profile_rma_load_begin(int proc, int nelem)
 
 void profile_rma_load_end(int proc)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
@@ -126,7 +134,7 @@ void profile_rma_load(int proc, int nelem)
 void profile_rma_nbstore_end(int proc, int rid)
 {
     rma_node_t *rma_node, tmp;
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
 
     elg_put_1te_remote(proc, rid);
@@ -142,14 +150,14 @@ void profile_rma_nbstore_end(int proc, int rid)
 
 void profile_save_nbstore(int proc)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
     profile_save_nbstore_rmaid(proc, rma_prof_rid);
 }
 
 void profile_save_nbstore_rmaid(int proc, int rid)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
     rma_node_t *new_rma;
     if ((new_rma = malloc(sizeof(*new_rma))) == NULL)
@@ -164,7 +172,7 @@ void profile_save_nbstore_rmaid(int proc, int rid)
 
 void profile_rma_nbload_end(int proc, int rid)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
     rma_node_t *rma_node, tmp;
 
@@ -181,14 +189,14 @@ void profile_rma_nbload_end(int proc, int rid)
 
 void profile_save_nbload(int proc)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
     profile_save_nbload_rmaid(proc, rma_prof_rid);
 }
 
 void profile_save_nbload_rmaid(int proc, int rid)
 {
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
     rma_node_t *new_rma;
     if ((new_rma = malloc(sizeof(*new_rma))) == NULL)
@@ -212,7 +220,7 @@ void profile_rma_end_all()
 void profile_rma_end_all_nbstores()
 {
     rma_node_t *rma_node, *tmp;
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
 
     DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
@@ -224,7 +232,7 @@ void profile_rma_end_all_nbstores()
 void profile_rma_end_all_nbstores_to_proc(int proc)
 {
     rma_node_t *rma_node, *tmp;
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
 
     DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
@@ -238,7 +246,7 @@ void profile_rma_end_all_nbstores_to_proc(int proc)
 void profile_rma_end_all_nbloads()
 {
     rma_node_t *rma_node, *tmp;
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
 
     DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
@@ -250,7 +258,7 @@ void profile_rma_end_all_nbloads()
 void profile_rma_end_all_nbloads_to_proc(int proc)
 {
     rma_node_t *rma_node, *tmp;
-    if (!profiling_enabled)
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
         return;
 
     DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
@@ -272,14 +280,38 @@ void profile_unset_in_prof_region()
     in_rma_region = 0;
 }
 
-#pragma weak uhcaf_profile_suspend_ = uhcaf_profile_suspend
-void uhcaf_profile_suspend()
+#pragma weak uhcaf_profile_start_ = uhcaf_profile_start
+void uhcaf_profile_start()
+{
+    profiling_enabled = 1;
+}
+
+#pragma weak uhcaf_profile_stop_ = uhcaf_profile_stop
+void uhcaf_profile_stop()
 {
     profiling_enabled = 0;
 }
 
-#pragma weak uhcaf_profile_resume_ = uhcaf_profile_resume
-void uhcaf_profile_resume()
+#pragma weak uhcaf_profile_set_events_ = uhcaf_profile_set_events
+void uhcaf_profile_set_events(caf_prof_groups_t *groups)
 {
-    profiling_enabled = 1;
+    prof_groups = *groups;
+}
+
+#pragma weak uhcaf_profile_reset_events_ = uhcaf_profile_reset_events
+void uhcaf_profile_reset_events()
+{
+    prof_groups = CAFPROF_DEFAULT;
+}
+
+#pragma weak uhcaf_profile_add_events_ = uhcaf_profile_add_events
+void uhcaf_profile_add_events(caf_prof_groups_t *groups)
+{
+    prof_groups |= *groups;
+}
+
+#pragma weak uhcaf_profile_remove_events_ = uhcaf_profile_remove_events
+void uhcaf_profile_remove_events(caf_prof_groups_t *groups)
+{
+    prof_groups &= ~(*groups);
 }

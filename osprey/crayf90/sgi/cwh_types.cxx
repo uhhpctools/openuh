@@ -1729,7 +1729,11 @@ cwh_types_dim_TY(INT32 num_dims)
   TY_IDX tb_idx  ;
   ARB_HANDLE arb;
 
+#ifndef _UH_COARRAYS
   static TY_IDX tbl[MAX_ARY_DIMS+1] = {0,0,0,0,0,0,0,0};
+#else
+  static TY_IDX tbl[MAX_ARY_DIMS+1] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+#endif
 
   if (num_dims == 0) 
     return (0);

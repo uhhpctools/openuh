@@ -67,7 +67,7 @@ void __libcaf_error(const char *file, const char *func, int line,
     vsnprintf(tmp, MSG_BUF_SIZE, error_msg, ap);
     va_end(ap);
 #if defined(CAFRT_DEBUG)
-    fprintf(stderr, "-- LIBCAF ERROR (%s:%d::%s): %s \n\n",
+    fprintf(stderr, "** LIBCAF ERROR (%s:%d::%s): %s \n\n",
             file, line, func, tmp);
 #else
     fprintf(stderr, "** LIBCAF ERROR: %s \n\n", tmp);
@@ -168,11 +168,11 @@ void uhcaf_debug_dope(DopeVectorType *dopev)
     sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
     sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
     sprintf(&str[strlen(str)], "     orig_base: %p\n", dopev->orig_base);
-    sprintf(&str[strlen(str)], "     orig_size: %d\n", dopev->orig_size);
+    sprintf(&str[strlen(str)], "     orig_size: %ld\n", dopev->orig_size);
     for (int i = 0; i < (dopev->n_dim + dopev->n_codim); i++) {
-    sprintf(&str[strlen(str)], "        lb[%d]: %d\n", i, dopev->dimension[i].low_bound);
-    sprintf(&str[strlen(str)], "       ext[%d]: %d\n", i, dopev->dimension[i].extent);
-    sprintf(&str[strlen(str)], "        sm[%d]: %d\n", i, dopev->dimension[i].stride_mult);
+    sprintf(&str[strlen(str)], "        lb[%d]: %ld\n", i, dopev->dimension[i].low_bound);
+    sprintf(&str[strlen(str)], "       ext[%d]: %ld\n", i, dopev->dimension[i].extent);
+    sprintf(&str[strlen(str)], "        sm[%d]: %ld\n", i, dopev->dimension[i].stride_mult);
     }
 
     fprintf(f, "%s", str);
