@@ -87,7 +87,7 @@ extern void _sma_fortran_deallocate_global(void *p);
 #endif		/* end MIPS */
 
 #ifdef _UH_COARRAYS
-extern void *coarray_allocatable_allocate_(unsigned long var_size);
+extern void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar);
 #pragma weak coarray_allocatable_allocate_
 extern void *coarray_asymmetric_allocate_(unsigned long var_size);
 #pragma weak coarray_asymmetric_allocate_ = _coarray_asymmetric_allocate_dummy
@@ -97,7 +97,7 @@ static void *_coarray_asymmetric_allocate_dummy(unsigned long var_size)
     return malloc( var_size );
 }
 
-extern void coarray_deallocate_(void *var_address);
+extern void coarray_deallocate_(void *var_address, int* statvar);
 #pragma weak coarray_deallocate_
 
 extern void coarray_asymmetric_deallocate_(void *var_address);
@@ -274,10 +274,14 @@ _ALLOCATE(AllocHeadType *aloclist,
 		if (nbytes != 0) {
 #ifdef _UH_COARRAYS
 		if (dva->is_coarray) {
-            if (dva->n_codim)
-                base = coarray_allocatable_allocate_(nbytes);
-            else
+            if (dva->n_codim) {
+                base = coarray_allocatable_allocate_(nbytes, statvar);
+                /* use returned status as error code */
+                if (lstat)
+                    errflag = *statvar;
+            } else {
                 base = coarray_asymmetric_allocate_(nbytes);
+            }
 		} else if (dva->p_or_a == POINTTR) {
             base = coarray_asymmetric_allocate_(nbytes);
         } else {
@@ -669,7 +673,10 @@ _DEALLOCATE(AllocHeadType *aloclist,
 
 #ifdef _UH_COARRAYS
         if(dva->is_coarray && dva->n_codim) {
-			coarray_deallocate_((void *)base);
+			coarray_deallocate_((void *)base, statvar);
+            /* use returned status as error code */
+            if (lstat)
+                errflag = *statvar;
         } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
             coarray_asymmetric_deallocate_((void *)base);
         }
@@ -778,7 +785,7 @@ _DEALLOC(AllocHeadType *aloclist)
 
 #ifdef _UH_COARRAYS
         if(dva->is_coarray && dva->n_codim) {
-			coarray_deallocate_((void *)base);
+			coarray_deallocate_((void *)base, NULL);
         } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
             coarray_asymmetric_deallocate_((void *)base);
         }

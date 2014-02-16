@@ -82,7 +82,8 @@ Environment Variables:
                          Can be set/overridden with --num-images
 
    UHCAF_IMAGE_HEAP_SIZE
-                      Specifies heap size per image for storing coarray data.
+                      Specifies heap size per image for dynamic allocation
+                      of remotely-accessible data
                          Can be set with --image-heap
 
    UHCAF_TRACE        Specifies trace levels for runtime.
@@ -114,6 +115,11 @@ Environment Variables:
                       all2all, 2tree_syncall, 2tree_syncimages, or
                       2tree_events.  By default it is 2tree_events.
 
+   UHCAF_SYNC_IMAGES_ALGORITHM
+                      Specifies the algorithm to use for sync images operation:
+                      counter, ping_pong, or sense_reversing.  By default it
+                      is sense_reversing.
+
 _EOT_
 }
 
@@ -128,10 +134,11 @@ Where OPTIONS are:
   --num-images=N
   -n,-np N            N is number of images to use
 
-  --image-heap=I      I is heap size per image for storing coarray data. It
-                      may be an integer which indicates size in bytes, or it
-                      may have the suffixes K, M, G which indicates size in
-                      kilobytes, megabytes, and gigabytes, respectively.
+  --image-heap=I      I is heap size per image for dynamic allocation of
+                      remotely-accessible data. It may be an integer which
+                      indicates size in bytes, or it may have the suffixes
+                      K, M, G which indicates size in kilobytes, megabytes,
+                      and gigabytes, respectively.
 
   --trace=L           Sets trace levels for runtime.
                       L=all or trace levels delimited by ':'.

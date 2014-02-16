@@ -64,10 +64,10 @@ module iso_fortran_env
   integer, parameter :: REAL32 = 4
   integer, parameter :: REAL64 = 8
   integer, parameter :: REAL128 = 16
-  integer, parameter :: STAT_LOCKED = 775
-  integer, parameter :: STAT_UNLOCKED = 776
-  integer, parameter :: STAT_LOCKED_OTHER_IMAGE = 777
-  integer, parameter :: STAT_STOPPED_IMAGE = 778
+  integer, parameter :: STAT_LOCKED = 101
+  integer, parameter :: STAT_UNLOCKED = 102
+  integer, parameter :: STAT_LOCKED_OTHER_IMAGE = 103
+  integer, parameter :: STAT_STOPPED_IMAGE = 104
 
   type :: LOCK_TYPE
       private

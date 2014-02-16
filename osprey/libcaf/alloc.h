@@ -53,11 +53,11 @@ typedef struct {
 
 /* SHARED MEMORY MANAGEMENT */
 
-void *coarray_allocatable_allocate_(unsigned long var_size);
+void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar);
 void *coarray_asymmetric_allocate_(unsigned long var_size);
 void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size);
 void coarray_asymmetric_deallocate_(void *var_address);
-void coarray_deallocate_(void *var_address);
+void coarray_deallocate_(void *var_address, int* statvar);
 void coarray_free_all_shared_memory_slots();
 
 
