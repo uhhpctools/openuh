@@ -838,15 +838,20 @@ void _EVENT_POST(event_t * event, int *image)
     if (*image == 0) {
         /* local reference */
         event_t result, inc = 1;
-        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fadd_request, event, &inc,
-                             sizeof(event_t), _this_image - 1, &result);
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_add_request, event, &inc,
+                             sizeof(event_t), _this_image - 1);
     } else {
         event_t result, inc = 1;
         check_remote_image(*image);
         check_remote_address(*image, event);
 
-        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fadd_request, event, &inc,
-                             sizeof(event_t), *image - 1, &result);
+        /* Not sure if we should do a sync memory here, or only perform a
+         * fence for PUT/GET requests to the target image. Doing the latter
+         * for now. */
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence, (size_t)(*image-1));
+
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_add_request, event, &inc,
+                             sizeof(event_t), *image - 1);
 
     }
 

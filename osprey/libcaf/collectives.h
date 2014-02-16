@@ -45,9 +45,6 @@ typedef enum {
     CO_REDUCE_DEFAULT = 4
 } co_reduce_t;
 
-/* environment */
-
-#define ENV_CO_REDUCE_ALGORITHM       "UHCAF_CO_REDUCE_ALGORITHM"
 
 /* Collectives */
 

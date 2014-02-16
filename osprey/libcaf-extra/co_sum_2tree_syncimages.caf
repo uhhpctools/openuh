@@ -13,21 +13,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -65,21 +60,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -118,21 +108,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -172,21 +157,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -227,21 +207,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -283,21 +258,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -340,21 +310,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -398,21 +363,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -453,21 +413,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -505,21 +460,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -558,21 +508,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -612,21 +557,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -667,21 +607,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -723,21 +658,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -780,21 +710,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -838,21 +763,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -893,21 +813,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -945,21 +860,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -998,21 +908,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1052,21 +957,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1107,21 +1007,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1163,21 +1058,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1220,21 +1110,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1278,21 +1163,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1333,21 +1213,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1385,21 +1260,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1438,21 +1308,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1492,21 +1357,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1547,21 +1407,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1603,21 +1458,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1660,21 +1510,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1718,21 +1563,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1773,21 +1613,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1825,21 +1660,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1878,21 +1708,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1932,21 +1757,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -1987,21 +1807,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2043,21 +1858,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2100,21 +1910,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2158,21 +1963,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2213,21 +2013,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2265,21 +2060,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2318,21 +2108,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2372,21 +2157,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2427,21 +2207,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2483,21 +2258,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2540,21 +2310,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2598,21 +2363,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2653,21 +2413,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2705,21 +2460,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2758,21 +2508,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2812,21 +2557,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2867,21 +2607,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2923,21 +2658,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -2980,21 +2710,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3038,21 +2763,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3093,21 +2813,16 @@
            ni = num_images()
            allocate( buf[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3145,21 +2860,16 @@
            x1 = ubound(source,1)-lbound(source,1)+1
            allocate( buf(1:x1)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3198,21 +2908,16 @@
            x2 = ubound(source,2)-lbound(source,2)+1
            allocate( buf(1:x1,1:x2)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3252,21 +2957,16 @@
            x3 = ubound(source,3)-lbound(source,3)+1
            allocate( buf(1:x1,1:x2,1:x3)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3307,21 +3007,16 @@
            x4 = ubound(source,4)-lbound(source,4)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3363,21 +3058,16 @@
            x5 = ubound(source,5)-lbound(source,5)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3420,21 +3110,16 @@
            x6 = ubound(source,6)-lbound(source,6)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
@@ -3478,21 +3163,16 @@
            x7 = ubound(source,7)-lbound(source,7)+1
            allocate( buf(1:x1,1:x2,1:x3,1:x4,1:x5,1:x6,1:x7)[*] )
            buf = source
-           sync all
            k = 1
            do while (k < ni)
                if ( mod(ti-1,2*k)==0) then
                    if ((ti+k)<=ni) then
+                       sync images(ti+k)
                        buf = buf + buf(:,:,:,:,:,:,:)[ti+k]
                    end if
-                   if (mod(ti-1,4*k)==0) then
-                       if ((ti+2*k)<=ni) then
-                           sync images(ti+2*k)
-                       end if
-                   else
-                       if ((ti-2*k)>=1) then
-                           sync images(ti-2*k)
-                       end if
+               else if (mod(ti-1,2*k)==k) then
+                   if ((ti-k)>=1) then
+                       sync images(ti-k)
                    end if
                end if
                k = k*2
