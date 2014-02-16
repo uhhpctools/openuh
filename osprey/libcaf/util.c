@@ -53,6 +53,7 @@ void __libcaf_warning(const char *file, const char *func, int line,
 #else
     fprintf(stderr, "-- LIBCAF WARNING: %s \n\n", tmp);
 #endif
+    LIBCAF_TRACE(LIBCAF_LOG_NOTICE, tmp);
     fflush(stderr);
 }
 

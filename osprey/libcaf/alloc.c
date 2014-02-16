@@ -42,7 +42,6 @@
 #include "profile.h"
 #include "util.h"
 
-
 /* describes memory usage status */
 mem_usage_info_t *mem_info;
 
@@ -225,6 +224,10 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
     struct shared_memory_slot *empty_slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
+
+    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
+        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    }
 
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
                                                      var_size);
@@ -486,7 +489,8 @@ void coarray_deallocate_(void *var_address, int* statvar)
     } else
         slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "Address%p not in remote-access segment.",
                      var_address);
 
         PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
@@ -511,7 +515,8 @@ void coarray_asymmetric_deallocate_(void *var_address)
 
     slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "Address%p not in remote-access segment.",
                      var_address);
 
         PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
