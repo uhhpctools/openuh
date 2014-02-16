@@ -295,6 +295,15 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
+/* must call comm_init() first */
+size_t comm_get_node_id(size_t proc)
+{
+#if GASNET_PSHM
+    return nodeinfo_table[proc].supernode;
+#else
+    return 0;
+#endif
+}
 
 /**************************************************************
  *       Shared (RMA) Memory Segment Address Ranges
@@ -1481,6 +1490,11 @@ void comm_init()
     ret = gasnet_getNodeInfo(nodeinfo_table, num_procs);
     if (ret != GASNET_OK) {
         Error("GASNET getNodeInfo failed");
+    }
+
+    for (i = 0; i < num_procs; i++) {
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "offset for %d = %ld", i,
+                nodeinfo_table[i].offset);
     }
 
 

@@ -86,11 +86,14 @@ Environment Variables:
                       of remotely-accessible data
                          Can be set with --image-heap
 
-   UHCAF_TRACE        Specifies trace levels for runtime.
-                         Can be set with --trace
+   UHCAF_STATS        Enable statistical collection
+                         Can be set with --stats
 
-   UHCAF_TRACE_DIR    Specifies dir to store runtime traces
-                         Can be set with --trace-dir
+   UHCAF_DTRACE       Specifies trace levels for runtime.
+                         Can be set with --dtrace
+
+   UHCAF_DTRACE_DIR   Specifies dir to store runtime traces
+                         Can be set with --dtrace-dir
 
    UHCAF_PROGRESS_THREAD
                       Set to 1 to enable progress thread in CAF runtime
@@ -140,13 +143,15 @@ Where OPTIONS are:
                       K, M, G which indicates size in kilobytes, megabytes,
                       and gigabytes, respectively.
 
-  --trace=L           Sets trace levels for runtime.
+  --dtrace=L          Sets diagnostic trace levels for runtime.
                       L=all or trace levels delimited by ':'.
                         Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
                         COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
 
-  --trace-dir=D       D is name of directory to store traces
+  --dtrace-dir=D      D is name of directory to store diagnostic traces
+
+  --stats             Turn on statistical collection
 
   --verbose,-v        Verbose output
 
@@ -298,14 +303,14 @@ for arg in "$@" ; do
         # next arg should be number of images
         process_num_images=yes
         ;;
-      --trace=*)
-        levels=`echo UhCaf$arg | sed -e 's/UhCaf--trace=//g'`
+      --dtrace=*)
+        levels=`echo UhCaf$arg | sed -e 's/UhCaf--dtrace=//g'`
         levels=`echo $levels | tr '[:lower:]' '[:upper:]'`
-        set_env UHCAF_TRACE $levels
+        set_env UHCAF_DTRACE $levels
         ;;
-      --trace-dir=*)
-        trace_dir=`echo UhCaf$arg | sed -e 's/UhCaf--trace-dir=//g'`
-        set_env UHCAF_TRACE_DIR $trace_dir
+      --dtrace-dir=*)
+        trace_dir=`echo UhCaf$arg | sed -e 's/UhCaf--dtrace-dir=//g'`
+        set_env UHCAF_DTRACE_DIR $trace_dir
         ;;
       --image-heap=*)
         image_heap=`echo UhCaf$arg | sed -e 's/UhCaf--image-heap=//g'`
@@ -321,6 +326,9 @@ for arg in "$@" ; do
             print_error "Invalid per-image heap size: $image_heap"
           fi
         fi
+        ;;
+      --stats)
+        set_env UHCAF_STATS 1
         ;;
       -*)
         echo "" >&2
@@ -535,12 +543,12 @@ else
 
 fi
 
-# if traces specified, then create directory for traces.
-if [ -n "$UHCAF_TRACE" ]; then
-    if [ -n "$UHCAF_TRACE_DIR" -a ! -d "$UHCAF_TRACE_DIR" ]; then
-        mkdir $UHCAF_TRACE_DIR
-    elif [ ! -d "uhcaf.traces" ]; then
-        mkdir uhcaf.traces
+# if dtraces specified, then create directory for traces.
+if [ -n "$UHCAF_DTRACE" ]; then
+    if [ -n "$UHCAF_DTRACE_DIR" -a ! -d "$UHCAF_DTRACE_DIR" ]; then
+        mkdir $UHCAF_DTRACE_DIR
+    elif [ ! -d "uhcaf.dtraces" ]; then
+        mkdir uhcaf.dtraces
     fi
 fi
 

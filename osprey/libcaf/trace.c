@@ -170,12 +170,12 @@ static void logging_filestream_init(void)
 
     trace_log_stream = stderr;
 
-    trace_dir = getenv("UHCAF_TRACE_DIR");
+    trace_dir = getenv(ENV_DTRACE_DIR);
     if (trace_dir == (char *) NULL) {
-        trace_dir = "uhcaf.traces";
+        trace_dir = "uhcaf.dtraces";
     }
 
-    snprintf(trace_filename, BUF_SIZE, "%s/trace.%lu",
+    snprintf(trace_filename, BUF_SIZE, "%s/dtrace.%lu",
              trace_dir, (long unsigned int) _this_image);
 
     fp = fopen(trace_filename, "w");
@@ -186,7 +186,7 @@ static void logging_filestream_init(void)
 
 void __libcaf_tracers_init(void)
 {
-    char *caf_tracelevels = getenv("UHCAF_TRACE");
+    char *caf_tracelevels = getenv(ENV_DTRACE);
     logging_filestream_init();
 
     if (caf_tracelevels != (char *) NULL) {
@@ -457,7 +457,7 @@ static void fprint_mem_area(FILE * f, char *mem_str, char *start_address,
     fprintf(f, "|\n");
 }
 
-static void uhcaf_tracefdump_shared_mem_alloc(FILE * f, char *str)
+static void uhcaf_trace_fprint_rma_segment(FILE * f, char *str, int len)
 {
     const int width = 70;
     int i, j;
@@ -479,7 +479,7 @@ static void uhcaf_tracefdump_shared_mem_alloc(FILE * f, char *str)
     for (i = 0; i < width - (j + strlen(label)); i++)
         fprintf(f, " ");
     fprintf(f, "|\n");
-    if (str != NULL) {
+    if (str != NULL && len > 0) {
         sprintf(label, "(%lu) %s", _this_image, str);
         j = (width - strlen(label)) / 2;
         fprintf(f, "|");
@@ -516,20 +516,20 @@ static void uhcaf_tracefdump_shared_mem_alloc(FILE * f, char *str)
     fflush(f);
 }
 
-#pragma weak uhcaf_tracedump_shared_mem_alloc_ = uhcaf_tracedump_shared_mem_alloc
-void uhcaf_tracedump_shared_mem_alloc(char *str)
+#pragma weak uhcaf_dtrace_print_rma_segment_ = uhcaf_dtrace_print_rma_segment
+void uhcaf_dtrace_print_rma_segment(char *str, int len)
 {
-    uhcaf_tracefdump_shared_mem_alloc(trace_log_stream, str);
+    uhcaf_trace_fprint_rma_segment(trace_log_stream, str, len);
 }
 
-#pragma weak uhcaf_trace_suspend_ = uhcaf_trace_suspend
-void uhcaf_trace_suspend()
+#pragma weak uhcaf_dtrace_suspend_ = uhcaf_dtrace_suspend
+void uhcaf_dtrace_suspend()
 {
     tracing_suspended = 1;
 }
 
-#pragma weak uhcaf_trace_resume_ = uhcaf_trace_resume
-void uhcaf_trace_resume()
+#pragma weak uhcaf_dtrace_resume_ = uhcaf_dtrace_resume
+void uhcaf_dtrace_resume()
 {
     tracing_suspended = 0;
 }

@@ -26,6 +26,9 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#include <stdio.h>
+#include "env.h"
+
 #ifndef _PROFILE_H
 #define _PROFILE_H
 
@@ -72,7 +75,17 @@ typedef enum caf_prof_groups {
 
 
 
-#define PROFILE_INIT()                                               ((void) 1)
+#define PROFILE_INIT()   {\
+    if (_this_image == 1 && esd_open != NULL) \
+      Warning("Profiling support is not enabled"); \
+}
+
+#define PROFILE_STATS_INIT()   {\
+    if (_this_image == 1 && getenv(ENV_STATS) != NULL) \
+      Warning("Profiling support is not enabled"); \
+}
+
+#define PROFILE_STATS_DUMP()                                         ((void) 1)
 
 #define PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count)  ((void) 1)
 #define PROFILE_RMA_STORE_BEGIN(proc, nelem)                         ((void) 1)
@@ -99,23 +112,82 @@ typedef enum caf_prof_groups {
 #include <epik_user.h>
 #include <elg_trc.h>
 
+/* EPIK Dummy Interfaces */
+
+static int esd_def_file_(FILE* a1)
+{
+    /* do nothing */
+    return 0;
+}
+
+static int esd_def_region_(const char* a1, int a2, int a3, int a4,
+                    const char* a5, unsigned char a6)
+{
+    /* do nothing */
+    return 0;
+}
+
+static void esd_enter_(int a1)
+{
+    /* do nothing */
+}
+
+static void esd_exit_(int a1)
+{
+    /* do nothing */
+}
+
+
+static void elg_put_1ts_(int a1, int a2, int a3)
+{
+    /* do nothing */
+}
+
+static void elg_put_1te_(int a1, int a2)
+{
+    /* do nothing */
+}
+
+static void elg_put_1te_remote_(int a1, int a2)
+{
+    /* do nothing */
+}
+
+static void elg_get_1ts_(int a1, int a2, int a3)
+{
+    /* do nothing */
+}
+
+static void elg_get_1te_remote_(int a1, int a2)
+{
+    /* do nothing */
+}
+
+static void elg_get_1te_(int a1, int a2)
+{
+    /* do nothing */
+}
+
+/* existence of esd_open means episode and epilog library should be available
+ * */
 #pragma weak esd_open
-#pragma weak esd_def_file
-#pragma weak esd_def_region
-#pragma weak esd_enter
-#pragma weak esd_exit
+#pragma weak esd_def_file             = esd_def_file_
+#pragma weak esd_def_region           = esd_def_region_
+#pragma weak esd_enter                = esd_enter_
+#pragma weak esd_exit                 = esd_exit_
 
-#pragma weak elg_put_1ts
-#pragma weak elg_put_1te
-#pragma weak elg_put_1te_remote
+#pragma weak elg_put_1ts              = elg_put_1ts_
+#pragma weak elg_put_1te              = elg_put_1te_
+#pragma weak elg_put_1te_remote       = elg_put_1te_remote_
 
-#pragma weak elg_get_1ts
-#pragma weak elg_get_1ts_remote
-#pragma weak elg_get_1te
+#pragma weak elg_get_1ts              = elg_put_1ts_
+#pragma weak elg_get_1ts_remote       = elg_get_1te_remote_
+#pragma weak elg_get_1te              = elg_get_1te_
 
 extern int in_rma_region;
 extern int rma_prof_rid;
 extern int profiling_enabled;
+extern int epik_enabled;
 
 extern caf_prof_groups_t prof_groups;
 
@@ -131,7 +203,7 @@ extern void esd_exit(elg_ui4);
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)    \
     static int _##rname##_init = 0; \
     static elg_ui4 _##rname##_rid; \
-    if (profiling_enabled && (prof_groups&(grp))) { \
+    if (epik_enabled && (prof_groups&(grp))) { \
         if (!_##rname##_init) { \
             int fid = esd_def_file(__FILE__); \
             _##rname##_rid = esd_def_region(#rname , fid, __LINE__, ELG_NO_LNO, \
@@ -144,7 +216,7 @@ extern void esd_exit(elg_ui4);
 #define PROFILE_FUNC_ENTRY(grp) \
     static int _prof_func_init = 0; \
     static elg_ui4 _prof_func_rid; \
-    if (profiling_enabled && (prof_groups&(grp))) { \
+    if (epik_enabled && (prof_groups&(grp))) { \
         if (!_prof_func_init) { \
             int fid = esd_def_file(__FILE__); \
             const char *group_name; \
@@ -166,16 +238,20 @@ extern void esd_exit(elg_ui4);
     }
 
 #define PROFILE_REGION_EXIT(rname,grp)  \
-    if (profiling_enabled && (prof_groups&(grp))) { \
+    if (epik_enabled && (prof_groups&(grp))) { \
         esd_exit(_##rname##_rid); \
     }
 
 #define PROFILE_FUNC_EXIT(grp)  \
-    if (profiling_enabled && (prof_groups&(grp))) { \
+    if (epik_enabled && (prof_groups&(grp))) { \
         esd_exit(_prof_func_rid); \
     }
 
 #define PROFILE_INIT() { profile_init();  }
+
+#define PROFILE_STATS_INIT() { profile_stats_init(); }
+
+#define PROFILE_STATS_DUMP() { profile_stats_dump(); }
 
 #define PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count)  { \
     int i; int nbytes = 1;  \
@@ -242,6 +318,8 @@ extern void esd_exit(elg_ui4);
                                    profile_rma_end_all_nbloads_to_proc
 
 void profile_init();
+void profile_stats_init();
+void profile_stats_dump();
 
 void profile_rma_store_begin(int proc, int nelem);
 void profile_rma_store_end(int proc);
@@ -266,6 +344,11 @@ void profile_rma_end_all_nbloads_to_proc(int proc);
 
 void profile_set_in_prof_region();
 void profile_unset_in_prof_region();
+
+void profile_record_put(int, int, int);
+void profile_record_put_env(int, int);
+void profile_record_get(int, int, int);
+void profile_record_get_env(int, int);
 
 void uhcaf_profile_start();
 void uhcaf_profile_stop();
