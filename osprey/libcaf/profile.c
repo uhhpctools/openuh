@@ -60,6 +60,9 @@ int rma_prof_rid = 0;
 typedef struct {
     long      get_rma_count;    /* total number of RMA GET requests to image */
     double    get_bytes_count;  /* total number of bytes sent to node */
+    long      get_cache_hits;   /* total number of GETs that hit in the get-cache */
+    long      get_cache_misses; /* total number of GETs that miss in the get-cache */
+    long      get_cache_writes; /* total number of write-through updates in get-cache */
     long      put_rma_count;    /* total number of RMA PUT requests to image */
     double    put_bytes_count;  /* total number of bytes received from node */
 } rma_info_t;
@@ -74,6 +77,12 @@ const char* CAFPROF_GRP_COMM  = "CAF_COMM";
 const char* CAFPROF_GRP_SYNC  = "CAF_SYNC";
 const char* CAFPROF_GRP_COLL  = "CAF_COLL";
 
+static void profile_record_put(int proc, int nelem);
+static void profile_record_put_end();
+static void profile_record_get(int proc, int nelem);
+static void profile_record_get_end();
+
+
 static int rmaid_cmp(rma_node_t * a, rma_node_t * b)
 {
     return (a->rmaid - b->rmaid);
@@ -82,10 +91,16 @@ static int rmaid_cmp(rma_node_t * a, rma_node_t * b)
 
 void profile_init()
 {
+    profiling_enabled =
+        get_env_flag(ENV_PROFILE, DEFAULT_ENABLE_PROFILE);
+
     epik_avail = (esd_open != NULL);
     if (epik_avail) {
         esd_open();
     }
+
+    if (profiling_enabled)
+        epik_enabled = epik_avail;
 }
 
 void profile_stats_init()
@@ -104,9 +119,10 @@ void profile_stats_init()
 
     if (_this_image == 1) {
         FILE *fp = fopen("cafrun-stats.out", "w");
-        fprintf(fp, "%s \t %s \t %s \t %s \t %s \t %s \t %s\n",
+        fprintf(fp, "%s \t %s \t %s \t %s \t %s \t %s \t %s \t %s \t %s \t %s\n",
                 "id", "node", "target node", "#gets",
-                "avg get size", "#puts", "avg put size");
+                "avg get size", "#puts", "avg put size",
+                "cache #hit", "cache #miss", "cache #writes" );
         fclose(fp);
     }
 
@@ -131,6 +147,7 @@ void profile_stats_dump()
         /* image-id, target-id, node-id, target-image-id, #reqs, avg-size */
         int my_node_id = (int) comm_get_node_id(_this_image-1);
         long get_rma_count, put_rma_count;
+        long get_cache_hits, get_cache_misses, get_cache_writes;
         double get_avg_size, put_avg_size;
 
         if (rma_node_stats[i] == NULL)
@@ -138,6 +155,9 @@ void profile_stats_dump()
 
         get_rma_count = rma_node_stats[i]->get_rma_count;
         put_rma_count = rma_node_stats[i]->put_rma_count;
+        get_cache_hits = rma_node_stats[i]->get_cache_hits;
+        get_cache_misses = rma_node_stats[i]->get_cache_misses;
+        get_cache_writes = rma_node_stats[i]->get_cache_writes;
 
         if (get_rma_count != 0)
             get_avg_size = rma_node_stats[i]->get_bytes_count/get_rma_count;
@@ -149,10 +169,12 @@ void profile_stats_dump()
         else
             put_avg_size = 0;
 
-        fprintf(fp, "%ld \t %d \t %d \t %ld \t %8.0lf \t %ld \t %8.0lf\n",
+        fprintf(fp, "%ld \t %d \t %d \t %ld \t %8.0lf \t %ld \t %8.0lf "
+                     "\t %ld \t %ld \t %ld\n",
                 _this_image-1, my_node_id, i,
                 get_rma_count, get_avg_size,
-                put_rma_count, put_avg_size);
+                put_rma_count, put_avg_size,
+                get_cache_hits, get_cache_misses, get_cache_writes);
     }
 
     fclose(fp);
@@ -170,7 +192,7 @@ void profile_rma_store_begin(int proc, int nelem)
     rma_prof_rid = rma_prof_rid + 1;
 
     if (stats_enabled)
-        profile_record_put(proc, rma_prof_rid, nelem);
+        profile_record_put(proc, nelem);
 
     if (epik_enabled)
         elg_put_1ts(proc, rma_prof_rid, nelem);
@@ -206,7 +228,7 @@ void profile_rma_load_begin(int proc, int nelem)
     rma_prof_rid = rma_prof_rid + 1;
 
     if (stats_enabled)
-        profile_record_get(proc, rma_prof_rid, nelem);
+        profile_record_get(proc, nelem);
 
     if (epik_enabled)
         elg_get_1ts_remote(proc, rma_prof_rid, nelem);
@@ -377,7 +399,7 @@ void profile_rma_end_all_nbloads_to_proc(int proc)
     }
 }
 
-void profile_record_put(int proc, int rid, int nelem)
+static void profile_record_put(int proc, int nelem)
 {
     int node_id = (int) comm_get_node_id(proc);
 
@@ -391,12 +413,12 @@ void profile_record_put(int proc, int rid, int nelem)
     rma_node_stats[node_id]->put_bytes_count += nelem;
 }
 
-void profile_record_put_end(int proc, int rid)
+static void profile_record_put_end()
 {
     /* do nothing */
 }
 
-void profile_record_get(int proc, int rid, int nelem)
+static void profile_record_get(int proc, int nelem)
 {
     int node_id = (int) comm_get_node_id(proc);
 
@@ -410,13 +432,59 @@ void profile_record_get(int proc, int rid, int nelem)
     rma_node_stats[node_id]->get_bytes_count += nelem;
 }
 
-void profile_record_get_end(int proc, int rid)
+static void profile_record_get_end()
 {
     /* do nothing */
 }
 
 
+void profile_record_get_cache_hit(int proc)
+{
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
+        return;
 
+    int node_id = (int) comm_get_node_id(proc);
+
+    if (rma_node_stats[node_id] == NULL) {
+        rma_node_stats[node_id] =
+            (rma_info_t *)coarray_asymmetric_allocate_(sizeof(rma_info_t));
+        memset(rma_node_stats[node_id], 0, sizeof(rma_info_t));
+    }
+
+    rma_node_stats[node_id]->get_cache_hits++;
+}
+
+void profile_record_get_cache_miss(int proc)
+{
+    if (!profiling_enabled || !(prof_groups & CAFPROF_GET))
+        return;
+
+    int node_id = (int) comm_get_node_id(proc);
+
+    if (rma_node_stats[node_id] == NULL) {
+        rma_node_stats[node_id] =
+            (rma_info_t *)coarray_asymmetric_allocate_(sizeof(rma_info_t));
+        memset(rma_node_stats[node_id], 0, sizeof(rma_info_t));
+    }
+
+    rma_node_stats[node_id]->get_cache_misses++;
+}
+
+void profile_record_get_cache_write_through(int proc)
+{
+    if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
+        return;
+
+    int node_id = (int) comm_get_node_id(proc);
+
+    if (rma_node_stats[node_id] == NULL) {
+        rma_node_stats[node_id] =
+            (rma_info_t *)coarray_asymmetric_allocate_(sizeof(rma_info_t));
+        memset(rma_node_stats[node_id], 0, sizeof(rma_info_t));
+    }
+
+    rma_node_stats[node_id]->get_cache_writes++;
+}
 
 void profile_set_in_prof_region()
 {

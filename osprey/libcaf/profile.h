@@ -109,6 +109,10 @@ extern int esd_open();
 #define PROFILE_RMA_END_ALL_LOADS()                                  ((void) 1)
 #define PROFILE_RMA_END_ALL_LOADS_TO_PROC(proc)                      ((void) 1)
 
+#define PROFILE_GET_CACHE_HIT(proc)                                  ((void) 1)
+#define PROFILE_GET_CACHE_MISS(proc)                                 ((void) 1)
+#define PROFILE_GET_CACHE_WRITE_THROUGH(proc)                        ((void) 1)
+
 #else
 
 #include <epik_user.h>
@@ -311,13 +315,19 @@ extern void esd_exit(elg_ui4);
 
 #define PROFILE_RMA_END_ALL_STORES profile_rma_end_all_nbstores
 
-#define PROFILE_RMA_END_ALL_STORES_TO_PROC(proc) \
+#define PROFILE_RMA_END_ALL_STORES_TO_PROC \
                                    profile_rma_end_all_nbstores_to_proc
 
 #define PROFILE_RMA_END_ALL_LOADS  profile_rma_end_all_nbloads
 
 #define PROFILE_RMA_END_ALL_LOADS_TO_PROC(proc) \
                                    profile_rma_end_all_nbloads_to_proc
+
+#define PROFILE_GET_CACHE_HIT      profile_record_get_cache_hit
+#define PROFILE_GET_CACHE_MISS     profile_record_get_cache_miss
+
+#define PROFILE_GET_CACHE_WRITE_THROUGH \
+                                   profile_record_get_cache_write_through
 
 void profile_init();
 void profile_stats_init();
@@ -347,10 +357,9 @@ void profile_rma_end_all_nbloads_to_proc(int proc);
 void profile_set_in_prof_region();
 void profile_unset_in_prof_region();
 
-void profile_record_put(int, int, int);
-void profile_record_put_env(int, int);
-void profile_record_get(int, int, int);
-void profile_record_get_env(int, int);
+void profile_record_get_cache_hit(int proc);
+void profile_record_get_cache_miss(int proc);
+void profile_record_get_cache_write_through(int proc);
 
 void uhcaf_profile_start();
 void uhcaf_profile_stop();

@@ -384,8 +384,16 @@ if [ $COMM_LAYER == gasnet ]; then
      print_error "No gasnet conduit set."
   fi
 
-  if [ "$GASNET_CONDUIT" == "smp" ]; then
+  if [ "$GASNET_CONDUIT" == "smp" -a "$support_mpi" == "y" ]; then
       print_error "CAF+MPI programs not supported when using GASNet smp conduit."
+  fi
+  if [ "$support_mpi" == "y" -a -z "$UHCAF_MPI_FCFLAGS" ]; then
+      print_warning \
+          "You may need to set UHCAF_MPI_FCFLAGS to compile MPI programs"
+  fi
+  if [ "$support_mpi" == "y" -a -z "$UHCAF_MPI_LDFLAGS" ]; then
+      print_warning \
+          "You may need to set UHCAF_MPI_LDFLAGS to compile MPI programs"
   fi
 
   # get necessary linker args from appropriate GASNet *.mak file

@@ -159,7 +159,9 @@ void comm_barrier_all();
 
 void comm_sync(comm_handle_t hdl);
 
+void comm_new_exec_segment();
 void comm_fence(size_t proc);
+void comm_fence_all();
 
 /* atomics */
 void comm_swap_request(void *target, void *value, size_t nbytes,

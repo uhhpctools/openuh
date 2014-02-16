@@ -624,6 +624,8 @@ void _COARRAY_LOCK(lock_t * lock, const int *image, char *success,
                              errmsg, errmsg_len);
     }
 
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_new_exec_segment);
+
     PROFILE_FUNC_EXIT(CAFPROF_MUTEX);
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -639,6 +641,8 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
         img = _this_image;
     else
         img = *image;
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
 
 #if defined(GASNET)
     if (status == NULL) {
@@ -862,10 +866,7 @@ void _EVENT_POST(event_t * event, int *image)
         check_remote_image(*image);
         check_remote_address(*image, event);
 
-        /* Not sure if we should do a sync memory here, or only perform a
-         * fence for PUT/GET requests to the target image. Doing the latter
-         * for now. */
-        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence, (size_t)(*image-1));
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
 
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_add_request, event, &inc,
                              sizeof(event_t), *image - 1);
@@ -968,6 +969,8 @@ void _EVENT_WAIT(event_t * event, int *image)
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
                      "resuming tracing after polling remote event");
     }
+
+    comm_new_exec_segment;
 
     STOP_TIMER(SYNC);
 
