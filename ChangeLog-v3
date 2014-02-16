@@ -8,6 +8,39 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-02-15: (3.0.34)
+
+* misc. improvements/fixes for CAF
+  * adds profiling group support, allowing for performance collection for
+  specific events
+  * adds some statistical collection support, describing volume of one-sided
+  operations between shared memory nodes, when UHCAF_STATS is set and
+  profiling is enabled.
+  * adds different algorithms for reductions that may be selected using the
+  UHCAF_CO_REDUCE_ALGORITHM environment variable
+  * support for (non-standard) log2_images() and rem_images()
+  * adds 3 different SYNC IMAGES algorithms that may be selected using the
+  UHCAF_SYNC_IMAGES_ALGORITHM environment variable
+  * corrects behavior during normal and error termination
+  * corrects behavior of get-cache optimizer, and reporting of cache hits and
+  misses when UHCAF_STATS is set
+  * better support for CAF+MPI programs, using the --mpi option with uhcaf
+  * many new environment variables to control behavior of CAF runtime
+     UHCAF_ALLOC_BYTE_ALIGNMENT, UHCAF_SHARED_MEM_RMA_BYPASS,
+	 UHCAF_LOCAL_PACK_NONCONTIG_PUT, UHCAF_GETCACHE_SYNC_REFETCH,
+	 UHCAF_OUT_OF_SEGMENT_RMA
+    see cafrun --help-env for details.
+  * fix use of function calls in lock/unlock and event post/wait/query
+  statements.
+  * fix compilation of DO loops with co-indexed loop bounds
+
+* other improvements
+  * modifies exporting of array region analysis, for use with Dragon tool.
+  Format used is described in "A Compiler-Based Tool for Array Analysis in HPC
+  Applications" by Ahmad Qawasmeh et al.
+
+----------------------------------------------------------------------------
+
 2013-10-09: (3.0.33)
 
 * misc. improvements/fixes for CAF
