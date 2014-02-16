@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES CAFRT_ENABLE_PROFILES DEFAULT_CAF_HEAP_SIZE BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -793,7 +793,7 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-coarrays       Enables UH Coarray Fortran (CAF) Implementation
   --disable-caf-runtime   Disable CAF Runtime
-  --enable-cafrt-traces   Enable CAF Runtime Tracing Functionality
+  --enable-cafrt-dtraces  Enable CAF Runtime Diagnostic Tracing Functionality
   --enable-cafrt-profiles Enable CAF Runtime Profiling Functionality
   --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
@@ -1443,14 +1443,14 @@ if test "$ENABLE_COARRAYS" = "NO"; then
 fi
 
 # Set whether CAF runtime will be built
-# Check whether --enable-cafrt-traces or --disable-cafrt-traces was given.
-if test "${enable_cafrt_traces+set}" = set; then
-  enableval="$enable_cafrt_traces"
-  CAFRT_ENABLE_TRACES="YES"
+# Check whether --enable-cafrt-dtraces or --disable-cafrt-dtraces was given.
+if test "${enable_cafrt_dtraces+set}" = set; then
+  enableval="$enable_cafrt_dtraces"
+  CAFRT_ENABLE_DTRACES="YES"
 fi;
 
-if test "x$enable_cafrt_traces" != "xyes"; then
-   CAFRT_ENABLE_TRACES="NO"
+if test "x$enable_cafrt_dtraces" != "xyes"; then
+   CAFRT_ENABLE_DTRACES="NO"
 fi
 
 
@@ -1517,7 +1517,45 @@ else
 fi;
 
 # set bash path
-BASH_PATH=`which bash`
+# Extract the first word of "bash", so it can be a program name with args.
+set dummy bash; ac_word=$2
+echo "$as_me:$LINENO: checking for $ac_word" >&5
+echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
+if test "${ac_cv_path_BASH_PATH+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  case $BASH_PATH in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_BASH_PATH="$BASH_PATH" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+  for ac_exec_ext in '' $ac_executable_extensions; do
+  if $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_BASH_PATH="$as_dir/$ac_word$ac_exec_ext"
+    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+done
+
+  ;;
+esac
+fi
+BASH_PATH=$ac_cv_path_BASH_PATH
+
+if test -n "$BASH_PATH"; then
+  echo "$as_me:$LINENO: result: $BASH_PATH" >&5
+echo "${ECHO_T}$BASH_PATH" >&6
+else
+  echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
 
 if test -z "${BASH_PATH}"; then
   { { echo "$as_me:$LINENO: error: Could not find bash on system" >&5
@@ -1578,20 +1616,9 @@ echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path
 fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
-    if test ! -f "${MPI_INCLUDE}/mpi.h"; then
-        if test -n "`which mpicc 2>/dev/null`"; then
-            d=`which mpicc 2>/dev/null`
-            MPI_INCLUDE=`dirname $d`/../include
-        fi
-        if test ! -f "${MPI_INCLUDE}/mpi.h"; then
-            { { echo "$as_me:$LINENO: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&5
-echo "$as_me: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&2;}
-   { (exit 1); exit 1; }; }
-        fi
-    fi
     if test ! -d "${ARMCI_HOME}"; then
-        { { echo "$as_me:$LINENO: error: Specified --with-armci-root=<path> doesn't look right. Check path." >&5
-echo "$as_me: error: Specified --with-armci-root=<path> doesn't look right. Check path." >&2;}
+        { { echo "$as_me:$LINENO: error: Specified --with-armci-root=<path> does not look right. Check path." >&5
+echo "$as_me: error: Specified --with-armci-root=<path> does not look right. Check path." >&2;}
    { (exit 1); exit 1; }; }
     fi
 fi
@@ -1602,18 +1629,71 @@ echo "$as_me: error: --with-armci-root=<path> must be specified if you want to u
    { (exit 1); exit 1; }; }
 fi
 
+if test "${BUILD_CAF_RUNTIME}" = "YES"; then
+    # Extract the first word of "mpicc", so it can be a program name with args.
+set dummy mpicc; ac_word=$2
+echo "$as_me:$LINENO: checking for $ac_word" >&5
+echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6
+if test "${ac_cv_path_MPICC_PATH+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  case $MPICC_PATH in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_MPICC_PATH="$MPICC_PATH" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+  for ac_exec_ext in '' $ac_executable_extensions; do
+  if $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_MPICC_PATH="$as_dir/$ac_word$ac_exec_ext"
+    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+done
+
+  ;;
+esac
+fi
+MPICC_PATH=$ac_cv_path_MPICC_PATH
+
+if test -n "$MPICC_PATH"; then
+  echo "$as_me:$LINENO: result: $MPICC_PATH" >&5
+echo "${ECHO_T}$MPICC_PATH" >&6
+else
+  echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+
+    if test ! -f "${UHCAF_MPI_INCLUDE}/mpi.h"; then
+        UHCAF_MPI_INCLUDE=`dirname ${MPICC_PATH}`/../include
+        if test ! -f "${UHCAF_MPI_INCLUDE}/mpi.h"; then
+            { { echo "$as_me:$LINENO: error: Environment variable UHCAF_MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays" >&5
+echo "$as_me: error: Environment variable UHCAF_MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays" >&2;}
+   { (exit 1); exit 1; }; }
+        else
+            { echo "$as_me:$LINENO: Using $UHCAF_MPI_INCLUDE for compiling CAF runtime" >&5
+echo "$as_me: Using $UHCAF_MPI_INCLUDE for compiling CAF runtime" >&6;}
+        fi
+    fi
+fi
+
 
 if test -n "${GASNET_HOME}"; then
   if test ! -d "${GASNET_HOME}"; then
-      { { echo "$as_me:$LINENO: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&5
-echo "$as_me: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&2;}
+      { { echo "$as_me:$LINENO: error: Specified --with-gasnet-root=<path> does not look right. Check path." >&5
+echo "$as_me: error: Specified --with-gasnet-root=<path> does not look right. Check path." >&2;}
    { (exit 1); exit 1; }; }
   fi
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
   if test  "${GASNET_CONDUITS}" = "*"; then
-      { { echo "$as_me:$LINENO: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&5
-echo "$as_me: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&2;}
+      { { echo "$as_me:$LINENO: error: Specified --with-gasnet-root=<path> does not look right. Check path." >&5
+echo "$as_me: error: Specified --with-gasnet-root=<path> does not look right. Check path." >&2;}
    { (exit 1); exit 1; }; }
   fi
 fi
@@ -2123,6 +2203,7 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
+
 
 
 
@@ -3038,6 +3119,8 @@ s,@target@,$target,;t t
 s,@target_cpu@,$target_cpu,;t t
 s,@target_vendor@,$target_vendor,;t t
 s,@target_os@,$target_os,;t t
+s,@BASH_PATH@,$BASH_PATH,;t t
+s,@MPICC_PATH@,$MPICC_PATH,;t t
 s,@MACHINE_TYPE@,$MACHINE_TYPE,;t t
 s,@CROSS_TARGET@,$CROSS_TARGET,;t t
 s,@BUILD_ABI@,$BUILD_ABI,;t t
@@ -3074,16 +3157,17 @@ s,@GCC_DIR@,$GCC_DIR,;t t
 s,@BUILD_GNU4@,$BUILD_GNU4,;t t
 s,@ENABLE_COARRAYS@,$ENABLE_COARRAYS,;t t
 s,@BUILD_CAF_RUNTIME@,$BUILD_CAF_RUNTIME,;t t
+s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
 s,@GASNET_HOME@,$GASNET_HOME,;t t
+s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
 s,@ARMCI_HOME@,$ARMCI_HOME,;t t
 s,@ARMCI_NETWORK_LIBS@,$ARMCI_NETWORK_LIBS,;t t
-s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
-s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
-s,@BASH_PATH@,$BASH_PATH,;t t
-s,@MPI_INCLUDE@,$MPI_INCLUDE,;t t
-s,@CAFRT_ENABLE_TRACES@,$CAFRT_ENABLE_TRACES,;t t
+s,@CAFRT_ENABLE_DTRACES@,$CAFRT_ENABLE_DTRACES,;t t
 s,@CAFRT_ENABLE_PROFILES@,$CAFRT_ENABLE_PROFILES,;t t
-s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
+s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
+s,@UHCAF_MPI_INCLUDE@,$UHCAF_MPI_INCLUDE,;t t
+s,@UHCAF_MPI_FCFLAGS@,$UHCAF_MPI_FCFLAGS,;t t
+s,@UHCAF_MPI_LDFLAGS@,$UHCAF_MPI_LDFLAGS,;t t
 s,@BUILD_LIBUHINSTR@,$BUILD_LIBUHINSTR,;t t
 s,@TAU_ROOT@,$TAU_ROOT,;t t
 s,@TAU_LIBS@,$TAU_LIBS,;t t
@@ -3611,8 +3695,8 @@ fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES"; then
 
-{ echo "$as_me:$LINENO:    CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES" >&5
-echo "$as_me:    CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES" >&6;}
+{ echo "$as_me:$LINENO:    CAFRT_ENABLE_DTRACES           = $CAFRT_ENABLE_DTRACES" >&5
+echo "$as_me:    CAFRT_ENABLE_DTRACES           = $CAFRT_ENABLE_DTRACES" >&6;}
 { echo "$as_me:$LINENO:    CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES" >&5
 echo "$as_me:    CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES" >&6;}
 if test "${CAFRT_ENABLE_PROFILES}" = "YES"; then
@@ -3634,8 +3718,12 @@ echo "$as_me:    GASNET_CONDUITS                = $GASNET_CONDUITS" >&6;}
 echo "$as_me:    ARMCI_HOME                     = $ARMCI_HOME" >&6;}
 { echo "$as_me:$LINENO:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&5
 echo "$as_me:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&6;}
-{ echo "$as_me:$LINENO:    MPI_INCLUDE                    = $MPI_INCLUDE" >&5
-echo "$as_me:    MPI_INCLUDE                    = $MPI_INCLUDE" >&6;}
+{ echo "$as_me:$LINENO:    UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE" >&5
+echo "$as_me:    UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE" >&6;}
+{ echo "$as_me:$LINENO:    UHCAF_MPI_FCFLAGS              = $UHCAF_MPI_FCFLAGS" >&5
+echo "$as_me:    UHCAF_MPI_FCFLAGS              = $UHCAF_MPI_FCFLAGS" >&6;}
+{ echo "$as_me:$LINENO:    UHCAF_MPI_LDFLAGS              = $UHCAF_MPI_LDFLAGS" >&5
+echo "$as_me:    UHCAF_MPI_LDFLAGS              = $UHCAF_MPI_LDFLAGS" >&6;}
 
 fi
 

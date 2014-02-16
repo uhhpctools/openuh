@@ -35,7 +35,7 @@
 #ifndef TRACE
 
 #define LIBCAF_TRACE_INIT()   {\
-    if (_this_image == 1 && getenv(ENV_DIAG_TRACE) != NULL) \
+    if (_this_image == 1 && getenv(ENV_DTRACE) != NULL) \
        Warning("Tracing support is not enabled"); \
 }
 

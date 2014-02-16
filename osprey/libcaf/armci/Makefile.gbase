@@ -56,7 +56,7 @@ LCDEFS += -D_LITTLE_ENDIAN -D_WORD32 -D_LIB_INTERNAL -D_GNU_SOURCE -U__mips -DKE
 ifeq ($(BUILD_OPTIMIZE),DEBUG)
 LCDEFS += -DCAFRT_DEBUG
 endif
-ifeq ($(CAFRT_ENABLE_TRACES), YES)
+ifeq ($(CAFRT_ENABLE_DTRACES), YES)
 LCDEFS += -DTRACE
 endif
 ifeq ($(CAFRT_ENABLE_PROFILES), YES)
@@ -68,7 +68,7 @@ LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
 LCINCS += -I$(BUILD_BASE)/../uthash
 LCINCS += -I$(EPIK_ROOT)/include
 
-LCINCS += -I$(MPI_INCLUDE)
+LCINCS += -I$(UHCAF_MPI_INCLUDE)
 
 CFLAGS += -DTARG_$(BUILD_TARGET)
 
@@ -81,7 +81,7 @@ CFILES = \
    env.c \
    util.c
 
-ifeq ($(CAFRT_ENABLE_TRACES), YES)
+ifeq ($(CAFRT_ENABLE_DTRACES), YES)
 CFILES += trace.c
 endif
 
