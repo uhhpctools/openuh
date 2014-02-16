@@ -96,18 +96,14 @@ Environment Variables:
                          Can be set with --dtrace-dir
 
    UHCAF_PROGRESS_THREAD
-                      Set to 1 to enable progress thread in CAF runtime
+                      Set to 1 to enable progress thread in CAF runtime.
+                      Note: This is only used for GASNet to ensure progress of
+                      Active Messages (AMs).
 
    UHCAF_PROGRESS_THREAD_INTERVAL
                       Set the time interval (ns) between AM serving by progress
-                      thread.
-
-   UHCAF_GETCACHE
-                      Set to 1 to enable getcache runtime optimization.
-
-   UHCAF_GETCACHE_LINE_SIZE
-                      Specifies the size (in bytes) of the cache line used by
-                      getcache optimizer. By default it is 64KB.
+                      thread.  Note: This is only used for GASNet to ensure
+                      progress of Active Messages (AMs).
 
    UHCAF_NB_XFER_LIMIT
                       Specifies the maximum number of outstanding non-blocking
@@ -122,6 +118,25 @@ Environment Variables:
                       Specifies the algorithm to use for sync images operation:
                       counter, ping_pong, or sense_reversing.  By default it
                       is sense_reversing.
+
+   -------------
+   EXPERIMENTAL:
+   -------------
+
+   UHCAF_GETCACHE
+                      Set to 1 to enable getcache runtime optimization.
+                      EXPERIMENTAL.
+
+   UHCAF_GETCACHE_LINE_SIZE
+                      Specifies the size (in bytes) of the cache line used by
+                      getcache optimizer. By default it is 64KB.
+
+
+   UHCAF_OUT_OF_SEGMENT_RMA
+                      Set to 1 to enable out-of-segment remote memory access
+                      support. Note: This is only available when using GASNet
+                      layer, and may not work if performing strided
+                      out-of-segment accesses.
 
 _EOT_
 }
@@ -232,6 +247,9 @@ if [ -z "$UHCAF_LAUNCHER" ]; then
   else
     UHCAF_LAUNCHER=$armci_launcher
   fi
+else
+  gasnet_launcher=$UHCAF_LAUNCHER
+  armci_launcher=$UHCAF_LAUNCHER
 fi
 
 if [ $# -eq 0 ]; then
@@ -497,7 +515,13 @@ COMM_NETWORK=""
 # Set environment for GASNET/ARMCI
 if [ $COMM_LAYER == gasnet ]; then
   # enable packing of non-contiguous put/get
-  set_env GASNET_VIS_AMPIPE 1
+  if [ -z "$GASNET_VIS_AMPIPE" ]; then
+      set_env GASNET_VIS_AMPIPE 1
+  fi
+
+  if [ "$GASNET_CONDUIT" = "ibv" -a -z "$GASNET_IB_SPAWNER" ]; then
+      set_env GASNET_IB_SPAWNER mpi
+  fi
 
   # CAF runtime will set this variable to a sufficient value
   unset GASNET_MAX_SEGSIZE
@@ -522,7 +546,9 @@ else
   launcher_name=`basename $UHCAF_LAUNCHER`
 
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
-          $launcher_name = aprun \) ]; then
+          $launcher_name = aprun -o $launcher_name = srun -o \
+          $launcher_name = amudprun -o $launcher_name = gasnetrun_ibv -o \
+          $launcher_name = gasnetrun_mpi \) ]; then
     if [ $num_images -gt 1 ]; then
       UHCAF_LAUNCHER_OPTS=" -n $num_images $UHCAF_LAUNCHER_OPTS"
     else

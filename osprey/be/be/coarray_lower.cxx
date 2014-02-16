@@ -332,7 +332,8 @@ static WN * Generate_Call_target_alloc(WN *, WN *);
 static WN * Generate_Call_target_dealloc(WN *);
 static WN * Generate_Call_acquire_lcb(WN *, WN *);
 static WN * Generate_Call_release_lcb(WN *);
-static WN * Generate_Call_coarray_sync(WN *, BOOL with_guard = FALSE);
+static WN * Generate_Call_coarray_wait(WN *, BOOL with_guard = FALSE);
+static WN * Generate_Call_coarray_wait_all();
 static WN * Generate_Call_coarray_nbread(WN *image, WN *src, WN *dest,
                                        WN *nbytes, WN *hdl);
 static WN * Generate_Call_coarray_read(WN *image, WN *src, WN *dest,
@@ -686,12 +687,11 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 } else if (WN_pragma(wn) == WN_PRAGMA_SYNC) {
                     WN *hdl;
                     if (WN_st(wn) == NULL) {
-                        hdl = WN_Intconst(Pointer_type, -1);
+                        insert_wnx = Generate_Call_coarray_wait_all();
                     } else {
-                        hdl = WN_Ldid(Pointer_type, 0, WN_st(wn),
-                                      WN_type(wn));
+                        hdl = WN_Lda(Pointer_type, 0, WN_st(wn));
+                        insert_wnx = Generate_Call_coarray_wait(hdl, TRUE);
                     }
-                    insert_wnx = Generate_Call_coarray_sync(hdl, TRUE);
                     WN_INSERT_BlockAfter(blk_node, wn, insert_wnx);
                 } else if (is_main && WN_pragma(wn) == WN_PRAGMA_PREAMBLE_END) {
                     pragma_preamble_done = TRUE;
@@ -935,11 +935,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             if (handle_st == NULL) {
                                 Is_True(0, ("handle_st not set for non-deferred sync"));
                             } else {
-                                sync_hdl = WN_Ldid( Pointer_type, 0,
-                                        handle_st, ST_type(handle_st));
+                                sync_hdl = WN_Lda( Pointer_type, 0, handle_st);
                             }
                             insert_sync =
-                                Generate_Call_coarray_sync(sync_hdl, TRUE);
+                                Generate_Call_coarray_wait(sync_hdl, TRUE);
 
                             WN *insert_sync_init = WN_Stid(Pointer_type, 0,
                                                     handle_st,
@@ -1039,11 +1038,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             if (handle_st == NULL) {
                                 Is_True(0, ("handle_st not set for non-deferred sync"));
                             } else {
-                                sync_hdl = WN_Ldid( Pointer_type, 0,
-                                        handle_st, ST_type(handle_st));
+                                sync_hdl = WN_Lda( Pointer_type, 0, handle_st );
                             }
                             insert_sync =
-                                Generate_Call_coarray_sync(sync_hdl, TRUE);
+                                Generate_Call_coarray_wait(sync_hdl, TRUE);
 
                             WN *insert_sync_init =
                                             WN_Stid(Pointer_type, 0,
@@ -1123,11 +1121,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                 if (handle_st == NULL) {
                                     sync_hdl = WN_Intconst(Pointer_type,0);
                                 } else {
-                                    sync_hdl = WN_Ldid( Pointer_type, 0,
-                                      handle_st, ST_type(handle_st));
+                                    sync_hdl = WN_Lda( Pointer_type, 0, handle_st );
                                 }
                                 insert_sync =
-                                    Generate_Call_coarray_sync(sync_hdl, TRUE);
+                                    Generate_Call_coarray_wait(sync_hdl, TRUE);
                                 WN_INSERT_BlockLast(insert_blk, insert_sync);
                             }
 
@@ -1137,8 +1134,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                             Is_True( 0,
                             ("Coarray_Sync not created for coarray read statement"));
-                            insert_sync = Generate_Call_coarray_sync(
-                                    WN_Intconst(Pointer_type,-1));
+                            insert_sync = Generate_Call_coarray_wait_all();
                             WN_INSERT_BlockLast(insert_blk, insert_sync);
                         }
 
@@ -1680,8 +1676,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                         Is_True( 0,
                                 ("Coarray_Sync not created for coarray read statement"));
-                        insert_sync = Generate_Call_coarray_sync(
-                                WN_Intconst(Pointer_type,-1));
+                        insert_sync = Generate_Call_coarray_wait_all();
                         WN_INSERT_BlockLast(insert_blk, insert_sync);
                     }
 
@@ -2022,18 +2017,16 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                                 if (handle_st == NULL) {
                                     sync_hdl = WN_Intconst(Pointer_type,0);
                                 } else {
-                                    sync_hdl = WN_Ldid( Pointer_type, 0,
-                                      handle_st, ST_type(handle_st));
+                                    sync_hdl = WN_Lda( Pointer_type, 0, handle_st );
                                 }
                                 insert_sync =
-                                    Generate_Call_coarray_sync(sync_hdl, TRUE);
+                                    Generate_Call_coarray_wait(sync_hdl, TRUE);
                                 WN_INSERT_BlockLast(insert_blk, insert_sync);
                             }
 
                             free(Coarray_Sync(stmt_node));
                         } else {
-                            insert_sync = Generate_Call_coarray_sync(
-                                    WN_Intconst(Pointer_type,-1));
+                            insert_sync = Generate_Call_coarray_wait_all();
                             WN_INSERT_BlockLast(insert_blk, insert_sync);
                         }
 
@@ -2273,11 +2266,10 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                             if (handle_st == NULL) {
                                 sync_hdl = WN_Intconst(Pointer_type,0);
                             } else {
-                                sync_hdl = WN_Ldid( Pointer_type, 0,
-                                        handle_st, ST_type(handle_st));
+                                sync_hdl = WN_Lda( Pointer_type, 0, handle_st );
                             }
                             insert_sync =
-                                Generate_Call_coarray_sync(sync_hdl, TRUE);
+                                Generate_Call_coarray_wait(sync_hdl, TRUE);
                             WN_INSERT_BlockLast(insert_blk, insert_sync);
                         }
 
@@ -2287,8 +2279,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
 
                         Is_True( 0,
                          ("Coarray_Sync not created for coarray read statement"));
-                        insert_sync = Generate_Call_coarray_sync(
-                                WN_Intconst(Pointer_type,-1));
+                        insert_sync = Generate_Call_coarray_wait_all();
                         WN_INSERT_BlockLast(insert_blk, insert_sync);
                     }
                 }
@@ -4005,15 +3996,24 @@ Generate_Call_release_lcb(WN *lcb_ptr)
     return call;
 }
 
-static WN * Generate_Call_coarray_sync(WN *hdl, BOOL with_guard)
+static WN * Generate_Call_coarray_wait_all()
+{
+    WN *call = Generate_Call_Shell( COARRAY_WAIT_ALL, MTYPE_V, 0);
+
+    return call;
+}
+
+static WN * Generate_Call_coarray_wait(WN *hdl, BOOL with_guard)
 {
     WN *test, *if_wn;
-    WN *call = Generate_Call_Shell( COARRAY_SYNC, MTYPE_V, 1);
+    WN *call = Generate_Call_Shell( COARRAY_WAIT, MTYPE_V, 1);
     WN_actual( call, 0 ) =
-        Generate_Param( hdl, WN_PARM_BY_VALUE);
+        Generate_Param( hdl, WN_PARM_BY_REFERENCE);
 
     if (with_guard) {
-        test = WN_NE(MTYPE_U8, WN_COPY_Tree(hdl), WN_Intconst(MTYPE_U8, 0));
+        WN *deref_hdl = WN_Iload(Pointer_type, 0, WN_type(hdl),
+                                 WN_COPY_Tree(hdl), 0);
+        test = WN_NE(MTYPE_U8, deref_hdl, WN_Intconst(MTYPE_U8, 0));
         if_wn = WN_CreateIf(test, WN_CreateBlock(), WN_CreateBlock());
         WN_INSERT_BlockLast( WN_then(if_wn), call);
         return if_wn;

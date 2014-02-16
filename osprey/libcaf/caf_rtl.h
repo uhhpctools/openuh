@@ -59,7 +59,8 @@ void __caf_finalize(int exit_code);
 void __caf_exit(int status);
 
 /* ensures local/remote completion of communication */
-void __coarray_sync(comm_handle_t hdl);
+void __coarray_wait_all();
+void __coarray_wait(comm_handle_t *hdl);
 
 void __target_alloc(unsigned long buf_size, void **ptr);
 void __target_dealloc(void **ptr);

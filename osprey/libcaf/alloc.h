@@ -34,7 +34,14 @@
 #include "lock.h"
 #include "dopevec.h"
 
-static const int SYMM_MEM_ALIGNMENT = 4;
+/* byte-alignment to use for allocations out of the remote-access (shared
+ * memory) segment */
+static const int SYMM_MEM_ALIGNMENT = 8;
+
+/* if an required asymmetric allocation will result in this percentage or
+ * greater of the heap space consumed, then allocate out of default system
+ * memory instead. Only used when out_of_segment_rma_enabed is set to 1. */
+static const double ASYMM_ALLOC_RESTRICT_FACTOR = 0.70;
 
 /* SHARED MEMORY MANAGEMENT */
 struct shared_memory_slot {

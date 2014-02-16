@@ -2,6 +2,9 @@
 README for OpenUH CAF (UHCAF) implementation
 --------------------------------------------
 
+Last modified: 2-6-2014
+
+
 CAF Installation
 ------------------
 
@@ -87,10 +90,14 @@ Where options are
                         armci
 
   --gasnet-path=G   G is the path to a specified GASNet installation
-                          Currently set to: $GASNET_HOME
+                          Currently set to:
 
-  --armci-path=A    A is the path to a specified ARMCI installation
-                          Currently set to: $ARMCI_HOME
+  --armci-path=A    A is the path to a specified ARMCI source directory
+                          Currently set to:
+
+  --static-libcaf   Force use of the static libcaf-* archive
+
+  --mpi             Compile CAF+MPI programs
 
   --help, -h        Displays this menu
 
@@ -105,17 +112,14 @@ Where options are
   --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
+   UHCAF_MPI_LDFLAGS
+                    Specify linker options for MPI
+                        Currently:
 
-   MPI_LIB          Path to MPI libs may be required. Should be compatible
-                    with GASNet or ARMCI installation being used.
-                        Currently: $MPI_LIB
-
-   MPI_LD_LIBS      Explicitly specify MPI libs to link in.
-                        Currently: $MPI_LD_LIBS
-
-   AUX_LD_LIBS      Optionally specify additional libraries that should be
-                    linked in.
-                        Currently: $AUX_LD_LIBS
+   UHCAF_EXTRA_LDFLAGS
+                    Optionally specify additional libraries that should be linked
+                    in.
+                        Currently:
 
 
 Example:
@@ -135,18 +139,21 @@ Where OPTIONS are:
   --num-images=N
   -n,-np N            N is number of images to use
 
-  --image-heap=I      I is heap size per image for storing coarray data. It
-                      may be an integer which indicates size in bytes, or it
-                      may have the suffixes K, M, G which indicates size in
-                      kilobytes, megabytes, and gigabytes, respectively.
+  --image-heap=I      I is heap size per image for dynamic allocation of
+                      remotely-accessible data. It may be an integer which
+                      indicates size in bytes, or it may have the suffixes
+                      K, M, G which indicates size in kilobytes, megabytes,
+                      and gigabytes, respectively.
 
-  --trace=L           Sets trace levels for runtime.
+  --dtrace=L          Sets diagnostic trace levels for runtime.
                       L=all or trace levels delimited by ':'.
                         Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
                         COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
 
-  --trace-file=F      F is name of file to store trace
+  --dtrace-dir=D      D is name of directory to store diagnostic traces
+
+  --stats             Turn on statistical collection
 
   --verbose,-v        Verbose output
 
@@ -162,8 +169,7 @@ Where OPTIONS are:
 
   --version,-V        Print version of cafrun and exits
 
-
 Example:
 
-$ cafrun --num-images=16 --trace=TIME_SUMMARY program
+$ cafrun -n 16  program
 

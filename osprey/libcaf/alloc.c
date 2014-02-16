@@ -42,6 +42,9 @@
 #include "profile.h"
 #include "util.h"
 
+/* flag for whether we are enabled out-of-segment rma accesses */
+int out_of_segment_rma_enabled = 0;
+
 /* describes memory usage status */
 mem_usage_info_t *mem_info;
 
@@ -279,13 +282,42 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
+    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
+        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    }
+
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
-    if (empty_slot == 0)
-        Error("No more shared memory space available for asymmetric data. "
-              "Set environment variable %s or cafrun option for more space.",
-              ENV_IMAGE_HEAP_SIZE);
-
+    if (empty_slot == 0 && !out_of_segment_rma_enabled) {
+        if (!out_of_segment_rma_enabled) {
+            /* out-of-segment accesses not supported */
+            Error("No more shared memory space available for asymmetric data."
+                  " Set environment variable %s or cafrun option for more "
+                  "space.", ENV_IMAGE_HEAP_SIZE);
+        } else {
+            /* it is assumed that out-of-segment accesses are supported here.
+             * */
+            LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                         "Couldn't find space in shared memory segment for "
+                         "asymmetric allocation, "
+                         "so allocating out of normal system memory.");
+            void *retval = comm_malloc(var_size);
+            return retval;
+        }
+        /* does not reach */
+    } else if (out_of_segment_rma_enabled &&
+             (mem_info->current_heap_usage + var_size) >=
+              ASYMM_ALLOC_RESTRICT_FACTOR*mem_info->reserved_heap_usage ) {
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                     "Running out of space in shared memory segment for "
+                     "asymmetric allocation (%ldMB out of %ldMB would "
+                     "be used) so allocating out of normal system memory.",
+                     (mem_info->current_heap_usage + var_size)/(1024*1024),
+                     (mem_info->reserved_heap_usage)/(1024*1024));
+        void *retval = comm_malloc(var_size);
+        return retval;
+        /* does not reach */
+    }
 
     /* update heap usage info */
     size_t current_size = mem_info->current_heap_usage + var_size;
@@ -320,6 +352,10 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
+
+    if (var_size % SYMM_MEM_ALIGNMENT != 0) {
+        var_size = (var_size/SYMM_MEM_ALIGNMENT+1)*SYMM_MEM_ALIGNMENT;
+    }
 
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
@@ -515,9 +551,20 @@ void coarray_asymmetric_deallocate_(void *var_address)
 
     slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "Address%p not in remote-access segment.",
-                     var_address);
+        if (!out_of_segment_rma_enabled) {
+            /* coarray_asymmetric_deallocate_ shouldn't be called unless the
+             * address is in the shared memory segment in this case.
+             */
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "Address%p not in remote-access segment.",
+                         var_address);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                         "Address%p not in remote-access segment, using "
+                         "normal free", var_address);
+        }
+
+        comm_free(var_address);
 
         PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
         LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");

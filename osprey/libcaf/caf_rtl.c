@@ -187,7 +187,18 @@ void __release_lcb(void **ptr)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
-void __coarray_sync(comm_handle_t hdl)
+void __coarray_wait_all()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_WAIT);
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync, (comm_handle_t) -1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_WAIT);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+void __coarray_wait(comm_handle_t *hdl)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_WAIT);
@@ -195,7 +206,8 @@ void __coarray_sync(comm_handle_t hdl)
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_sync with hdl=%p",
                  hdl);
 
-    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync, hdl);
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync, *hdl);
+    *hdl = NULL;
 
     PROFILE_FUNC_EXIT(CAFPROF_WAIT);
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
