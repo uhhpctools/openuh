@@ -212,6 +212,11 @@ fei_static_subscripts( INT64 static_subscripts[STATIC_SUBSCRIPT_SIZE] )
    /* Create an initial start subscript position from the data given */
    DevAssert((TY_kind(current_ty)==KIND_ARRAY),("Not an array ty"));
    rank = TY_AR_ndims(Ty_Table[current_ty]);
+
+#ifdef _UH_COARRAYS
+   rank = rank - ARB_codimension(TY_arb(Ty_Table[current_ty]));
+#endif
+
    offset = 0;
 
    arb = TY_arb(Ty_Table[current_ty])[rank - 1];

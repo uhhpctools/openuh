@@ -4075,7 +4075,8 @@ boolean final_arg_work(opnd_type	*list_opnd,
       }
 
       /* if dummy is intent(in), don't do copy out for coindexed actuals */
-      if ( ATD_INTENT(dummy) == Intent_In && (a_type == Coindexed_Array_Elt ||
+      if ( dummy && AT_OBJ_CLASS(dummy) == Data_Obj &&
+           ATD_INTENT(dummy) == Intent_In && (a_type == Coindexed_Array_Elt ||
           a_type == Coindexed_Array_Section) ) {
           if (association == COPY_IN_COPY_OUT)
               association = COPY_IN;
@@ -4264,7 +4265,8 @@ boolean final_arg_work(opnd_type	*list_opnd,
        * also whether there are coarrays in the scope of the called routine,
        * and if not avoid this copyin/copyout code. */
       copy_check = 0;
-      target_realloc = cmd_line_flags.co_array_fortran && ATD_TARGET(dummy) &&
+      target_realloc = cmd_line_flags.co_array_fortran && dummy &&
+                      AT_OBJ_CLASS(dummy) == Data_Obj && ATD_TARGET(dummy) &&
                       !ATD_TARGET(attr_idx) && !ATD_POINTER(attr_idx) &&
                       !ATD_PE_ARRAY_IDX(attr_idx);
 

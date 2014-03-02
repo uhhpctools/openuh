@@ -8,6 +8,20 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-03-17: (3.0.35)
+
+* misc. improvements/fixes for CAF
+  * adds environment variable for controlling RMA ordering in CAF runtime
+    (UHCAF_RMA_ORDERING)
+  * fix for static coarrays or targets with initialized declarations
+  * fix for determining size of certain coarrays in front-end
+  * fix for non-constant, non-unit stride in first array dimension for
+    remote accesses
+  * fix for runtime pack-and-send implementation for strided source buffers when
+    target buffer is contiguous
+
+----------------------------------------------------------------------------
+
 2014-02-15: (3.0.34)
 
 * misc. improvements/fixes for CAF

@@ -232,7 +232,7 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     if (var_size % alloc_byte_alignment != 0) {
-        var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
+        var_size = ((var_size-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
 
     empty_slot = find_empty_shared_memory_slot_above(common_slot,

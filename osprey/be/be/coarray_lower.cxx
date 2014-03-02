@@ -2966,8 +2966,12 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
 
     BOOL coarray_ref_is_contig = TRUE;
     if (remote_arrsection) {
-        remote_arrsection_first_sm = WN_const_val(
-                               remote_arrsection->stride_mult[0]);
+        if (WN_operator(remote_arrsection->stride_mult[0]) == OPR_INTCONST) {
+            remote_arrsection_first_sm = WN_const_val(
+                                   remote_arrsection->stride_mult[0]);
+        } else {
+            remote_arrsection_first_sm = INT_MAX;
+        }
         coarray_ref_is_contig =
                (remote_arrsection_first_sm == remote_access_elemsize) &&
                                             is_contiguous_access(
@@ -2980,8 +2984,12 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
     if (access != READ_TO_LCB && access != WRITE_FROM_LCB &&
         !local_array_is_lcb) {
         if (local_arrsection) {
-            local_arrsection_first_sm = WN_const_val(
-                                local_arrsection->stride_mult[0]);
+            if (WN_operator(local_arrsection->stride_mult[0]) == OPR_INTCONST) {
+                local_arrsection_first_sm = WN_const_val(
+                                    local_arrsection->stride_mult[0]);
+            } else {
+                local_arrsection_first_sm = INT_MAX;
+            }
             local_ref_is_contig =
                 (local_arrsection_first_sm == local_access_elemsize) &&
                                           is_contiguous_access(

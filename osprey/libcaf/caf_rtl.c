@@ -509,8 +509,8 @@ void __coarray_strided_write(size_t image,
             void *buf;
             __acquire_lcb(nbytes, &buf);
             local_src_strided_copy(src, src_strides, buf, count, stride_levels);
-            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest,
-                                 buf, nbytes, ordered, hdl);
+            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb,
+                                 image - 1, dest, buf, nbytes, ordered, hdl);
         }
 
         PROFILE_FUNC_EXIT(CAFPROF_PUT);

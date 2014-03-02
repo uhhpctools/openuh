@@ -173,6 +173,16 @@ Environment Variables:
                       layer, and may not work if performing strided
                       out-of-segment accesses.
 
+   UHCAF_RMA_ORDERING
+                      Specifies an ordering policy for remote memory access
+                      operations for the runtime. These are: blocking,
+                      put_ordered, put_image_ordered, put_address_ordered, and
+                      relaxed. By default, it is put_address_ordered.
+                      Note: relaxed requires that the user adds sync
+                      memory (or equivalent) after an assignment to co-indexed
+                      variable and before the source is updated or the
+                      co-indexed variable is subsequently read or written to.
+
 _EOT_
 }
 
@@ -316,6 +326,9 @@ add_uhcaf_envs_to_list()
     fi
     if [ -n "$UHCAF_OUT_OF_SEGMENT_RMA" ]; then
         add_to_env_list UHCAF_OUT_OF_SEGMENT_RMA
+    fi
+    if [ -n "$UHCAF_RMA_ORDERING" ]; then
+        add_to_env_list UHCAF_RMA_ORDERING
     fi
 }
 
