@@ -69,9 +69,7 @@ extern shared_memory_slot_t *common_slot;
 static unsigned long my_proc;
 static unsigned long num_procs;
 
-static unsigned long static_symm_data_total_size_ = 0;
-#pragma weak static_symm_data_total_size = static_symm_data_total_size_
-extern unsigned long static_symm_data_total_size;
+static unsigned long static_symm_data_total_size = 0;
 
 /* sync images */
 
@@ -84,6 +82,9 @@ typedef union {
     } t; /* used for sense reversing */
 } sync_flag_t;
 static sync_flag_t *sync_flags = NULL;
+
+/* rma ordering */
+static rma_ordering_t rma_ordering;
 
 /* Shared memory management:
  * coarray_start_all_images stores the shared memory start address of all
@@ -168,9 +169,10 @@ static void wait_on_pending_accesses(size_t proc,
                                      void *remote_address,
                                      size_t size,
                                      access_type_t access_type);
-static void wait_on_pending_puts(size_t proc);
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
 static void wait_on_all_pending_accesses();
+static void wait_on_all_pending_puts_to_proc(unsigned long proc);
+static void wait_on_all_pending_puts();
 
 static inline armci_hdl_t *get_next_armci_handle(access_type_t
                                                  access_type);
@@ -187,6 +189,8 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
 
+void set_static_symm_data(void *base_address, size_t alignment);
+unsigned long get_static_symm_size(size_t alignment);
 
 
 /* must call comm_init() first */
@@ -406,6 +410,9 @@ void comm_init()
     common_slot = malloc(sizeof(shared_memory_slot_t));
     common_shared_memory_slot = common_slot;
 
+    alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
+                                   DEFAULT_ALLOC_BYTE_ALIGNMENT);
+
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap).
      *
@@ -413,14 +420,16 @@ void comm_init()
      * segment for storing the start address of every proc's shared memory, so
      * add that as well (treat is as part of save coarray memory).
      */
+
+    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment);
     static_symm_data_total_size += sizeof(void *);
-    alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
-                                   DEFAULT_ALLOC_BYTE_ALIGNMENT);
+
     if (static_symm_data_total_size % alloc_byte_alignment) {
         static_symm_data_total_size =
-            (static_symm_data_total_size/alloc_byte_alignment+1)*
+            ((static_symm_data_total_size-1)/alloc_byte_alignment+1)*
               alloc_byte_alignment;
     }
+
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
                                    DEFAULT_IMAGE_HEAP_SIZE);
@@ -515,6 +524,33 @@ void comm_init()
             }
         }
     }
+
+    /* which rma ordering strategy to use */
+    char *ordering_val;
+    ordering_val = getenv(ENV_RMA_ORDERING);
+    rma_ordering = RMA_ORDERING_DEFAULT;
+
+    if (ordering_val != NULL) {
+        if (strncasecmp(ordering_val, "blocking", 8) == 0) {
+            rma_ordering = RMA_BLOCKING;
+        } else if (strncasecmp(ordering_val, "put_ordered", 11) == 0) {
+            rma_ordering = RMA_PUT_ORDERED;
+        } else if (strncasecmp(ordering_val, "put_image_ordered", 17) == 0) {
+            rma_ordering = RMA_PUT_IMAGE_ORDERED;
+        } else if (strncasecmp(ordering_val, "put_address_ordered", 19) == 0) {
+            rma_ordering = RMA_PUT_ADDRESS_ORDERED;
+        } else if (strncasecmp(ordering_val, "relaxed", 11) == 0) {
+            rma_ordering = RMA_RELAXED;
+        } else if (strncasecmp(ordering_val, "default", 7) == 0) {
+            rma_ordering = RMA_ORDERING_DEFAULT;
+        } else {
+            if (my_proc == 0) {
+                Warning("rma_ordering %s is not supported. "
+                        "Using default", ordering_val);
+            }
+        }
+    }
+
 
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE, DEFAULT_ENABLE_GETCACHE);
@@ -1276,7 +1312,7 @@ static void wait_on_pending_accesses(size_t proc,
         if (access_type == PUTS) {
             /* ARMCI provides no way to wait on a specific PUT to complete
              * remotely, so just wait on all of them to complete */
-            wait_on_pending_puts(proc);
+            wait_on_all_pending_puts_to_proc(proc);
         } else {                /* GETS */
             while (handle_node) {
                 if (address_in_handle(handle_node, remote_address, size)) {
@@ -1300,45 +1336,8 @@ static void wait_on_pending_accesses(size_t proc,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-/* wait on all pending PUTS to proc to complete */
-static void wait_on_pending_puts(size_t proc)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    void **min_nb_address = nb_mgr[PUTS].min_nb_address;
-    void **max_nb_address = nb_mgr[PUTS].max_nb_address;
-    struct handle_list **handles = nb_mgr[PUTS].handles;
-    struct handle_list *handle_node, *node_to_delete;
-    handle_node = handles[proc];
-    ARMCI_Fence(proc);
-    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
-
-    /* clear out entire handle list */
-    while (handle_node) {
-        /* return armci handle to free list */
-        return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                            PUTS);
-        node_to_delete = handle_node;
-        handle_node = handle_node->next;
-        comm_lcb_free(node_to_delete->local_buf);
-        if (node_to_delete->state == INTERNAL) {
-            comm_free(node_to_delete);
-        } else {
-            /* will delete node_to_delete later */
-            node_to_delete->handle = NULL;
-            node_to_delete->state = STALE;
-        }
-        nb_mgr[PUTS].num_handles--;
-    }
-    handles[proc] = 0;
-    min_nb_address[proc] = 0;
-    max_nb_address[proc] = 0;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
-
-/* wait on all pending accesses to complete */
-static void wait_on_all_pending_accesses()
+/* wait on all pending puts to complete */
+static void wait_on_all_pending_puts()
 {
     int i;
     struct handle_list *handle_node, *node_to_delete;
@@ -1374,7 +1373,25 @@ static void wait_on_all_pending_accesses()
         nb_mgr[PUTS].handles[i] = 0;
         nb_mgr[PUTS].min_nb_address[i] = 0;
         nb_mgr[PUTS].max_nb_address[i] = 0;
+    }
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+
+/* wait on all pending accesses to complete */
+static void wait_on_all_pending_accesses()
+{
+    int i;
+    struct handle_list *handle_node, *node_to_delete;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
+
+    wait_on_all_pending_puts();
+
+    for (i = 0; i < num_procs; i++) {
         handle_node = nb_mgr[GETS].handles[i];
         /* clear out entire handle list */
         while (handle_node) {
@@ -1399,6 +1416,43 @@ static void wait_on_all_pending_accesses()
         nb_mgr[GETS].min_nb_address[i] = 0;
         nb_mgr[GETS].max_nb_address[i] = 0;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+/* wait on all pending PUTS to proc to complete */
+static void wait_on_all_pending_puts_to_proc(unsigned long proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    void **min_nb_address = nb_mgr[PUTS].min_nb_address;
+    void **max_nb_address = nb_mgr[PUTS].max_nb_address;
+    struct handle_list **handles = nb_mgr[PUTS].handles;
+    struct handle_list *handle_node, *node_to_delete;
+    handle_node = handles[proc];
+    ARMCI_Fence(proc);
+    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
+
+    /* clear out entire handle list */
+    while (handle_node) {
+        /* return armci handle to free list */
+        return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                            PUTS);
+        node_to_delete = handle_node;
+        handle_node = handle_node->next;
+        comm_lcb_free(node_to_delete->local_buf);
+        if (node_to_delete->state == INTERNAL) {
+            comm_free(node_to_delete);
+        } else {
+            /* will delete node_to_delete later */
+            node_to_delete->handle = NULL;
+            node_to_delete->state = STALE;
+        }
+        nb_mgr[PUTS].num_handles--;
+    }
+    handles[proc] = 0;
+    min_nb_address[proc] = 0;
+    max_nb_address[proc] = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -1473,19 +1527,24 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
 
 /* It should allocate memory to all static coarrays/targets from the
  * pinned-down memory created during init */
-void set_static_symm_data_(void *base_address)
+void set_static_symm_data_(void *base_address, size_t alignment)
 {
     /* do nothing */
 }
 
 #pragma weak set_static_symm_data = set_static_symm_data_
-void set_static_symm_data(void *base_address);
 
+unsigned long get_static_symm_size_(size_t alignment)
+{
+    return 0;
+}
+
+#pragma weak get_static_symm_size = get_static_symm_size_
 
 void allocate_static_symm_data(void *base_address)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-    set_static_symm_data(base_address);
+    set_static_symm_data(base_address, alloc_byte_alignment);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
@@ -1815,7 +1874,7 @@ void comm_sync(comm_handle_t hdl)
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
 
         if (((struct handle_list *)hdl)->access_type == PUTS) {
-            wait_on_pending_puts(((struct handle_list *)hdl)->proc);
+            wait_on_all_pending_puts_to_proc(((struct handle_list *)hdl)->proc);
         } else {
             ARMCI_Wait(((struct handle_list *) hdl)->handle);
 
@@ -2377,7 +2436,14 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  src, remote_src, comm_address_translation_offset(proc),
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
-    if (nb_mgr[PUTS].handles[proc]) {
+
+    if (rma_ordering == RMA_PUT_ORDERED) {
+        wait_on_all_pending_puts();
+    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
+        wait_on_all_pending_puts_to_proc(proc);
+    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Finished waiting for"
@@ -2404,15 +2470,20 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
     PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
 
-    handle = get_next_armci_handle(GETS);
-    ARMCI_INIT_HANDLE(handle);
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Before ARMCI_NbGet from %p on"
-                 " image %lu to %p size %lu",
-                 remote_src, proc + 1, dest, nbytes);
-    ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
+    if (rma_ordering == RMA_BLOCKING) {
+        ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
+    } else {
+        handle = get_next_armci_handle(GETS);
+        ARMCI_INIT_HANDLE(handle);
 
-    in_progress = (ARMCI_Test(handle) == 0);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Before ARMCI_NbGet from %p on"
+                     " image %lu to %p size %lu",
+                     remote_src, proc + 1, dest, nbytes);
+        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
+        in_progress = (ARMCI_Test(handle) == 0);
+    }
+
 
     if (in_progress == 1) {
         struct handle_list *handle_node =
@@ -2433,7 +2504,9 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
             *hdl = NULL;
         }
 
-        return_armci_handle((armci_handle_x_t *) handle, GETS);
+        if (rma_ordering != RMA_BLOCKING) {
+            return_armci_handle((armci_handle_x_t *) handle, GETS);
+        }
 
         PROFILE_RMA_LOAD_END(proc);
     }
@@ -2471,7 +2544,14 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
                  src, remote_src, comm_address_translation_offset(proc),
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
-    if (nb_mgr[PUTS].handles[proc]) {
+
+    if (rma_ordering == RMA_PUT_ORDERED) {
+        wait_on_all_pending_puts();
+    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
+        wait_on_all_pending_puts_to_proc(proc);
+    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Finished waiting for"
@@ -2523,12 +2603,19 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
     remote_dest = get_remote_address(dest, proc);
     if (ordered) {
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
-        if (hdl != (void *) -1) {
+        if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
             armci_hdl_t *handle;
             handle = get_next_armci_handle(PUTS);
             ARMCI_INIT_HANDLE(handle);
@@ -2538,7 +2625,9 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             ARMCI_NbPut(src, remote_dest, nbytes, proc,
                         handle_node->handle);
             handle_node->next = 0;
-            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            }
             LIBCAF_TRACE(LIBCAF_LOG_COMM,
                          "After ARMCI_NbPut to %p on image %lu. Min:%p, Max:%p",
                          remote_dest,
@@ -2551,14 +2640,21 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             /* block until remote completion */
             ARMCI_Put(src, remote_dest, nbytes, proc);
             comm_lcb_free(src);
-            wait_on_pending_puts(proc);
+            wait_on_all_pending_puts_to_proc(proc);
 
             PROFILE_RMA_STORE_END(proc);
         }
 
     } else {                    /* ordered == 0 */
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
@@ -2596,7 +2692,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             PROFILE_RMA_STORE_END(proc);
         } else { /* hdl == -1 */
             /* block until it remotely completes */
-            wait_on_pending_puts(proc);
+            wait_on_all_pending_puts_to_proc(proc);
             comm_lcb_free(src);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
@@ -2636,21 +2732,31 @@ void comm_write(size_t proc, void *dest, void *src,
 #endif
 
     remote_dest = get_remote_address(dest, proc);
-    if (ordered) {
-        if (nb_mgr[PUTS].handles[proc])
+    if (ordered && rma_ordering != RMA_RELAXED) {
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         /* guarantees local completion */
         ARMCI_Put(src, remote_dest, nbytes, proc);
 
-        if (hdl != (void *) -1) {
-            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+        if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
+            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            }
 
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else {
             /* block until remote completion */
-            wait_on_pending_puts(proc);
+            wait_on_all_pending_puts_to_proc(proc);
 
             PROFILE_RMA_STORE_END(proc);
         }
@@ -2662,8 +2768,15 @@ void comm_write(size_t proc, void *dest, void *src,
                      nb_mgr[PUTS].min_nb_address[proc],
                      nb_mgr[PUTS].max_nb_address[proc]);
     } else {                    /* ordered == 0 */
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
@@ -2700,7 +2813,7 @@ void comm_write(size_t proc, void *dest, void *src,
             PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else { /* hdl == -1 */
             /* block until it remotely completes */
-            wait_on_pending_puts(proc);
+            wait_on_all_pending_puts_to_proc(proc);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
             PROFILE_RMA_STORE_END(proc);
@@ -2759,11 +2872,18 @@ void comm_strided_nbread(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_src, size, PUTS);
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
-                         " pending puts on %p on image %lu. Min:%p,Max:%p",
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_pending_accesses(proc, remote_src, size, PUTS);
+            LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                         "Finished waiting for"
+                         " pending puts on %p on image %lu. Min:%p, Max:%p",
                          remote_src, proc + 1,
                          nb_mgr[PUTS].min_nb_address[proc],
                          nb_mgr[PUTS].max_nb_address[proc]);
@@ -2787,15 +2907,22 @@ void comm_strided_nbread(size_t proc,
 
         int in_progress = 0;
         armci_hdl_t *handle;
-        handle = get_next_armci_handle(GETS);
-        ARMCI_INIT_HANDLE(handle);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
-                     " %p on image %lu to %p (stride_levels= %u)",
-                     remote_src, proc + 1, dest, stride_levels);
-        ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
-                     count, stride_levels, proc, handle);
 
-        in_progress = (ARMCI_Test(handle) == 0);
+        if (rma_ordering == RMA_BLOCKING) {
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
+                         " %p on image %lu to %p (stride_levels= %u)",
+                         remote_src, proc + 1, dest, stride_levels);
+            ARMCI_GetS(remote_src, src_strides, dest, dest_strides,
+                       count, stride_levels, proc);
+
+        } else {
+            handle = get_next_armci_handle(GETS);
+            ARMCI_INIT_HANDLE(handle);
+            ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
+                         count, stride_levels, proc, handle);
+
+            in_progress = (ARMCI_Test(handle) == 0);
+        }
 
         if (in_progress == 1) {
             struct handle_list *handle_node =
@@ -2814,7 +2941,10 @@ void comm_strided_nbread(size_t proc,
             if (hdl != NULL) {
                 *hdl = NULL;
             }
-            return_armci_handle((armci_handle_x_t *) handle, GETS);
+
+            if (rma_ordering != RMA_BLOCKING) {
+                return_armci_handle((armci_handle_x_t *) handle, GETS);
+            }
 
             PROFILE_RMA_LOAD_END(proc);
         }
@@ -2864,9 +2994,15 @@ void comm_strided_read(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_src, size, PUTS);
 
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_pending_accesses(proc, remote_src, size, PUTS);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
                          " pending puts on %p on image %lu. Min:%p,Max:%p",
                          remote_src, proc + 1,
@@ -2954,8 +3090,16 @@ void comm_strided_write_from_lcb(size_t proc,
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
-            if (nb_mgr[PUTS].handles[proc])
+
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -2970,7 +3114,10 @@ void comm_strided_write_from_lcb(size_t proc,
                              count, stride_levels, proc,
                              handle_node->handle);
                 handle_node->next = 0;
-                update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                    update_nb_address_block(remote_dest, proc, size, PUTS);
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else {
@@ -2978,7 +3125,7 @@ void comm_strided_write_from_lcb(size_t proc,
                 ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                            count, stride_levels, proc);
                 comm_lcb_free(src);
-                wait_on_pending_puts(proc);
+                wait_on_all_pending_puts_to_proc(proc);
 
                 PROFILE_RMA_STORE_END(proc);
             }
@@ -2993,8 +3140,16 @@ void comm_strided_write_from_lcb(size_t proc,
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
-            if (nb_mgr[PUTS].handles[proc])
+
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -3032,7 +3187,7 @@ void comm_strided_write_from_lcb(size_t proc,
                 PROFILE_RMA_STORE_END(proc);
             } else { /* hdl == -1 */
                 /* block until it remotely completes */
-                wait_on_pending_puts(proc);
+                wait_on_all_pending_puts_to_proc(proc);
                 comm_lcb_free(src);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
@@ -3102,13 +3257,21 @@ void comm_strided_write(size_t proc,
     {
         remote_dest = get_remote_address(dest, proc);
 
-        if (ordered) {
+        if (ordered && rma_ordering != RMA_RELAXED) {
             size_t size;
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
-            if (nb_mgr[PUTS].handles[proc])
+
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -3116,13 +3279,15 @@ void comm_strided_write(size_t proc,
             ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                        count, stride_levels, proc);
 
-            if (hdl != (void *) -1) {
-                update_nb_address_block(remote_dest, proc, size, PUTS);
+            if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
+                if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                    update_nb_address_block(remote_dest, proc, size, PUTS);
+                }
 
                 PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else {
                 /* block until it remotely completes */
-                wait_on_pending_puts(proc);
+                wait_on_all_pending_puts_to_proc(proc);
 
                 PROFILE_RMA_STORE_END(proc);
             }
@@ -3137,8 +3302,16 @@ void comm_strided_write(size_t proc,
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
-            if (nb_mgr[PUTS].handles[proc])
+
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -3175,7 +3348,7 @@ void comm_strided_write(size_t proc,
                 PROFILE_RMA_STORE_END(proc);
             } else { /* hdl == -1 */
                 /* block until it remotely completes */
-                wait_on_pending_puts(proc);
+                wait_on_all_pending_puts_to_proc(proc);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
 
                 PROFILE_RMA_STORE_END(proc);

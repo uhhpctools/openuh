@@ -60,6 +60,16 @@ typedef enum {
   SYNC_IMAGES_DEFAULT = 2
 } sync_images_t;
 
+/* different types of rma ordering strategies */
+typedef enum {
+  RMA_BLOCKING = 0,
+  RMA_PUT_ORDERED = 1,
+  RMA_PUT_IMAGE_ORDERED = 2,
+  RMA_PUT_ADDRESS_ORDERED = 3,
+  RMA_RELAXED = 4,
+  RMA_ORDERING_DEFAULT = RMA_PUT_ADDRESS_ORDERED
+} rma_ordering_t;
+
 typedef struct {
     int image_id;
     UT_hash_handle hh;

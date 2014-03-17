@@ -121,9 +121,7 @@ extern int out_of_segment_rma_enabled;
 static unsigned long my_proc;
 static unsigned long num_procs;
 
-static unsigned long static_symm_data_total_size_ = 0;
-#pragma weak static_symm_data_total_size = static_symm_data_total_size_
-extern unsigned long static_symm_data_total_size;
+static unsigned long static_symm_data_total_size = 0;
 
 static unsigned short gasnet_everything = 0;    /* flag */
 
@@ -160,6 +158,9 @@ static int in_normal_termination = 0;
 
 /*sync images*/
 static sync_images_t sync_images_algorithm;
+
+/* rma ordering */
+static rma_ordering_t rma_ordering;
 
 typedef union {
     short value; /* used for counter and ping-pong */
@@ -273,6 +274,8 @@ static void wait_on_pending_accesses(unsigned long proc,
                                      access_type_t access_type);
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
 static inline void wait_on_all_pending_accesses();
+static void wait_on_all_pending_puts_to_proc(unsigned long proc);
+static inline void wait_on_all_pending_puts();
 
 static void clear_all_cache();
 static void clear_cache(size_t node);
@@ -300,7 +303,8 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
 
-static void image_control_fence();
+void set_static_symm_data(void *base_address, size_t alignment);
+unsigned long get_static_symm_size(size_t alignment);
 
 
 /* must call comm_init() first */
@@ -1338,11 +1342,15 @@ void comm_init()
      */
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
+
+    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment);
+
     if (static_symm_data_total_size % alloc_byte_alignment) {
         static_symm_data_total_size =
-            (static_symm_data_total_size/alloc_byte_alignment+1)*
+            ((static_symm_data_total_size-1)/alloc_byte_alignment+1)*
               alloc_byte_alignment;
     }
+
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
                                    DEFAULT_IMAGE_HEAP_SIZE);
@@ -1398,6 +1406,8 @@ void comm_init()
                   _num_images, _log2_images, _rem_images);
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "after gasnet_init");
 
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "static_symm_data_total_size = %ld",
+                 static_symm_data_total_size);
 
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
@@ -1448,6 +1458,33 @@ void comm_init()
             }
         }
     }
+
+    /* which rma ordering strategy to use */
+    char *ordering_val;
+    ordering_val = getenv(ENV_RMA_ORDERING);
+    rma_ordering = RMA_ORDERING_DEFAULT;
+
+    if (ordering_val != NULL) {
+        if (strncasecmp(ordering_val, "blocking", 8) == 0) {
+            rma_ordering = RMA_BLOCKING;
+        } else if (strncasecmp(ordering_val, "put_ordered", 11) == 0) {
+            rma_ordering = RMA_PUT_ORDERED;
+        } else if (strncasecmp(ordering_val, "put_image_ordered", 17) == 0) {
+            rma_ordering = RMA_PUT_IMAGE_ORDERED;
+        } else if (strncasecmp(ordering_val, "put_address_ordered", 19) == 0) {
+            rma_ordering = RMA_PUT_ADDRESS_ORDERED;
+        } else if (strncasecmp(ordering_val, "relaxed", 11) == 0) {
+            rma_ordering = RMA_RELAXED;
+        } else if (strncasecmp(ordering_val, "default", 7) == 0) {
+            rma_ordering = RMA_ORDERING_DEFAULT;
+        } else {
+            if (my_proc == 0) {
+                Warning("rma_ordering %s is not supported. "
+                        "Using default", ordering_val);
+            }
+        }
+    }
+
 
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE, DEFAULT_ENABLE_GETCACHE);
@@ -2248,7 +2285,7 @@ static void wait_on_pending_accesses(unsigned long proc,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
+static void wait_on_all_pending_puts_to_proc(unsigned long proc)
 {
     struct handle_list *handle_node, *node_to_delete;
 
@@ -2272,6 +2309,24 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
         }
         nb_mgr[PUTS].num_handles--;
     }
+
+    nb_mgr[PUTS].handles[proc] = 0;
+    nb_mgr[PUTS].min_nb_address[proc] = 0;
+    nb_mgr[PUTS].max_nb_address[proc] = 0;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
+{
+    struct handle_list *handle_node, *node_to_delete;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
+
+    wait_on_all_pending_puts_to_proc(proc);
+
     handle_node = nb_mgr[GETS].handles[proc];
     while (handle_node) {
         if (handle_node->handle != GASNET_INVALID_HANDLE) {
@@ -2291,9 +2346,6 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
         nb_mgr[GETS].num_handles--;
     }
 
-    nb_mgr[PUTS].handles[proc] = 0;
-    nb_mgr[PUTS].min_nb_address[proc] = 0;
-    nb_mgr[PUTS].max_nb_address[proc] = 0;
     nb_mgr[GETS].handles[proc] = 0;
     nb_mgr[GETS].min_nb_address[proc] = 0;
     nb_mgr[GETS].max_nb_address[proc] = 0;
@@ -2316,6 +2368,21 @@ static inline void wait_on_all_pending_accesses()
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+static inline void wait_on_all_pending_puts()
+{
+    int i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
+
+    for (i = 0; i < num_procs; i++) {
+        wait_on_all_pending_puts_to_proc(i);
+    }
+    gasnet_wait_syncnbi_all();
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
 
 /*****************************************************************
  *                  Shared Memory Management
@@ -2323,19 +2390,22 @@ static inline void wait_on_all_pending_accesses()
 
 /* It should allocate memory to all static coarrays/targets from the
  * pinned-down memory created during init */
-void set_static_symm_data_(void *base_address)
+void set_static_symm_data_(void *base_address, size_t alignment)
 {
     /* do nothing */
 }
-
 #pragma weak set_static_symm_data = set_static_symm_data_
-void set_static_symm_data(void *base_address);
 
+unsigned long get_static_symm_size_(size_t alignment)
+{
+    return 0;
+}
+#pragma weak get_static_symm_size = get_static_symm_size_
 
 void allocate_static_symm_data(void *base_address)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-    set_static_symm_data(base_address);
+    set_static_symm_data(base_address, alloc_byte_alignment);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
@@ -3341,8 +3411,16 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
     }
 
     remote_src = get_remote_address(src, proc);
-    if (nb_mgr[PUTS].handles[proc])
+
+    if (rma_ordering == RMA_PUT_ORDERED) {
+        wait_on_all_pending_puts();
+    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
+        wait_on_all_pending_puts_to_proc(proc);
+    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
+    }
 
     /* do a non-blocking read */
     void *temp_dest = dest;
@@ -3396,12 +3474,17 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
             temp_dest = dest;
     }
 
+    if (rma_ordering == RMA_BLOCKING) {
+        gasnet_get_bulk(temp_dest, proc, remote_src, nbytes);
+        handle = GASNET_INVALID_HANDLE;
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "gasnet_get_nb_bulk from %p on image %lu"
+                     " to %p size %lu", remote_src, proc + 1, temp_dest,
+                     nbytes);
+        handle = gasnet_get_nb_bulk(temp_dest, proc, remote_src, nbytes);
+    }
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "gasnet_get_nb_bulk from %p on image %lu"
-                 " to %p size %lu", remote_src, proc + 1, temp_dest,
-                 nbytes);
-    handle = gasnet_get_nb_bulk(temp_dest, proc, remote_src, nbytes);
 
     if (handle != GASNET_INVALID_HANDLE) {
         /* get is not yet complete */
@@ -3470,8 +3553,15 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 
     remote_src = get_remote_address(src, proc);
 
-    if (nb_mgr[PUTS].handles[proc])
+    if (rma_ordering == RMA_PUT_ORDERED) {
+        wait_on_all_pending_puts();
+    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
+        wait_on_all_pending_puts_to_proc(proc);
+    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+               nb_mgr[PUTS].handles[proc]) {
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
+    }
 
 #if GASNET_PSHM
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
@@ -3555,13 +3645,25 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
 
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         gasnet_handle_t handle;
-        handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
+        if (rma_ordering == RMA_BLOCKING) {
+            gasnet_put_bulk(proc, remote_dest, src, nbytes);
+            handle = GASNET_INVALID_HANDLE;
+        } else {
+            handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
+        }
 
         if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* put hasn't completed, and we don't want to block */
@@ -3569,7 +3671,9 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                 get_next_handle(proc, remote_dest, src, nbytes, PUTS);
             handle_node->handle = handle;
             handle_node->next = 0;
-            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            }
 
             if (hdl != NULL) {
                 handle_node->state = EXPOSED;
@@ -3597,8 +3701,15 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
 
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
@@ -3687,27 +3798,39 @@ void comm_write(size_t proc, void *dest, void *src,
     }
 
     remote_dest = get_remote_address(dest, proc);
-    if (ordered) {
-        /* use gasnet_put_nb to ensure local completion. If 2-, 4-, or
-         * 8-bytes, it needs to be aligned */
-        void *aligned_src = src;
-        if (nbytes == 2 && ((unsigned long) src % 2) == 0 ||
-            nbytes == 4 && ((unsigned long) src % 4) == 0 ||
-            nbytes == 8 && ((unsigned long) src % 8) == 0) {
-            memset(tmp_aligned_buffer, 0, 8);
-            memcpy(&tmp_aligned_buffer, src, nbytes);
-            aligned_src = &tmp_aligned_buffer;
-        }
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
-                     "image %lu from %p size %lu",
-                     remote_dest, proc + 1, aligned_src, nbytes);
-        if (nb_mgr[PUTS].handles[proc])
+    if (ordered && rma_ordering != RMA_RELAXED) {
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
+
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         gasnet_handle_t handle;
-        handle = gasnet_put_nb(proc, remote_dest, aligned_src, nbytes);
+        if (rma_ordering == RMA_BLOCKING) {
+            gasnet_put_bulk(proc, remote_dest, src, nbytes);
+            handle = GASNET_INVALID_HANDLE;
+        } else {
+            /* use gasnet_put_nb to ensure local completion. */
+            void *aligned_src = src;
+            if (nbytes == 2 && ((unsigned long) src % 2) == 0 ||
+                nbytes == 4 && ((unsigned long) src % 4) == 0 ||
+                nbytes == 8 && ((unsigned long) src % 8) == 0) {
+                memset(tmp_aligned_buffer, 0, 8);
+                memcpy(&tmp_aligned_buffer, src, nbytes);
+                aligned_src = &tmp_aligned_buffer;
+            }
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
+                         "image %lu from %p size %lu",
+                         remote_dest, proc + 1, aligned_src, nbytes);
+            handle = gasnet_put_nb(proc, remote_dest, aligned_src, nbytes);
+        }
 
         if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* pass NULL for source buf argument */
@@ -3715,7 +3838,9 @@ void comm_write(size_t proc, void *dest, void *src,
                 get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
             handle_node->handle = handle;
             handle_node->next = 0;
-            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+            }
 
             if (hdl != NULL) {
                 handle_node->state = EXPOSED;
@@ -3741,8 +3866,15 @@ void comm_write(size_t proc, void *dest, void *src,
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
 
-        if (nb_mgr[PUTS].handles[proc])
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
@@ -3755,7 +3887,6 @@ void comm_write(size_t proc, void *dest, void *src,
                 get_next_handle(proc, NULL, NULL, 0, PUTS);
             handle_node->handle = handle;
             handle_node->next = 0;
-            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
 
             if (hdl != NULL) {
                 handle_node->state = EXPOSED;
@@ -3821,7 +3952,13 @@ void comm_strided_nbread(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (nb_mgr[PUTS].handles[proc]) {
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_src, size, PUTS);
         }
 
@@ -3869,14 +4006,26 @@ void comm_strided_nbread(size_t proc,
         PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
 
         gasnet_handle_t handle;
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"
-                     " %p on image %lu to %p (stride_levels= %u)",
-                     remote_src, proc + 1, dest, stride_levels);
-        handle = gasnet_gets_nb_bulk(dest,
-                                     dest_strides,
-                                     proc, remote_src,
-                                     src_strides,
-                                     count, stride_levels);
+
+
+        if (rma_ordering == RMA_BLOCKING) {
+            gasnet_gets_bulk(dest,
+                             dest_strides,
+                             proc, remote_src,
+                             src_strides,
+                             count, stride_levels);
+            handle = GASNET_INVALID_HANDLE;
+        } else {
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"
+                         " %p on image %lu to %p (stride_levels= %u)",
+                         remote_src, proc + 1, dest, stride_levels);
+            handle = gasnet_gets_nb_bulk(dest,
+                                         dest_strides,
+                                         proc, remote_src,
+                                         src_strides,
+                                         count, stride_levels);
+        }
 
         if (handle != GASNET_INVALID_HANDLE) {
             /* get is not yet complete */
@@ -3938,7 +4087,13 @@ void comm_strided_read(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (nb_mgr[PUTS].handles[proc]) {
+        if (rma_ordering == RMA_PUT_ORDERED) {
+            wait_on_all_pending_puts();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
+            wait_on_all_pending_puts_to_proc(proc);
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                   nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_src, size, PUTS);
         }
 
@@ -4038,8 +4193,15 @@ void comm_strided_write_from_lcb(size_t proc,
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
-            if (nb_mgr[PUTS].handles[proc])
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -4048,10 +4210,18 @@ void comm_strided_write_from_lcb(size_t proc,
                          remote_dest, proc + 1, src, size);
 
             gasnet_handle_t handle;
-            handle = gasnet_puts_nb_bulk(proc, remote_dest,
-                                         dest_strides, src,
-                                         src_strides, count,
-                                         stride_levels);
+            if (rma_ordering == RMA_BLOCKING) {
+                gasnet_puts_bulk(proc, remote_dest,
+                                 dest_strides, src,
+                                 src_strides, count,
+                                 stride_levels);
+                handle = GASNET_INVALID_HANDLE;
+            } else {
+                handle = gasnet_puts_nb_bulk(proc, remote_dest,
+                                             dest_strides, src,
+                                             src_strides, count,
+                                             stride_levels);
+            }
 
             if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
                 /* put has not yet completed */
@@ -4059,7 +4229,9 @@ void comm_strided_write_from_lcb(size_t proc,
                     get_next_handle(proc, remote_dest, src, size, PUTS);
                 handle_node->handle = handle;
                 handle_node->next = 0;
-                update_nb_address_block(remote_dest, proc, size, PUTS);
+                if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                    update_nb_address_block(remote_dest, proc, size, PUTS);
+                }
 
                 if (hdl != NULL) {
                     handle_node->state = EXPOSED;
@@ -4089,8 +4261,15 @@ void comm_strided_write_from_lcb(size_t proc,
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
-            if (nb_mgr[PUTS].handles[proc])
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
@@ -4184,14 +4363,21 @@ void comm_strided_write(size_t proc,
     {
         remote_dest = get_remote_address(dest, proc);
 
-        if (ordered) {
+        if (ordered && rma_ordering != RMA_RELAXED) {
             size_t size;
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
-            if (nb_mgr[PUTS].handles[proc])
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             if (!local_pack_noncontig_put) {
               PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
@@ -4212,15 +4398,17 @@ void comm_strided_write(size_t proc,
               PROFILE_RMA_STORE_END(proc);
 
             } else { /* local_pack_noncontig_put == 1 */
-              /* GASNet doesn't provide non-contiguous, non-blocking PUT that
-               * guarantees local completion. It may be more efficient to do
-               * this LCB creation and mem copy with the compiler instead. */
 
-              void *new_src;
+              void *new_src = NULL;
               gasnet_handle_t handle;
               size_t new_src_strides[stride_levels];
               size_t nbytes = 1;
               int i;
+
+              /* GASNet doesn't provide non-contiguous, non-blocking PUT
+               * that guarantees local completion. It may be more
+               * efficient to do this LCB creation and mem copy with the
+               * compiler instead. */
               for (i = 0; i < stride_levels; i++) {
                   nbytes = nbytes * count[i];
                   new_src_strides[i] = nbytes;
@@ -4234,7 +4422,8 @@ void comm_strided_write(size_t proc,
               PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
               LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
-                           " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
+                           " gasnet_puts_nb_bulk to %p on "
+                           "image %lu from %p size %lu",
                            remote_dest, proc + 1, new_src, size);
 
               handle = gasnet_puts_nb_bulk(proc, remote_dest,
@@ -4242,6 +4431,7 @@ void comm_strided_write(size_t proc,
                                            new_src,
                                            new_src_strides,
                                            count, stride_levels);
+
               if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
                   /* put has not yet completed */
                   struct handle_list *handle_node =
@@ -4249,7 +4439,10 @@ void comm_strided_write(size_t proc,
                                       PUTS);
                   handle_node->handle = handle;
                   handle_node->next = 0;
-                  update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                  if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                      update_nb_address_block(remote_dest, proc, size, PUTS);
+                  }
 
                   if (hdl != NULL) {
                       handle_node->state = EXPOSED;
@@ -4281,8 +4474,15 @@ void comm_strided_write(size_t proc,
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
-            if (nb_mgr[PUTS].handles[proc])
+            if (rma_ordering == RMA_PUT_ORDERED) {
+                wait_on_all_pending_puts();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
+                wait_on_all_pending_puts_to_proc(proc);
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
+                       nb_mgr[PUTS].handles[proc]) {
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 

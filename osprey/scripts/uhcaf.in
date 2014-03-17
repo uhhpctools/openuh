@@ -197,8 +197,6 @@ write_set_static_symm_data()
   echo "#include <string.h>" >> $set_static_symm_data.c
   echo "" >> $set_static_symm_data.c
 
-  save_total_size=0
-
   for i in `seq 0 $((${#args[@]}-1))`; do
       symm_data_name=${args[i]}
       echo "void *$symm_data_name;" >> $set_static_symm_data.c
@@ -208,15 +206,14 @@ write_set_static_symm_data()
           echo "extern void *$orig_ptr;" >> $set_static_symm_data.c
       fi
   done
-  echo "void set_static_symm_data ( void *base_address)" >> $set_static_symm_data.c
+  echo "void set_static_symm_data ( void *base_address, size_t alignment)" >> $set_static_symm_data.c
   echo "{" >> $set_static_symm_data.c
   echo "  unsigned long offset = 0;" >> $set_static_symm_data.c
   for i in `seq 0 $((${#args[@]}-1))`; do
       symm_data_name=${args[i]}
       size=${symm_data_name##*_}
-      save_total_size=$(($save_total_size+$size))
       echo "   $symm_data_name  = base_address + offset;" >> $set_static_symm_data.c
-      echo "   offset += $size;" >> $set_static_symm_data.c
+      echo "   offset += (($size-1)/alignment+1)*alignment;" >> $set_static_symm_data.c
       # do memcpy for initialized data
       if [[ $symm_data_name == __SAVE_INIT_* ]]; then
           orig_ptr=__${symm_data_name#__SAVE_INIT_SYMM_}
@@ -225,9 +222,17 @@ write_set_static_symm_data()
       fi
   done
   echo "}" >> $set_static_symm_data.c
-
   echo "" >> $set_static_symm_data.c
-  echo "unsigned long static_symm_data_total_size = $save_total_size;" >> $set_static_symm_data.c
+  echo "unsigned long get_static_symm_size ( size_t alignment)" >> $set_static_symm_data.c
+  echo "{" >> $set_static_symm_data.c
+  echo "  unsigned long offset = 0;" >> $set_static_symm_data.c
+  for i in `seq 0 $((${#args[@]}-1))`; do
+      symm_data_name=${args[i]}
+      size=${symm_data_name##*_}
+      echo "   offset += (($size-1)/alignment+1)*alignment;" >> $set_static_symm_data.c
+  done
+  echo "  return offset;" >> $set_static_symm_data.c
+  echo "}" >> $set_static_symm_data.c
 }
 
 execute()
@@ -623,7 +628,6 @@ else
         symm_data_name[i]=$s
         i=$((i+1))
       done
-
 
       if [ $i -gt 0 ]; then
           write_set_static_symm_data "${symm_data_name[@]}"
