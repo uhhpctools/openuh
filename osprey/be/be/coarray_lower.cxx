@@ -64,6 +64,7 @@
 #include "be_symtab.h"
 #include "f90_utils.h"
 #include "limits.h"
+#include "data_layout.h"
 
 #include <vector>
 #include <map>
@@ -245,11 +246,12 @@ static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
 
 static BOOL is_load_operation(WN *node);
 static BOOL is_convert_operation(WN *node);
-static void gen_save_coarray_symbol(ST *sym);
-static void gen_save_target_symbol(ST *sym);
 static void gen_auto_target_symbol(ST *sym);
-static void gen_global_save_coarray_symbol(ST *sym);
-static void gen_global_save_target_symbol(ST *sym);
+static inline void gen_save_coarray_symbol(ST *sym);
+static inline void gen_save_target_symbol(ST *sym);
+static inline void gen_global_save_coarray_symbol(ST *sym);
+static inline void gen_global_save_target_symbol(ST *sym);
+static ST* gen_save_symm_symbol(ST *sym);
 static WN* gen_array1_ref( OPCODE op_array, TY_IDX array_type,
                                ST *array_st, INT8 index, INT8 dim);
 static ST *get_lcb_sym(WN *access);
@@ -530,17 +532,22 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
             if (ST_sclass(sym) == SCLASS_PSTATIC) {
                 set_coarray_tsize(ST_type(sym));
                 gen_save_coarray_symbol(sym);
-                /* don't allot space for this symbol in global memory */
-                //Set_TY_size(ST_type(sym), 0);
-                Set_ST_type(sym, null_coarray_type);
-                Set_ST_is_not_used(sym);
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_coarray_type);
+                    Set_ST_is_not_used(sym);
+                }
             }
         } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
             if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
                 gen_save_target_symbol(sym);
-                /* don't allot space for this symbol in global memory */
-                Set_ST_type(sym, null_array_type);
-                Set_ST_is_not_used(sym);
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_array_type);
+                    Set_ST_is_not_used(sym);
+                }
             } else if (ST_sclass(sym) == SCLASS_AUTO) {
                 gen_auto_target_symbol(sym);
                 ST *targ_ptr = auto_target_symbol_map[sym];
@@ -568,18 +575,23 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 if (ST_sclass(sym) == SCLASS_COMMON ||
                     ST_sclass(sym) == SCLASS_DGLOBAL) {
                     gen_global_save_coarray_symbol(sym);
-                    /* don't allot space for this symbol in global memory */
-                    //Set_TY_size(ST_type(sym), 0);
-                    Set_ST_type(sym, null_coarray_type);
-                    Set_ST_is_not_used(sym);
+                    /* don't allot space for this symbol in global memory, if
+                     * uninitialized */
+                    if (!ST_is_initialized(sym)) {
+                        Set_ST_type(sym, null_coarray_type);
+                        Set_ST_is_not_used(sym);
+                    }
                 }
             } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
                 if (ST_sclass(sym) == SCLASS_COMMON ||
                     ST_sclass(sym) == SCLASS_DGLOBAL) {
                     gen_global_save_target_symbol(sym);
-                    /* don't allot space for this symbol in global memory */
-                    Set_ST_type(sym, null_array_type);
-                    Set_ST_is_not_used(sym);
+                    /* don't allot space for this symbol in global memory, if
+                     * uninitialized */
+                    if (!ST_is_initialized(sym)) {
+                        Set_ST_type(sym, null_array_type);
+                        Set_ST_is_not_used(sym);
+                    }
                 }
             }
         }
@@ -670,11 +682,12 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
           }
         }
 
-        /* need to move static initializers to coarray data past the call to
-         * caf_init(). */
+        /* need to move static initializers to coarray data or F90 targets
+         * past the call to caf_init(). */
         if (is_main && !pragma_preamble_done) {
             if (WN_operator(wn) == OPR_STID) {
-                if ( is_coarray_type(ST_type(WN_st(wn))) ) {
+                if ( is_coarray_type(ST_type(WN_st(wn))) ||
+                     ST_is_f90_target(WN_st(wn)) ) {
                     add_caf_stmt_to_initializer_list(wn, func_body);
                 }
             } else if (WN_operator(wn) == OPR_ISTORE ||
@@ -684,7 +697,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     find_lda = WN_kid0(find_lda);
                 }
                 if ( find_lda &&
-                        is_coarray_type(ST_type(WN_st(find_lda))) ) {
+                     (is_coarray_type(ST_type(WN_st(find_lda))) ||
+                      ST_is_f90_target(WN_st(find_lda))) ) {
                     add_caf_stmt_to_initializer_list(wn, func_body);
                 }
 
@@ -2683,6 +2697,7 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
         WN *parent_store = direct_coarray_ref;
         while (parent_store &&
                WN_operator(parent_store) != OPR_STID &&
+               WN_operator(parent_store) != OPR_MSTORE &&
                WN_operator(parent_store) != OPR_ISTORE) {
             parent_store = Get_Parent(parent_store);
             if (parent_store && WN_operator(parent_store) == OPR_ADD) {
@@ -5487,58 +5502,6 @@ static WN* gen_array1_ref( OPCODE op_array, TY_IDX array_type,
     return array;
 }
 
-static void gen_save_coarray_symbol(ST *sym)
-{
-    Is_True( ST_sclass(sym) == SCLASS_PSTATIC,
-            ("sym storage class should be SCLASS_PSTATIC"));
-
-    char *new_sym_str = (char *) alloca(strlen("__SAVE_COARRAY_") +
-                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
-                + 20);
-
-    sprintf( new_sym_str, "__SAVE_COARRAY_%s_%s_%lu",
-            ST_name(Get_Current_PU_ST()), ST_name(sym),
-            (unsigned long) TY_size(ST_type(sym)));
-
-    /* make symbol name a legal variable identifier */
-    char *s = new_sym_str;
-    for (int i = 0; i < strlen(new_sym_str); i++) {
-        if (s[i] == '.') s[i] = '_';
-    }
-
-    ST *new_sym = New_ST( GLOBAL_SYMTAB );
-    ST_Init( new_sym, Save_Str(new_sym_str), CLASS_VAR, SCLASS_EXTERN,
-            EXPORT_PREEMPTIBLE, Make_Pointer_Type(ST_type(sym)) );
-
-    save_coarray_symbol_map[sym] = new_sym;
-}
-
-static void gen_save_target_symbol(ST *sym)
-{
-    Is_True( ST_sclass(sym) == SCLASS_PSTATIC || currentpu_ismain(),
-            ("sym storage class should be SCLASS_PSTATIC"));
-
-    char *new_sym_str = (char *) alloca(strlen("__SAVE_TARGET_") +
-                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
-                + 20);
-
-    sprintf( new_sym_str, "__SAVE_TARGET_%s_%s_%lu",
-            ST_name(Get_Current_PU_ST()), ST_name(sym),
-            (unsigned long) TY_size(ST_type(sym)));
-
-    /* make symbol name a legal variable identifier */
-    char *s = new_sym_str;
-    for (int i = 0; i < strlen(new_sym_str); i++) {
-        if (s[i] == '.') s[i] = '_';
-    }
-
-    ST *new_sym = New_ST( GLOBAL_SYMTAB );
-    ST_Init( new_sym, Save_Str(new_sym_str), CLASS_VAR, SCLASS_EXTERN,
-            EXPORT_PREEMPTIBLE, Make_Pointer_Type(ST_type(sym)) );
-
-    save_target_symbol_map[sym] = new_sym;
-}
-
 static void gen_auto_target_symbol(ST *sym)
 {
     char *new_sym_str = (char *) alloca(strlen("__targptr_") +
@@ -5559,46 +5522,61 @@ static void gen_auto_target_symbol(ST *sym)
     auto_target_symbol_map[sym] = new_sym;
 }
 
-static void gen_global_save_coarray_symbol(ST *sym)
+static inline void gen_save_coarray_symbol(ST *sym)
 {
-    Is_True( ST_sclass(sym) == SCLASS_COMMON ||
-             ST_sclass(sym) == SCLASS_DGLOBAL,
-            ("sym storage class should be SCLASS_COMMON or SCLASS_DGLOBAL"));
+    Is_True( ST_sclass(sym) == SCLASS_PSTATIC,
+            ("sym storage class should be SCLASS_PSTATIC"));
 
-    char *new_sym_str = (char *) alloca(strlen("__SAVE_COARRAY_") +
-            strlen(ST_name(sym)) + strlen(ST_name(ST_base(sym)))
-            + 20);
-
-    sprintf( new_sym_str, "__SAVE_COARRAY_%s_%s_%lu",
-            ST_name(ST_base(sym)), ST_name(sym),
-            (unsigned long) TY_size(ST_type(sym)));
-
-    /* make symbol name a legal variable identifier */
-    char *s = new_sym_str;
-    for (int i = 0; i < strlen(new_sym_str); i++) {
-        if (s[i] == '.') s[i] = '_';
-    }
-
-    ST *new_sym = New_ST( GLOBAL_SYMTAB );
-    ST_Init( new_sym, Save_Str(new_sym_str), CLASS_VAR, SCLASS_EXTERN,
-            EXPORT_PREEMPTIBLE, Make_Pointer_Type(ST_type(sym)) );
-
-    common_save_coarray_symbol_map[sym] = new_sym;
+    save_coarray_symbol_map[sym] = gen_save_symm_symbol(sym);
 }
 
-static void gen_global_save_target_symbol(ST *sym)
+static inline void gen_save_target_symbol(ST *sym)
+{
+    Is_True( ST_sclass(sym) == SCLASS_PSTATIC || currentpu_ismain(),
+            ("sym storage class should be SCLASS_PSTATIC"));
+
+    save_target_symbol_map[sym] = gen_save_symm_symbol(sym);
+}
+
+static inline void gen_global_save_coarray_symbol(ST *sym)
 {
     Is_True( ST_sclass(sym) == SCLASS_COMMON ||
              ST_sclass(sym) == SCLASS_DGLOBAL,
             ("sym storage class should be SCLASS_COMMON or SCLASS_DGLOBAL"));
 
-    char *new_sym_str = (char *) alloca(strlen("__SAVE_TARGET_") +
-            strlen(ST_name(sym)) + strlen(ST_name(ST_base(sym)))
-            + 20);
+    common_save_coarray_symbol_map[sym] = gen_save_symm_symbol(sym);
+}
 
-    sprintf( new_sym_str, "__SAVE_TARGET_%s_%s_%lu",
-            ST_name(ST_base(sym)), ST_name(sym),
-            (unsigned long) TY_size(ST_type(sym)));
+static inline void gen_global_save_target_symbol(ST *sym)
+{
+    Is_True( ST_sclass(sym) == SCLASS_COMMON ||
+             ST_sclass(sym) == SCLASS_DGLOBAL,
+            ("sym storage class should be SCLASS_COMMON or SCLASS_DGLOBAL"));
+
+    common_save_target_symbol_map[sym] = gen_save_symm_symbol(sym);
+}
+
+static ST* gen_save_symm_symbol(ST *sym)
+{
+    char *new_sym_str;
+
+    if (ST_is_initialized(sym)) {
+        new_sym_str = (char *) alloca(strlen("__SAVE_INIT_SYMM") +
+                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
+                + 20);
+
+        sprintf( new_sym_str, "__SAVE_INIT_SYMM_%s_%s_%lu",
+                ST_name(Get_Current_PU_ST()), ST_name(sym),
+                (unsigned long) TY_size(ST_type(sym)));
+    } else {
+        new_sym_str = (char *) alloca(strlen("__SAVE_SYMM_") +
+                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
+                + 20);
+
+        sprintf( new_sym_str, "__SAVE_SYMM_%s_%s_%lu",
+                ST_name(Get_Current_PU_ST()), ST_name(sym),
+                (unsigned long) TY_size(ST_type(sym)));
+    }
 
     /* make symbol name a legal variable identifier */
     char *s = new_sym_str;
@@ -5610,7 +5588,38 @@ static void gen_global_save_target_symbol(ST *sym)
     ST_Init( new_sym, Save_Str(new_sym_str), CLASS_VAR, SCLASS_EXTERN,
             EXPORT_PREEMPTIBLE, Make_Pointer_Type(ST_type(sym)) );
 
-    common_save_target_symbol_map[sym] = new_sym;
+    /* if symbol is initialized, then we also generate a global pointer symbol
+     * to it */
+    if (ST_is_initialized(sym)) {
+        char *str = (char *) alloca(8 + strlen(ST_name(sym)) +
+                     strlen(ST_name(Get_Current_PU_ST())));
+
+        sprintf( str, "__%s_%s_ptr", ST_name(Get_Current_PU_ST()),
+                 ST_name(sym));
+
+        /* make symbol name a legal variable identifier */
+        char *s = str;
+        for (int i = 0; i < strlen(str); i++) {
+            if (s[i] == '.') s[i] = '_';
+        }
+
+        ST *new_sym_ptr = New_ST( GLOBAL_SYMTAB );
+
+        ST_Init( new_sym_ptr, Save_Str(str), CLASS_VAR, SCLASS_DGLOBAL,
+                EXPORT_PREEMPTIBLE, MTYPE_To_TY(Pointer_type) );
+        Set_ST_is_initialized(new_sym_ptr);
+
+        Allocate_Object(new_sym_ptr);
+
+        INITO_IDX new_inito = New_INITO (new_sym_ptr);
+        INITV_IDX inv = New_INITV();
+        INITV_Init_Symoff(inv, ST_base(sym), sym->offset);
+        Set_ST_initv_in_other_st(sym);
+        Set_INITV_next(inv, 0);
+        Set_INITO_val(new_inito, inv);
+    }
+
+    return new_sym;
 }
 
 /*
