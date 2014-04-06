@@ -885,6 +885,9 @@ static void init_cmd_line (void)
 {
    int	idx;
    char	*u_option;
+#ifdef _UH_COARRAYS
+   char *comm_layer;
+#endif
 
    TRACE (Func_Entry, "init_cmd_line", NULL);
 
@@ -1124,6 +1127,15 @@ static void init_cmd_line (void)
 #ifdef KEY /* Bug 8117 */
    dump_flags.arg_passing		= FALSE;
 #endif /* KEY Bug 8117 */
+   dump_flags.target_realloc	= FALSE;
+
+#ifdef _UH_COARRAYS
+   /* always enable target realloc option when using ARMCI runtime */
+   comm_layer = getenv("OPENUH_COMM_LAYER");
+   if (comm_layer && strcmp(comm_layer, "armci") == 0) {
+       dump_flags.target_realloc = TRUE;
+   }
+#endif
 
    /* Set defaults for -Y CCG option flags.                                   */
 
@@ -3877,6 +3889,12 @@ static void process_u_option (char *optargs)
          cmd_line_flags.co_array_fortran	= TRUE;
          dump_flags.fmm1 = TRUE;
          non_debug_ok		= TRUE;
+      }
+# endif
+# if defined(_UH_COARRAYS)
+      else if (EQUAL_STRS(cp, "target_realloc")) {
+         dump_flags.target_realloc = TRUE;
+         non_debug_ok = TRUE;
       }
 # endif
       else if (EQUAL_STRS(cp, "no_mod_output")) {	/* For inlinefrom     */

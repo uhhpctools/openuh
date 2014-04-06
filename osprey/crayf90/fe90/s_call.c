@@ -4265,7 +4265,9 @@ boolean final_arg_work(opnd_type	*list_opnd,
        * also whether there are coarrays in the scope of the called routine,
        * and if not avoid this copyin/copyout code. */
       copy_check = 0;
-      target_realloc = cmd_line_flags.co_array_fortran && dummy &&
+      target_realloc = dump_flags.target_realloc &&
+                       cmd_line_flags.co_array_fortran &&
+                       dummy &&
                       AT_OBJ_CLASS(dummy) == Data_Obj && ATD_TARGET(dummy) &&
                       !ATD_TARGET(attr_idx) && !ATD_POINTER(attr_idx) &&
                       !ATD_PE_ARRAY_IDX(attr_idx);
