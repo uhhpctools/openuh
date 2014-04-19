@@ -268,8 +268,13 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Atan2d_Intrinsic,
 				Atand_Intrinsic,
 #ifdef _UH_COARRAYS
+                Atomic_Add_Intrinsic,
+                Atomic_And_Intrinsic,
+                Atomic_Cas_Intrinsic,
                 Atomic_Define_Intrinsic,
+                Atomic_Or_Intrinsic,
                 Atomic_Ref_Intrinsic,
+                Atomic_Xor_Intrinsic,
 #endif
 				Bitest_Intrinsic,
 				Bit_Size_Intrinsic,

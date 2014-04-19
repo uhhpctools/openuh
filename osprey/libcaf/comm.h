@@ -52,6 +52,14 @@ enum {
     STAT_STOPPED_IMAGE = 104
 } status_codes;
 
+/* different types of atomic operations */
+typedef enum {
+  ATOMIC_ADD = 0,
+  ATOMIC_AND = 1,
+  ATOMIC_OR = 2,
+  ATOMIC_XOR = 3
+} atomic_op_t;
+
 /* different types of sync images algorithms */
 typedef enum {
   SYNC_COUNTER = 0,
@@ -126,6 +134,9 @@ void comm_strided_write(size_t proc,
                         size_t stride_levels, int ordered,
                         comm_handle_t * hdl);
 
+void comm_atomic_define(size_t proc, INT8 *atom, INT8 val);
+void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom);
+
 /* TODO: vector, non-contiguous read and write operations  */
 
 
@@ -182,6 +193,15 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
 void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                        void *retval);
 void comm_add_request(void *target, void *value, size_t nbytes, int proc);
+void comm_fand_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval);
+void comm_and_request(void *target, void *value, size_t nbytes, int proc);
+void comm_for_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval);
+void comm_or_request(void *target, void *value, size_t nbytes, int proc);
+void comm_fxor_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval);
+void comm_xor_request(void *target, void *value, size_t nbytes, int proc);
 
 /* progress */
 void comm_service();

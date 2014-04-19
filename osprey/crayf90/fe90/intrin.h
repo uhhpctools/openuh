@@ -1457,6 +1457,65 @@ intrin_tbl_type         intrin_tbl[] =
    {"ATAND",5,1,1,0,0,0,0,0,1,0,Atand_Intrinsic,Real_4,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,REAL_MASK,0},
 #ifdef _UH_COARRAYS
+{"ATOMIC_ADD",13,0,0,0,0,0,0,1,0,4,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_ADD_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Add_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_ADD_2", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Add_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_ADD_4", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Add_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_ADD_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Add_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+{"ATOMIC_AND",13,0,0,0,0,0,0,1,0,4,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_AND_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_And_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_AND_2", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_And_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_AND_4", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_And_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_AND_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_And_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+{"ATOMIC_CAS",13,0,0,0,0,0,0,1,0,2,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_CAS", 11, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Cas_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"COMPARE", 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"NEW", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    /* LOGICAL */
+    {"_ATOMIC_CAS", 11, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Cas_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"COMPARE", 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"NEW", 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
 {"ATOMIC_DEFINE",13,0,0,0,0,0,0,1,0,8,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
     /* INT */
     {"_ATOMIC_DEFINE_1", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
@@ -1492,6 +1551,28 @@ intrin_tbl_type         intrin_tbl[] =
       {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
       {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
       {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+{"ATOMIC_OR",13,0,0,0,0,0,0,1,0,4,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_OR_1", 12, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Or_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_OR_2", 12, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Or_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_OR_4", 12, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Or_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_OR_8", 12, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Or_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
 {"ATOMIC_REF",10,0,0,0,0,0,0,1,0,8,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
     /* INT */
     {"_ATOMIC_REF_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
@@ -1526,6 +1607,28 @@ intrin_tbl_type         intrin_tbl[] =
     {"_ATOMIC_REF_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
       {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
       {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+{"ATOMIC_XOR",13,0,0,0,0,0,0,1,0,4,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_XOR_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Xor_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_XOR_2", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Xor_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_XOR_4", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Xor_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_XOR_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Xor_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"OLD", 3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I8_MASK, 0},
       {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
 #endif
 #ifdef KEY /* Bug 1683 */
@@ -16283,8 +16386,13 @@ void	(*intrinsic_semantics[]) ()	= {
 	atan2_intrinsic,        	/*  Atan2d_Intrinsic          	     */
 	sin_intrinsic,	         	/*  Atand_Intrinsic          	     */
 #ifdef _UH_COARRAYS
+	atomic_intrinsic,        	/*  Atomic_Add_Intrinsic     	 */
+	atomic_intrinsic,        	/*  Atomic_And_Intrinsic     	 */
+	atomic_intrinsic,        	/*  Atomic_Cas_Intrinsic     	 */
 	atomic_intrinsic,        	/*  Atomic_Define_Intrinsic     	 */
+	atomic_intrinsic,        	/*  Atomic_Or_Intrinsic     	 */
 	atomic_intrinsic,	       	/*  Atomic_Ref_Intrinsic       	     */
+	atomic_intrinsic,        	/*  Atomic_Xor_Intrinsic     	 */
 #endif
 	btest_intrinsic,     		/*  Bitest_Intrinsic      	     */
 	bit_size_intrinsic,     	/*  Bit_Size_Intrinsic      	     */

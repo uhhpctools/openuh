@@ -2245,7 +2245,6 @@ void
 comm_cswap_request(void *target, void *cond, void *value,
                    size_t nbytes, int proc, void *retval)
 {
-    check_remote_address(proc + 1, target);
     /* TODO */
     Error("comm_cswap_request not implemented for ARMCI comm layer");
 }
@@ -2304,6 +2303,71 @@ void comm_add_request(void *target, void *value, size_t nbytes, int proc)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
+
+void comm_fand_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_fand_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_and_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_and_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+void comm_for_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval)
+{
+    long long old;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_for_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_or_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_or_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+void comm_fxor_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval)
+{
+    long long old;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_fxor_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_xor_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* TODO */
+    Error("comm_xor_request not implemented for ARMCI comm layer");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+
 void comm_fstore_request(void *target, void *value, size_t nbytes,
                          int proc, void *retval)
 {
@@ -2327,6 +2391,33 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_fstore_request",
+                (unsigned long) nbytes);
+        Error(msg);
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_atomic_store_request(void *target, void *value, size_t nbytes,
+                               int proc)
+{
+    long long old;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    check_remote_address(proc + 1, target);
+    memmove(&old, value, nbytes);
+    if (nbytes == sizeof(int)) {
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw(ARMCI_SWAP, value, remote_address, 0, proc);
+        memmove(value, &old, nbytes);
+    } else if (nbytes == sizeof(long)) {
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw(ARMCI_SWAP_LONG, value, remote_address, 0, proc);
+        memmove(value, &old, nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%lu) in comm_atomic_store_request",
                 (unsigned long) nbytes);
         Error(msg);
     }
@@ -2407,6 +2498,25 @@ void comm_service()
     count++;
 }
 
+void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    comm_atomic_store_request(atom, &val, sizeof val, proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom)
+{
+    INT8 x;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    x = 0;
+    comm_fadd_request(atom, &x, sizeof *val, proc, val);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
 
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl)
