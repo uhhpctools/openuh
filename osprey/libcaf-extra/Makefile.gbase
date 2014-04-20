@@ -46,6 +46,11 @@ VPATH    =  $(SRC_DIRS)
 
 
 OBJECTS = \
+	reduce.o \
+	co_sum_wrapper.o \
+	co_prod_wrapper.o \
+	co_min_wrapper.o \
+	co_max_wrapper.o \
 	caf_reductions.o \
 	caf_reductions_1d.o \
 	caf_broadcasts.o \

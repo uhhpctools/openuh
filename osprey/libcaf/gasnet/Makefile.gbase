@@ -94,27 +94,39 @@ ifeq ($(CAFRT_ENABLE_PROFILES), YES)
 CFILES += profile.c
 endif
 
-LCINCS += -I$(GASNET_HOME)/include 
+LCINCS += -I$(GASNET_HOME)/include
 LCINCS += -I$(GASNET_HOME)/include/$(GASNET_CONDUIT)-conduit
 LCDEFS += -DGASNET # -DPERM_ANAL
 
+# MPI is available for these supported conduits
 ifeq ($(GASNET_CONDUIT),ibv)
-LCDEFS += -DGASNET_CONDUIT_IBV
+LCDEFS += -DGASNET_CONDUIT_IBV -DMPI_AVAIL
 endif
 ifeq ($(GASNET_CONDUIT),vapi)
-LCDEFS += -DGASNET_CONDUIT_VAPI
-endif
-ifeq ($(GASNET_CONDUIT),gemini)
-LCDEFS += -DGASNET_CONDUIT_GEMINI
+LCDEFS += -DGASNET_CONDUIT_VAPI -DMPI_AVAIL
 endif
 ifeq ($(GASNET_CONDUIT),mpi)
-LCDEFS += -DGASNET_CONDUIT_MPI
+LCDEFS += -DGASNET_CONDUIT_MPI -DMPI_AVAIL
 ifneq ($(BUILD_TYPE), NONSHARED)
 LCOPTS += -fPIC
 endif
 endif
+ifeq ($(GASNET_CONDUIT),gemini)
+LCDEFS += -DGASNET_CONDUIT_GEMINI -DMPI_AVAIL
+endif
+
+# these supported conduits don't ensure MPI availability
+ifeq ($(GASNET_CONDUIT),udp)
+LCDEFS += -DGASNET_CONDUIT_UDP
+endif
+ifeq ($(GASNET_CONDUIT),SMP)
+LCDEFS += -DGASNET_CONDUIT_SMP
+endif
 
 default: $(TARGETS)
+
+reduce.o : reduce.caf
+	$(uhcaf) -c $(FFLAGS_NOLANG) $(F90FLAGS) $<
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^

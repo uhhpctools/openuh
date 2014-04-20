@@ -63,6 +63,11 @@ extern int rma_prof_rid;
  * asymmetric data. */
 extern shared_memory_slot_t *common_slot;
 
+extern int enable_collectives_1sided;
+extern int mpi_collectives_available;
+extern void *collectives_buffer;
+extern size_t collectives_bufsize;
+
 /*
  * Static Variable declarations
  */
@@ -190,7 +195,8 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       char *errmsg, int errmsg_len);
 
 void set_static_symm_data(void *base_address, size_t alignment);
-unsigned long get_static_symm_size(size_t alignment);
+unsigned long get_static_symm_size(size_t alignment,
+                                   size_t collectives_bufsize);
 
 
 /* must call comm_init() first */
@@ -399,6 +405,7 @@ void comm_init()
     char **argv;
     unsigned long caf_shared_memory_size;
     unsigned long image_heap_size;
+    size_t collectives_offset;
     armci_handle_x_t *p;
     shared_memory_slot_t *common_shared_memory_slot;
 
@@ -421,8 +428,12 @@ void comm_init()
      * add that as well (treat is as part of save coarray memory).
      */
 
-    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment);
+    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
+                                                       collectives_bufsize);
     static_symm_data_total_size += sizeof(void *);
+
+    collectives_offset = static_symm_data_total_size -
+      ((collectives_bufsize-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
 
     if (static_symm_data_total_size % alloc_byte_alignment) {
         static_symm_data_total_size =
@@ -624,6 +635,11 @@ void comm_init()
 
     allocate_static_symm_data((char *) coarray_start_all_images[my_proc]
                               + sizeof(void *));
+
+    /* set collectives buffer */
+    collectives_buffer = coarray_start_all_images[my_proc] +
+                         collectives_offset;
+
     nb_mgr[PUTS].handles = (struct handle_list **) malloc
         (num_procs * sizeof(struct handle_list *));
     nb_mgr[PUTS].num_handles = 0;
@@ -719,6 +735,12 @@ void comm_init()
     sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
             num_procs * sizeof(sync_flag_t), NULL);
     memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
+
+    /* check whether to use 1-sided collectives implementation */
+    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
+                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+
+    mpi_collectives_available = 1;
 
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
@@ -1534,9 +1556,10 @@ void set_static_symm_data_(void *base_address, size_t alignment)
 
 #pragma weak set_static_symm_data = set_static_symm_data_
 
-unsigned long get_static_symm_size_(size_t alignment)
+unsigned long get_static_symm_size_(size_t alignment,
+                                    size_t collectives_bufsize)
 {
-    return 0;
+    return ((collectives_bufsize-1)/alignment+1)*alignment;
 }
 
 #pragma weak get_static_symm_size = get_static_symm_size_
@@ -2496,6 +2519,28 @@ void comm_service()
 
     if (count % SLEEP_INTERVAL == 0) usleep(1);
     count++;
+}
+
+void comm_poll_char_while_nonzero(char *c)
+{
+  char val;
+
+  val = *c;
+  while (val != 0) {
+    comm_service();
+    val = *c;
+  }
+}
+
+void comm_poll_char_while_zero(char *c)
+{
+  char val;
+
+  val = *c;
+  while (val == 0) {
+    comm_service();
+    val = *c;
+  }
 }
 
 void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)

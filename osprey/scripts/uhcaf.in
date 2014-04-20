@@ -223,7 +223,7 @@ write_set_static_symm_data()
   done
   echo "}" >> $set_static_symm_data.c
   echo "" >> $set_static_symm_data.c
-  echo "unsigned long get_static_symm_size ( size_t alignment)" >> $set_static_symm_data.c
+  echo "unsigned long get_static_symm_size (size_t alignment, size_t collectives_bufsize)" >> $set_static_symm_data.c
   echo "{" >> $set_static_symm_data.c
   echo "  unsigned long offset = 0;" >> $set_static_symm_data.c
   for i in `seq 0 $((${#args[@]}-1))`; do
@@ -231,6 +231,7 @@ write_set_static_symm_data()
       size=${symm_data_name##*_}
       echo "   offset += (($size-1)/alignment+1)*alignment;" >> $set_static_symm_data.c
   done
+  echo "   offset += ((collectives_bufsize-1)/alignment+1)*alignment;" >> $set_static_symm_data.c
   echo "  return offset;" >> $set_static_symm_data.c
   echo "}" >> $set_static_symm_data.c
 }

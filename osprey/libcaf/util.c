@@ -154,6 +154,7 @@ void uhcaf_debug_dope(DopeVectorType *dopev)
 
     sprintf(str, "dope vector: \n");
     sprintf(&str[strlen(str)], "  base address: %p\n", dopev->base_addr.a.ptr);
+    sprintf(&str[strlen(str)], "     elem len : %ld\n", (long) dopev->base_addr.a.el_len >> 3);
     sprintf(&str[strlen(str)], "         assoc: %d\n", dopev->assoc);
     sprintf(&str[strlen(str)], "     ptr_alloc: %d\n", dopev->ptr_alloc);
     sprintf(&str[strlen(str)], "        p_or_a: %d\n", dopev->p_or_a);
@@ -166,7 +167,6 @@ void uhcaf_debug_dope(DopeVectorType *dopev)
     sprintf(&str[strlen(str)], "        dpflag: %d\n", dopev->type_lens.dpflag);
     sprintf(&str[strlen(str)], "  kind_or_star: %d\n", dopev->type_lens.kind_or_star);
     sprintf(&str[strlen(str)], "       int_len: %d\n", dopev->type_lens.int_len);
-    sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
     sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
     sprintf(&str[strlen(str)], "     orig_base: %p\n", dopev->orig_base);
     sprintf(&str[strlen(str)], "     orig_size: %ld\n", dopev->orig_size);
