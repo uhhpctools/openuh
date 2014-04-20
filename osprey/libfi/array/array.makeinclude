@@ -43,6 +43,7 @@ CFILES += \
 	count_gen.c \
 	cshift_gen.c \
 	eoshift_gen.c \
+	is_contiguous.c \
 	lbound.c \
 	maxloc_gen.c \
 	maxval0_gen.c \
@@ -54,6 +55,7 @@ CFILES += \
 	reshape_gen.c \
 	shape.c \
 	size.c \
+	sizeof.c \
 	spread_gen.c \
 	trans_gen.c \
 	transfer_gen.c \

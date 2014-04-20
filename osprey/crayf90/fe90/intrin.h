@@ -6014,6 +6014,9 @@ intrin_tbl_type         intrin_tbl[] =
    {"__isatty_f90",12,0,1,0,1,0,0,0,1,0,Pathf90_Intrinsic,Logical_4,0},
       {"UNIT",4,0,0,0,0,0,0,0,0,0,0,I4_MASK,0},
 #endif /* KEY Bug 1683 */
+{"IS_CONTIGUOUS",13,0,1,0,1,0,0,1,0,28,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
+   {"_IS_CONTIGUOUS",14,0,1,0,1,0,0,0,0,0,Is_Contiguous_Intrinsic,Logical_4,0},
+      {"ARRAY",5,0,0,0,0,0,1,0,0,1,0,ALL_MASK,0},
 {"ISHA",4,1,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
    {"ISHA",4,1,1,0,0,0,0,0,0,0,Isha_Intrinsic,0,0},
       {"I",1,0,0,0,0,0,0,0,0,0,0,INTEGER_TYPELESS_MASK,0},
@@ -16635,6 +16638,7 @@ void	(*intrinsic_semantics[]) ()	= {
 	int_intrinsic,			/*  Iqint_Intrinsic          	     */
 	nint_intrinsic,			/*  Iqnint_Intrinsic          	     */
 	rtc_intrinsic,			/*  Irtc_Intrinsic          	     */
+	is_contiguous_intrinsic,	/*  Is_Contiguous_Intrinsic          */
 	ishft_intrinsic,		/*  Isha_Intrinsic          	     */
 	ishftc_intrinsic,		/*  Ishc_Intrinsic          	     */
 	ishft_intrinsic,        	/*  Ishft_Intrinsic         	     */

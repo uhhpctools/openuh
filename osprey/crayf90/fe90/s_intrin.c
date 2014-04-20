@@ -15944,6 +15944,38 @@ void    shape_intrinsic(opnd_type     *result_opnd,
 
 }  /* shape_intrinsic */
 
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      Function    IS_CONTIGUOUS(SOURCE) intrinsic.                          *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void    is_contiguous_intrinsic(opnd_type     *result_opnd,
+                        expr_arg_type *res_exp_desc,
+                        int           *spec_idx)
+{
+
+
+   TRACE (Func_Entry, "is_contiguous_intrinsic", NULL);
+
+
+   TRACE (Func_Exit, "is_contiguous_intrinsic", NULL);
+
+}  /* is_contiguous_intrinsic */
+
+
+
 
 /******************************************************************************\
 |*                                                                            *|
