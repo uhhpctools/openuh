@@ -29,7 +29,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "utlist.h"
+#include "collectives.h"
 #include "caf_rtl.h"
 #include "comm.h"
 #include "util.h"
@@ -118,8 +120,13 @@ void profile_stats_init()
     memset(rma_node_stats, 0, _num_images * sizeof(rma_info_t));
 
     if (_this_image == 1) {
-        FILE *fp = fopen("cafrun-stats.out", "w");
-        fprintf(fp, "%s \t %s \t %s \t %s \t %s \t %s \t %s \t %s \t %s \t %s\n",
+        char fn[30];
+        snprintf(fn, 30, "cafrun-stats.%d.out", getpid());
+        FILE *fp = fopen(fn, "w");
+        if (fp == NULL) {
+          Error("Can not open %s for statistical output\n", fn);
+        }
+        fprintf(fp, "%7s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n",
                 "id", "node", "target node", "#gets",
                 "avg get size", "#puts", "avg put size",
                 "cache #hit", "cache #miss", "cache #writes" );
@@ -131,16 +138,27 @@ void profile_stats_init()
 
 void profile_stats_dump()
 {
+    char fn[30];
     FILE *fp;
 
     if (!stats_enabled)
         return;
+    int pid;
+
+    if (_this_image == 1) {
+      pid = getpid();
+    }
+    co_broadcast_from_root(&pid, sizeof(pid), 1);
+    snprintf(fn, 30, "cafrun-stats.%d.out", pid);
 
     /* each image writes its stats into the output file */
 
     comm_critical();
 
-    fp = fopen("cafrun-stats.out", "a");
+    fp = fopen(fn, "a");
+    if (fp == NULL) {
+      Error("Can not open %s for statistical output\n", fn);
+    }
 
     int i;
     for (i = 0; i < _num_images; i++) {
@@ -169,8 +187,8 @@ void profile_stats_dump()
         else
             put_avg_size = 0;
 
-        fprintf(fp, "%ld \t %d \t %d \t %ld \t %8.0lf \t %ld \t %8.0lf "
-                     "\t %ld \t %ld \t %ld\n",
+        fprintf(fp, "%7ld %12d %12d %12ld %12.0lf %12ld %12.0lf "
+                     "%12ld %12ld %12ld\n",
                 _this_image-1, my_node_id, i,
                 get_rma_count, get_avg_size,
                 put_rma_count, put_avg_size,

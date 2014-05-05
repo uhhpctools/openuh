@@ -82,6 +82,11 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                                caf_reduction_op_t *op);
 
 
+void CO_BROADCAST__(void *source, INTEGER4 * source_image,
+                    INTEGER4 * stat, char * errmsg, DopeVectorType *source_dv,
+                    int charlen);
+
+void co_broadcast_from_root(void *source, size_t sz, int source_image);
 
 /* CO_BCAST */
 
