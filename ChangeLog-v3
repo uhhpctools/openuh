@@ -8,6 +8,25 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-05-05: (3.0.36)
+
+* misc. improvements/fixes for CAF
+  * performance improvements for SYNC IMAGES
+  * corrects atomic behavior for ATOMIC_DEFINE and ATOMIC_REF
+  * partial suppot for intrinsic routines described in N2007:
+	* adds support for ATOMIC_ADD, ATOMIC_AND, ATOMIC_OR, ATOMIC_XOR, and
+	  ATOMIC_CAS
+	* adds improved collectives support. CO_SUM, CO_MAX, CO_MIN, as well as
+	  CO_BROADCAST and non-standard CO_PRODUCT.
+	* old reduction and broadcast implementations are still available but
+	  deprecated, using CO_SUM_OLD, CO_PRODUCT_OLD, CO_MAXVAL, CO_MINVAL, and
+	  CO_BCAST.
+
+* other improvements
+  * adds support for IS_CONTIGUOUS intrinsic and non-standard SIZEOF intrinsic
+
+----------------------------------------------------------------------------
+
 2014-03-17: (3.0.35)
 
 * misc. improvements/fixes for CAF

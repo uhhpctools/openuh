@@ -4331,6 +4331,7 @@ void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     x = 0;
+    comm_service();
     comm_fadd_request(atom, &x, sizeof *val, proc, val);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");

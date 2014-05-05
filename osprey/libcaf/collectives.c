@@ -305,7 +305,7 @@ _CO_REDUCE(PRODUCT, C8,      product, c8)
 
 #define MIN(x,y) ( (x<y) ? (x) : (y) )
 
-//#define SEND_WITH_CANARY
+#define SEND_WITH_CANARY
 #define COMM_POLL
 
 void sum_reduce_int1__(void *, void *, int);
