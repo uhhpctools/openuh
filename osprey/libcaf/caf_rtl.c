@@ -669,21 +669,17 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
 
 void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *atom = (atomic_t) * value;
-    } else {
-        atomic_t t = (atomic_t) * value;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
-                       sizeof(atomic_t), 1, (void *) -1);
-    }
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
+                         atom, *value);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -691,21 +687,17 @@ void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
 
 void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *atom = (atomic_t) * value;
-    } else {
-        atomic_t t = (atomic_t) * value;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
-                       sizeof(atomic_t), 1, (void *) -1);
-    }
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
+                         atom, *value);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -713,21 +705,17 @@ void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
 
 void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *atom = (atomic_t) * value;
-    } else {
-        atomic_t t = (atomic_t) * value;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
-                       sizeof(atomic_t), 1, (void *) -1);
-    }
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
+                         atom, *value);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -735,21 +723,17 @@ void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image)
 
 void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *atom = (atomic_t) * value;
-    } else {
-        atomic_t t = (atomic_t) * value;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
-                       sizeof(atomic_t), 1, (void *) -1);
-    }
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
+                         atom, *value);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -757,23 +741,20 @@ void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image)
 
 void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
 {
+    INT8 val;
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *value = (INT1) * atom;
-    } else {
-        atomic_t t;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
-                       sizeof(atomic_t));
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
+                         atom);
 
-        *value = (INT1) t;
-    }
+    *value = (INT1) val;
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -781,23 +762,20 @@ void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
 
 void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
 {
+    INT8 val;
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *value = (INT2) * atom;
-    } else {
-        atomic_t t;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
-                       sizeof(atomic_t));
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
+                         atom);
 
-        *value = (INT2) t;
-    }
+    *value = (INT2) val;
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -805,23 +783,20 @@ void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
 
 void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
 {
+    INT8 val;
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *value = (atomic_t) * atom;
-    } else {
-        atomic_t t;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
-                       sizeof(atomic_t));
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
+                         atom);
 
-        *value = (INT4) t;
-    }
+    *value = (INT4) val;
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -829,23 +804,453 @@ void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
 
 void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image)
 {
+    INT8 val;
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0) {
-        /* local reference */
-        *value = (INT8) * atom;
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
+                         atom);
+
+    *value = (INT8) val;
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
     } else {
-        atomic_t t;
-        check_remote_image(*image);
-        check_remote_address(*image, atom);
-
-        /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
-                       sizeof(atomic_t));
-
-        *value = (INT8) t;
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
     }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fand_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fand_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fand_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fand_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_for_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_for_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_for_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_for_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fxor_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fxor_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fxor_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fxor_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_CAS(atomic_t * atom, atomic_t * oldval, atomic_t *compare,
+                 atomic_t *newval, int *image)
+{
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_cswap_request, atom,
+                         compare, newval, sizeof *newval, img-1, oldval);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");

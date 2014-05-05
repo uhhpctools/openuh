@@ -213,6 +213,9 @@ static void handler_get_request(gasnet_token_t token, void *buf,
 static void handler_get_reply(gasnet_token_t token, void *buf,
                               size_t bufsiz, gasnet_handlerarg_t unused);
 
+static void handler_atomic_store_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
 static void handler_sync_request(gasnet_token_t token, int imageIndex);
 
 static void
@@ -232,15 +235,39 @@ handler_cswap_reply(gasnet_token_t token,
                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
 
 static void
+handler_fop_reply(gasnet_token_t token,
+                  void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
 handler_fadd_request(gasnet_token_t token,
                      void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
 
 static void
-handler_fadd_reply(gasnet_token_t token,
-                   void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+handler_add_request(gasnet_token_t token,
+                    void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
 
 static void
-handler_add_request(gasnet_token_t token,
+handler_fand_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_and_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_for_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_or_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_fxor_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_xor_request(gasnet_token_t token,
                      void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
 
 static void *get_remote_address(void *src, size_t img);
@@ -518,13 +545,20 @@ static gasnet_handlerentry_t handlers[] = {
     {GASNET_HANDLER_SWAP_REPLY, handler_swap_reply},
     {GASNET_HANDLER_CSWAP_REQUEST, handler_cswap_request},
     {GASNET_HANDLER_CSWAP_REPLY, handler_cswap_reply},
+    {GASNET_HANDLER_FOP_REPLY, handler_fop_reply},
     {GASNET_HANDLER_FADD_REQUEST, handler_fadd_request},
-    {GASNET_HANDLER_FADD_REPLY, handler_fadd_reply},
     {GASNET_HANDLER_ADD_REQUEST, handler_add_request},
+    {GASNET_HANDLER_FAND_REQUEST, handler_fand_request},
+    {GASNET_HANDLER_AND_REQUEST, handler_and_request},
+    {GASNET_HANDLER_FOR_REQUEST, handler_for_request},
+    {GASNET_HANDLER_OR_REQUEST, handler_or_request},
+    {GASNET_HANDLER_FXOR_REQUEST, handler_fxor_request},
+    {GASNET_HANDLER_XOR_REQUEST, handler_xor_request},
     {GASNET_HANDLER_PUT_REQUEST, handler_put_request},
     {GASNET_HANDLER_PUT_REPLY, handler_put_reply},
     {GASNET_HANDLER_GET_REQUEST, handler_get_request},
-    {GASNET_HANDLER_GET_REPLY, handler_get_reply}
+    {GASNET_HANDLER_GET_REPLY, handler_get_reply},
+    {GASNET_HANDLER_ATOMIC_STORE_REQUEST, handler_atomic_store_request}
 };
 
 static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
@@ -639,6 +673,29 @@ handler_swap_request(gasnet_token_t token,
                           unused);
 }
 
+static void
+handler_atomic_store_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old;
+    swap_payload_t *pp = (swap_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        SYNC_SWAP((INT4 *) pp->r_symm_addr, (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        SYNC_SWAP((INT8 *) pp->r_symm_addr, (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        SYNC_SWAP((INT1 *) pp->r_symm_addr, (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        SYNC_SWAP((INT2 *) pp->r_symm_addr, (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_swap_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+}
+
 /*
  * called by swap invoker when old value returned by remote PE
  */
@@ -734,7 +791,32 @@ typedef struct {
     volatile int *completed_addr;       /* addr of marker */
     size_t nbytes;              /* how big the value is */
     long long value;            /* value to be added & then return old */
-} fadd_payload_t;
+} fop_payload_t;
+
+typedef struct {
+    void *r_symm_addr;          /* recipient symmetric var */
+    size_t nbytes;              /* how big the value is */
+    long long value;            /* value to be added & then return old */
+} op_payload_t;
+
+/*
+ * called by fop invoker when old value returned by remote PE
+ */
+static void
+handler_fop_reply(gasnet_token_t token,
+                   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    fop_payload_t *pp = (fop_payload_t *) buf;
+
+    /* save returned value */
+    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
+
+    LOAD_STORE_FENCE();
+
+    /* done it */
+    *(pp->completed_addr) = 1;
+
+}
 
 /*
  * called by remote PE to do the fetch and add.  Store new value, send
@@ -746,7 +828,7 @@ handler_fadd_request(gasnet_token_t token,
 {
     long long old = 0;
     long long plus = 0;
-    fadd_payload_t *pp = (fadd_payload_t *) buf;
+    fop_payload_t *pp = (fop_payload_t *) buf;
 
     if (pp->nbytes == sizeof(INT4)) {
         pp->value = SYNC_FETCH_AND_ADD((INT4 *) pp->r_symm_addr,
@@ -767,38 +849,9 @@ handler_fadd_request(gasnet_token_t token,
     }
 
     /* return updated payload */
-    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FADD_REPLY, buf, bufsiz,
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FOP_REPLY, buf, bufsiz,
                           unused);
 }
-
-/*
- * called by fadd invoker when old value returned by remote PE
- */
-static void
-handler_fadd_reply(gasnet_token_t token,
-                   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
-{
-    fadd_payload_t *pp = (fadd_payload_t *) buf;
-
-    /* save returned value */
-    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
-
-    LOAD_STORE_FENCE();
-
-    /* done it */
-    *(pp->completed_addr) = 1;
-
-}
-
-/*
- * add
- */
-
-typedef struct {
-    void *r_symm_addr;          /* recipient symmetric var */
-    size_t nbytes;              /* how big the value is */
-    long long value;            /* value to be added & then return old */
-} add_payload_t;
 
 /*
  * called by remote PE to do the atomic add.  Store new value. Don't bother
@@ -807,11 +860,11 @@ typedef struct {
 
 static void
 handler_add_request(gasnet_token_t token,
-                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+        void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
 {
     long long old = 0;
     long long plus = 0;
-    add_payload_t *pp = (add_payload_t *) buf;
+    op_payload_t *pp = (op_payload_t *) buf;
 
     if (pp->nbytes == sizeof(INT4)) {
         SYNC_FETCH_AND_ADD((INT4 *) pp->r_symm_addr, (INT4) pp->value);
@@ -823,10 +876,201 @@ handler_add_request(gasnet_token_t token,
         SYNC_FETCH_AND_ADD((INT2 *) pp->r_symm_addr, (INT2) pp->value);
     } else {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "comm_add_request doesn't allow nbytes = %d",
-                     pp->nbytes);
+                "comm_add_request doesn't allow nbytes = %d",
+                pp->nbytes);
     }
 }
+
+/*
+ * called by remote PE to do the fetch and and.  Store new value, send
+ * back old value
+ */
+static void
+handler_fand_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    fop_payload_t *pp = (fop_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        pp->value = SYNC_FETCH_AND_AND((INT4 *) pp->r_symm_addr,
+                                       (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        pp->value = SYNC_FETCH_AND_AND((INT8 *) pp->r_symm_addr,
+                                       (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        pp->value = SYNC_FETCH_AND_AND((INT1 *) pp->r_symm_addr,
+                                       (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        pp->value = SYNC_FETCH_AND_AND((INT2 *) pp->r_symm_addr,
+                                       (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_fand_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+    /* return updated payload */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FOP_REPLY, buf, bufsiz,
+                          unused);
+}
+
+/*
+ * called by remote PE to do the atomic or.  Store new value. Don't bother
+ * fetching, though.
+ */
+
+static void
+handler_and_request(gasnet_token_t token,
+        void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    op_payload_t *pp = (op_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        SYNC_FETCH_AND_AND((INT4 *) pp->r_symm_addr, (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        SYNC_FETCH_AND_AND((INT8 *) pp->r_symm_addr, (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        SYNC_FETCH_AND_AND((INT1 *) pp->r_symm_addr, (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        SYNC_FETCH_AND_ADD((INT2 *) pp->r_symm_addr, (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "comm_and_request doesn't allow nbytes = %d",
+                pp->nbytes);
+    }
+}
+
+/*
+ * called by remote PE to do the fetch and or.  Store new value, send
+ * back old value
+ */
+static void
+handler_for_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    fop_payload_t *pp = (fop_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        pp->value = SYNC_FETCH_AND_OR((INT4 *) pp->r_symm_addr,
+                                       (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        pp->value = SYNC_FETCH_AND_OR((INT8 *) pp->r_symm_addr,
+                                       (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        pp->value = SYNC_FETCH_AND_OR((INT1 *) pp->r_symm_addr,
+                                       (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        pp->value = SYNC_FETCH_AND_OR((INT2 *) pp->r_symm_addr,
+                                       (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_for_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+    /* return updated payload */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FOP_REPLY, buf, bufsiz,
+                          unused);
+}
+
+
+/*
+ * called by remote PE to do the atomic or.  Store new value. Don't bother
+ * fetching, though.
+ */
+
+static void
+handler_or_request(gasnet_token_t token,
+        void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    op_payload_t *pp = (op_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        SYNC_FETCH_AND_OR((INT4 *) pp->r_symm_addr, (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        SYNC_FETCH_AND_OR((INT8 *) pp->r_symm_addr, (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        SYNC_FETCH_AND_OR((INT1 *) pp->r_symm_addr, (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        SYNC_FETCH_AND_OR((INT2 *) pp->r_symm_addr, (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "comm_add_request doesn't allow nbytes = %d",
+                pp->nbytes);
+    }
+}
+
+/*
+ * called by remote PE to do the fetch and xor.  Store new value, send
+ * back old value
+ */
+static void
+handler_fxor_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    fop_payload_t *pp = (fop_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        pp->value = SYNC_FETCH_AND_XOR((INT4 *) pp->r_symm_addr,
+                                       (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        pp->value = SYNC_FETCH_AND_XOR((INT8 *) pp->r_symm_addr,
+                                       (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        pp->value = SYNC_FETCH_AND_XOR((INT1 *) pp->r_symm_addr,
+                                       (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        pp->value = SYNC_FETCH_AND_XOR((INT2 *) pp->r_symm_addr,
+                                       (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_fxor_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+    /* return updated payload */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FOP_REPLY, buf, bufsiz,
+                          unused);
+}
+
+/*
+ * called by remote PE to do the atomic xor.  Store new value. Don't bother
+ * fetching, though.
+ */
+
+static void
+handler_xor_request(gasnet_token_t token,
+        void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    op_payload_t *pp = (op_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        SYNC_FETCH_AND_XOR((INT4 *) pp->r_symm_addr, (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        SYNC_FETCH_AND_XOR((INT8 *) pp->r_symm_addr, (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        SYNC_FETCH_AND_XOR((INT1 *) pp->r_symm_addr, (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        SYNC_FETCH_AND_XOR((INT2 *) pp->r_symm_addr, (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "comm_xor_request doesn't allow nbytes = %d",
+                pp->nbytes);
+    }
+}
+
 
 
 /***************************************************************
@@ -931,6 +1175,20 @@ comm_swap_request(void *target, void *value, size_t nbytes,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
+void
+comm_fstore_request(void *target, void *value, size_t nbytes, int proc,
+                    void *retval)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    long long old;
+
+    check_for_error_stop();
+
+    memmove(&old, value, nbytes);
+    comm_swap_request(target, value, nbytes, proc, retval);
+    memmove(value, &old, nbytes);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
 
 
 /*
@@ -1043,6 +1301,95 @@ comm_cswap_request(void *target, void *cond, void *value,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
+/*
+ * perform an atomic store
+ * like swap, except ignore return value
+ */
+void
+comm_atomic_store_request(void *target, void *value, size_t nbytes,
+                  int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_SWAP((INT4 *) target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+             SYNC_SWAP((INT8 *) target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+             SYNC_SWAP((INT1 *) target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_SWAP((INT2 *) target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_atomic_store_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        /* target resides in the same compute node */
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_SWAP((INT4 *) new_target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_SWAP((INT8 *) new_target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_SWAP((INT1 *) new_target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_SWAP((INT2 *) new_target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_atomic_store_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        return;
+    }
+#endif
+
+    swap_payload_t *p = (swap_payload_t *) malloc(sizeof(*p));
+    if (p == (swap_payload_t *) NULL) {
+        Error("unable to allocate swap payload memory");
+    }
+    /* build payload to send */
+    p->local_store = value;
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    memmove(&(p->value), value, nbytes);
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_ATOMIC_STORE_REQUEST, p,
+                            sizeof(*p), 0);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
 
 /*
  * perform the fetch-and-add
@@ -1122,9 +1469,9 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
     }
 #endif
 
-    fadd_payload_t *p = (fadd_payload_t *) malloc(sizeof(*p));
+    fop_payload_t *p = (fop_payload_t *) malloc(sizeof(*p));
 
-    if (p == (fadd_payload_t *) NULL) {
+    if (p == (fop_payload_t *) NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
                      "unable to allocate fetch-and-add payload memory");
     }
@@ -1145,21 +1492,6 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
 
     free(p);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-}
-
-void
-comm_fstore_request(void *target, void *value, size_t nbytes, int proc,
-                    void *retval)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
-    long long old;
-
-    check_for_error_stop();
-
-    memmove(&old, value, nbytes);
-    comm_swap_request(target, value, nbytes, proc, retval);
-    memmove(value, &old, nbytes);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
@@ -1230,9 +1562,9 @@ comm_add_request(void *target, void *value, size_t nbytes, int proc)
     }
 #endif
 
-    add_payload_t *p = (add_payload_t *) malloc(sizeof(*p));
+    op_payload_t *p = (op_payload_t *) malloc(sizeof(*p));
 
-    if (p == (add_payload_t *) NULL) {
+    if (p == (op_payload_t *) NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
                      "unable to allocate add payload memory");
     }
@@ -1244,6 +1576,580 @@ comm_add_request(void *target, void *value, size_t nbytes, int proc)
 
     /* send and wait for ack */
     gasnet_AMRequestMedium1(proc, GASNET_HANDLER_ADD_REQUEST, p,
+                            sizeof(*p), 0);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/*
+ * perform the fetch-and-and
+ */
+void
+comm_fand_request(void *target, void *value, size_t nbytes, int proc,
+                  void *retval)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_AND((INT4 *) target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_AND((INT8 *) target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_AND((INT1 *) target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_AND((INT2 *) target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_fand_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_AND((INT4 *) new_target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_AND((INT8 *) new_target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_AND((INT1 *) new_target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_AND((INT2 *) new_target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_fand_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    fop_payload_t *p = (fop_payload_t *) malloc(sizeof(*p));
+
+    if (p == (fop_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate fetch-and-and payload memory");
+    }
+
+    /* build payload to send */
+    p->local_store = retval;
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_FAND_REQUEST, p,
+                            sizeof(*p), 0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/*
+ * perform the atomic increment
+ */
+void
+comm_and_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_AND((INT4 *) target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_AND((INT8 *) target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_AND((INT1 *) target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_AND((INT2 *) target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_and_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_AND((INT4 *) new_target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_AND((INT8 *) new_target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_AND((INT1 *) new_target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_AND((INT2 *) new_target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_and_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    op_payload_t *p = (op_payload_t *) malloc(sizeof(*p));
+
+    if (p == (op_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate and payload memory");
+    }
+
+    /* build payload to send */
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_AND_REQUEST, p,
+                            sizeof(*p), 0);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+/*
+ * perform the fetch-and-or
+ */
+void
+comm_for_request(void *target, void *value, size_t nbytes, int proc,
+                  void *retval)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_OR((INT4 *) target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_OR((INT8 *) target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_OR((INT1 *) target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_OR((INT2 *) target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_for_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_OR((INT4 *) new_target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_OR((INT8 *) new_target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_OR((INT1 *) new_target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_OR((INT2 *) new_target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_for_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    fop_payload_t *p = (fop_payload_t *) malloc(sizeof(*p));
+
+    if (p == (fop_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate fetch-and-or payload memory");
+    }
+
+    /* build payload to send */
+    p->local_store = retval;
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_FOR_REQUEST, p,
+                            sizeof(*p), 0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/*
+ * perform the atomic or
+ */
+void
+comm_or_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_OR((INT4 *) target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_OR((INT8 *) target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_OR((INT1 *) target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_OR((INT2 *) target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_or_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_OR((INT4 *) new_target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_OR((INT8 *) new_target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_OR((INT1 *) new_target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_OR((INT2 *) new_target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_or_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    op_payload_t *p = (op_payload_t *) malloc(sizeof(*p));
+
+    if (p == (op_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate add payload memory");
+    }
+
+    /* build payload to send */
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_OR_REQUEST, p,
+                            sizeof(*p), 0);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+/*
+ * perform the fetch-and-xor
+ */
+void
+comm_fxor_request(void *target, void *value, size_t nbytes, int proc,
+                  void *retval)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_XOR((INT4 *) target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_XOR((INT8 *) target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_XOR((INT1 *) target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_XOR((INT2 *) target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_fxor_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            *(INT4 *) retval = SYNC_FETCH_AND_XOR((INT4 *) new_target,
+                                                  *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            *(INT8 *) retval = SYNC_FETCH_AND_XOR((INT8 *) new_target,
+                                                  *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            *(INT1 *) retval = SYNC_FETCH_AND_XOR((INT1 *) new_target,
+                                                  *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            *(INT2 *) retval = SYNC_FETCH_AND_XOR((INT2 *) new_target,
+                                                  *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_fxor_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    fop_payload_t *p = (fop_payload_t *) malloc(sizeof(*p));
+
+    if (p == (fop_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate fetch-and-xor payload memory");
+    }
+
+    /* build payload to send */
+    p->local_store = retval;
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_FXOR_REQUEST, p,
+                            sizeof(*p), 0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+
+    free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/*
+ * perform the atomic xor
+ */
+void
+comm_xor_request(void *target, void *value, size_t nbytes, int proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    check_remote_address(proc + 1, target);
+
+    if (proc == my_proc) {
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_XOR((INT4 *) target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_XOR((INT8 *) target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_XOR((INT1 *) target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_XOR((INT2 *) target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_xor_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#if GASNET_PSHM
+    else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        void *new_target;
+
+        /* if target address falls outside the symmetric heap, we assume it is
+         * with respect to the address space of target image. Otherwise, we
+         * assume it is with respect to the local address space.
+         */
+        if (!address_in_symmetric_mem(target)) {
+            ssize_t ofst = node_info->offset;
+            new_target = (void *) ((uintptr_t) target + ofst);
+        } else {
+            ssize_t ofst = node_info->offset;
+            new_target =
+                (void *) ((uintptr_t) get_remote_address(target, proc) +
+                          ofst);
+        }
+
+        if (nbytes == sizeof(INT4)) {
+            SYNC_FETCH_AND_XOR((INT4 *) new_target, *(INT4 *) value);
+        } else if (nbytes == sizeof(INT8)) {
+            SYNC_FETCH_AND_XOR((INT8 *) new_target, *(INT8 *) value);
+        } else if (nbytes == sizeof(INT1)) {
+            SYNC_FETCH_AND_XOR((INT1 *) new_target, *(INT1 *) value);
+        } else if (nbytes == sizeof(INT2)) {
+            SYNC_FETCH_AND_XOR((INT2 *) new_target, *(INT2 *) value);
+        } else {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                         "comm_xor_request doesn't allow nbytes = %d",
+                         nbytes);
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+        return;
+    }
+#endif
+
+    op_payload_t *p = (op_payload_t *) malloc(sizeof(*p));
+
+    if (p == (op_payload_t *) NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unable to allocate xor payload memory");
+    }
+
+    /* build payload to send */
+    p->r_symm_addr = get_remote_address(target, proc);
+    p->nbytes = nbytes;
+    p->value = *(long long *) value;
+
+    /* send and wait for ack */
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_XOR_REQUEST, p,
                             sizeof(*p), 0);
 
     free(p);
@@ -3371,6 +4277,26 @@ void comm_service()
 {
     check_for_error_stop();
     GASNET_Safe(gasnet_AMPoll());
+}
+
+void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    comm_atomic_store_request(atom, &val, sizeof val, proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom)
+{
+    INT8 x;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    x = 0;
+    comm_fadd_request(atom, &x, sizeof *val, proc, val);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 

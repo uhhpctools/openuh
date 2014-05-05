@@ -36,6 +36,9 @@
 
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
+#define SYNC_FETCH_AND_AND(t,v) __sync_fetch_and_and(t,v)
+#define SYNC_FETCH_AND_OR(t,v) __sync_fetch_and_or(t,v)
+#define SYNC_FETCH_AND_XOR(t,v) __sync_fetch_and_xor(t,v)
 #define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)
 #define SYNC_CSWAP(t,u,v) __sync_val_compare_and_swap(t,u,v)
 
@@ -149,6 +152,24 @@ void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image);
 void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image);
 void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image);
 void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image);
+void _ATOMIC_ADD_1(atomic_t * atom, INT1 * value, atomic_t *old, int *image);
+void _ATOMIC_ADD_2(atomic_t * atom, INT2 * value, atomic_t *old, int *image);
+void _ATOMIC_ADD_4(atomic_t * atom, INT4 * value, atomic_t *old, int *image);
+void _ATOMIC_ADD_8(atomic_t * atom, INT8 * value, atomic_t *old, int *image);
+void _ATOMIC_AND_1(atomic_t * atom, INT1 * value, atomic_t *old, int *image);
+void _ATOMIC_AND_2(atomic_t * atom, INT2 * value, atomic_t *old, int *image);
+void _ATOMIC_AND_4(atomic_t * atom, INT4 * value, atomic_t *old, int *image);
+void _ATOMIC_AND_8(atomic_t * atom, INT8 * value, atomic_t *old, int *image);
+void _ATOMIC_OR_1(atomic_t * atom, INT1 * value, atomic_t *old, int *image);
+void _ATOMIC_OR_2(atomic_t * atom, INT2 * value, atomic_t *old, int *image);
+void _ATOMIC_OR_4(atomic_t * atom, INT4 * value, atomic_t *old, int *image);
+void _ATOMIC_OR_8(atomic_t * atom, INT8 * value, atomic_t *old, int *image);
+void _ATOMIC_XOR_1(atomic_t * atom, INT1 * value, atomic_t *old, int *image);
+void _ATOMIC_XOR_2(atomic_t * atom, INT2 * value, atomic_t *old, int *image);
+void _ATOMIC_XOR_4(atomic_t * atom, INT4 * value, atomic_t *old, int *image);
+void _ATOMIC_XOR_8(atomic_t * atom, INT8 * value, atomic_t *old, int *image);
+void _ATOMIC_CAS(atomic_t * atom, atomic_t * oldval, atomic_t *compare,
+                 atomic_t *newval, int *image);
 
 /* EVENTS SUPPORT */
 void _EVENT_POST(event_t * event, int *image);
