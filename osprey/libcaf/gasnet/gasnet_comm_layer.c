@@ -114,6 +114,11 @@ extern shared_memory_slot_t *common_slot;
 
 extern int out_of_segment_rma_enabled;
 
+extern int enable_collectives_1sided;
+extern int mpi_collectives_available;
+extern void *collectives_buffer;
+extern size_t collectives_bufsize;
+
 /*
  * Static variable declarations
  */
@@ -326,7 +331,8 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       char *errmsg, int errmsg_len);
 
 void set_static_symm_data(void *base_address, size_t alignment);
-unsigned long get_static_symm_size(size_t alignment);
+unsigned long get_static_symm_size(size_t alignment,
+                                   size_t collectives_bufsize);
 
 
 /* must call comm_init() first */
@@ -2224,6 +2230,7 @@ void comm_init()
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
     unsigned long image_heap_size;
+    size_t collectives_offset;
 
     shared_memory_slot_t *common_shared_memory_slot;
 
@@ -2242,7 +2249,14 @@ void comm_init()
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
 
-    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment);
+    /* get size for collectives buffer */
+    collectives_bufsize = get_env_size(ENV_COLLECTIVES_BUFSIZE,
+                                       DEFAULT_COLLECTIVES_BUFSIZE);
+
+    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
+                                                       collectives_bufsize);
+    collectives_offset = static_symm_data_total_size -
+      ((collectives_bufsize-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
 
     if (static_symm_data_total_size % alloc_byte_alignment) {
         static_symm_data_total_size =
@@ -2543,6 +2557,12 @@ void comm_init()
 
     allocate_static_symm_data(coarray_start_all_images[my_proc].addr);
 
+    /* set collectives buffer */
+    collectives_buffer = coarray_start_all_images[my_proc].addr +
+                         collectives_offset;
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "collectives_buffer = %p\n",
+                collectives_buffer);
+
     if (gasnet_everything) {
         everything_heap_start = coarray_start_all_images[my_proc].addr;
     }
@@ -2592,6 +2612,12 @@ void comm_init()
         num_procs * sizeof(sync_flag_t), NULL);
     memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
 
+    /* check whether to use 1-sided collectives implementation */
+    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
+                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+
+    /* enable 1-sided collectives MPI isn't already initialized */
+    mpi_collectives_available = mpi_initialized_by_gasnet;
 
     /* start progress thread */
     comm_service_init();
@@ -3291,9 +3317,10 @@ void set_static_symm_data_(void *base_address, size_t alignment)
 }
 #pragma weak set_static_symm_data = set_static_symm_data_
 
-unsigned long get_static_symm_size_(size_t alignment)
+unsigned long get_static_symm_size_(size_t alignment,
+                                    size_t collectives_bufsize)
 {
-    return 0;
+    return ((collectives_bufsize-1)/alignment+1)*alignment;
 }
 #pragma weak get_static_symm_size = get_static_symm_size_
 
@@ -4279,6 +4306,16 @@ void comm_service()
     GASNET_Safe(gasnet_AMPoll());
 }
 
+void comm_poll_char_while_nonzero(char *c)
+{
+  GASNET_BLOCKUNTIL((*c == 0));
+}
+
+void comm_poll_char_while_zero(char *c)
+{
+  GASNET_BLOCKUNTIL((*c != 0));
+}
+
 void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
@@ -4846,14 +4883,24 @@ void comm_write(size_t proc, void *dest, void *src,
 void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
 {
     void *remote_dest;
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     remote_dest = get_remote_address(dest, proc);
 
-    PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-    gasnet_put_nbi(proc, remote_dest, src, nbytes);
-    PROFILE_RMA_STORE_END(proc);
+    if (0 && shared_mem_rma_bypass &&
+        node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        ssize_t ofst = node_info->offset;
+        remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
+        memcpy(remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    } else {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        gasnet_put_nbi(proc, remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }

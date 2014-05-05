@@ -301,14 +301,13 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Co_all_Intrinsic,
 				Co_any_Intrinsic,
 				Co_bcast_Intrinsic,
+				Co_broadcast_Intrinsic,
 				Co_count_Intrinsic,
 				Co_findloc_Intrinsic,
 				Co_maxloc_Intrinsic,
-				Co_maxval_Intrinsic,
 				Co_minloc_Intrinsic,
-				Co_minval_Intrinsic,
-				Co_product_Intrinsic,
-				Co_sum_Intrinsic,
+                Co_reduce_Intrinsic,
+				Co_reduce_old_Intrinsic,
 #endif
 				Compare_And_Swap_Intrinsic,
 				Compl_Intrinsic,
@@ -2919,6 +2918,10 @@ extern  void  write_memory_barrier_intrinsic
 			(opnd_type *, expr_arg_type *, int *);
 #ifdef _UH_COARRAYS
 extern void co_sum_intrinsic
+            (opnd_type *, expr_arg_type *, int *);
+extern void co_reduce_intrinsic
+            (opnd_type *, expr_arg_type *, int *);
+extern void co_broadcast_intrinsic
             (opnd_type *, expr_arg_type *, int *);
 extern void atomic_intrinsic
             (opnd_type *, expr_arg_type *, int *);

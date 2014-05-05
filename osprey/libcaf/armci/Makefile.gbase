@@ -90,7 +90,7 @@ CFILES += profile.c
 endif
 
 LCINCS += -I$(ARMCI_HOME)/include
-LCDEFS += -DARMCI
+LCDEFS += -DARMCI -DMPI_AVAIL
 
 default: $(TARGETS)
 

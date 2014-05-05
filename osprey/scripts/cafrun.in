@@ -100,11 +100,6 @@ Environment Variables:
                       Specifies the maximum number of outstanding non-blocking
                       PUT or GET transfers. By default it is 16.
 
-   UHCAF_CO_REDUCE_ALGORITHM
-                      Specifies the algorithm to use for reduction operations:
-                      all2all, 2tree_syncall, 2tree_syncimages, or
-                      2tree_events.  By default it is 2tree_events.
-
    UHCAF_SYNC_IMAGES_ALGORITHM
                       Specifies the algorithm to use for sync images operation:
                       counter, ping_pong, or sense_reversing.  By default it
@@ -127,6 +122,18 @@ Environment Variables:
                       completion of non-contiguous puts without having to wait
                       for remote completion. The overhead of the packing may
                       be greater than the gains, so by default it is 0.
+
+   UHCAF_COLLECTIVES_1SIDED
+                      Enables the 1-sided implementation for collectives in the
+                      CAF runtime library, even if MPI is available. If not set,
+                      the implementation will decide whether to use 1-sided or
+                      2-sided messaging for collectives. By default it is 0.
+
+   UHCAF_COLLECTIVES_BUFSIZE
+                      Specifies the size of the collectives buffer for use by
+                      the CAF runtime when performing collectives using
+                      1-sided communication. By default, it is:
+                        MIN(4M, IMAGE_HEAP_SIZE / 2).
 
    ---------------------------------------------------------------------------
    Profiling (requires compiler to be configured with profiling enabled)
@@ -182,6 +189,16 @@ Environment Variables:
                       memory (or equivalent) after an assignment to co-indexed
                       variable and before the source is updated or the
                       co-indexed variable is subsequently read or written to.
+
+   -------------
+   DEPRECATED:
+   -------------
+
+   UHCAF_CO_REDUCE_ALGORITHM
+                      Specifies the algorithm to use for reduction operations
+                      (CO_SUM_OLD, CO_PRODUCT_OLD, CO_MINVAL, CO_MAXVAL):
+                      all2all, 2tree_syncall, 2tree_syncimages, or
+                      2tree_events.  By default it is 2tree_syncimages.
 
 _EOT_
 }
@@ -287,6 +304,12 @@ add_uhcaf_envs_to_list()
     fi
     if [ -n "$UHCAF_NB_XFER_LIMIT" ]; then
         add_to_env_list UHCAF_NB_XFER_LIMIT
+    fi
+    if [ -n "$UHCAF_COLLECTIVES_1SIDED" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_1SIDED
+    fi
+    if [ -n "$UHCAF_COLLECTIVES_BUFSIZE" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_BUFSIZE
     fi
     if [ -n "$UHCAF_CO_REDUCE_ALGORITHM" ]; then
         add_to_env_list UHCAF_CO_REDUCE_ALGORITHM

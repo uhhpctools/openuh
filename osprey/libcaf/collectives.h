@@ -42,11 +42,46 @@ typedef enum {
     CO_REDUCE_2TREE_SYNCALL = 2,
     CO_REDUCE_2TREE_SYNCIMAGES = 3,
     CO_REDUCE_2TREE_EVENTS = 4,
-    CO_REDUCE_DEFAULT = 4
+    CO_REDUCE_DEFAULT = 3
 } co_reduce_t;
 
+typedef enum {
+    CAF_UNKNOWN   = 0,
+    CAF_INT1      = 1,
+    CAF_INT2      = 2,
+    CAF_INT4      = 3,
+    CAF_INT8      = 4,
+    CAF_REAL4     = 5,
+    CAF_REAL8     = 6,
+    CAF_REAL16    = 7,
+    CAF_COMPLEX4  = 8,
+    CAF_COMPLEX8  = 9,
+    CAF_COMPLEX16 = 10,
+    CAF_LOGICAL1  = 11,
+    CAF_LOGICAL2  = 12,
+    CAF_LOGICAL4  = 13,
+    CAF_LOGICAL8  = 14,
+    CAF_CHAR      = 15
+} caf_reduction_type_t;
+
+typedef enum {
+    CAF_SUM       = 1,
+    CAF_MIN       = 2,
+    CAF_MAX       = 3,
+    CAF_PROD      = 4,
+} caf_reduction_op_t;
 
 /* Collectives */
+
+void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
+                                 int *charlen, caf_reduction_type_t *elem_type,
+                                 caf_reduction_op_t *op);
+
+void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
+                               caf_reduction_type_t *elem_type,
+                               caf_reduction_op_t *op);
+
+
 
 /* CO_BCAST */
 

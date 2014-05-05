@@ -3196,10 +3196,11 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
    enum intrinsic_values first_intrin = Co_all_Intrinsic;
-   char*          intrin_names[11] =
-   { "CO_ALL", "CO_ANY", "CO_BCAST", "CO_COUNT", "CO_FINDLOC",
-     "CO_MAXLOC", "CO_MAXVAL", "CO_MINLOC", "CO_MINVAL",
-     "CO_PRODUCT", "CO_SUM" };
+   char*          intrin_names[16] = {
+     "CO_ALL", "CO_ANY", "CO_BCAST", "CO_BROADCAST",
+     "CO_COUNT", "CO_FINDLOC",
+     "CO_MAX", "CO_MAXLOC", "CO_MAXVAL", "CO_MIN", "CO_MINLOC", "CO_MINVAL",
+     "CO_PRODUCT", "CO_PRODUCT_OLD", "CO_SUM", "CO_SUM_OLD" };
 
 
    TRACE (Func_Entry, "co_sum_intrinsic", NULL);
@@ -3217,11 +3218,11 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
 
    if (ATP_INTRIN_ENUM(*spec_idx) == Co_bcast_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_maxloc_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_maxval_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_minloc_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_minval_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_sum_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_product_Intrinsic) {
+       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic) {
       if (IR_LIST_CNT_R(ir_idx) >= 2) {
          int rank = 0;
 
@@ -3281,6 +3282,156 @@ EXIT:
 }
 /*end of co_sum_intrinsic*/
 
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      Function  CO_BROADCAST(SOURCE, SOURCE IMAGE) intrinsic                *|
+|*      Function  CO_MAX(SOURCE, RESULT) intrinsic                            *|
+|*      Function  CO_MIN(SOURCE, RESULT) intrinsic                            *|
+|*      Function  CO_SUM(SOURCE, RESULT) intrinsic                            *|
+|*      Function  CO_PRODUCT(SOURCE, RESULT) intrinsic                        *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void    co_reduce_intrinsic(opnd_type     *result_opnd,
+                         expr_arg_type *res_exp_desc,
+                         int           *spec_idx)
+{
+
+   int            line;
+   int            column;
+   int            ir_idx;
+   int            cn_idx;
+   int            info_idx1;
+   int            info_idx2;
+   int            list_idx1;
+   int            list_idx2;
+   opnd_type      opnd;
+   int            opnd_line;
+   int            opnd_col;
+   int            attr_idx;
+   expr_arg_type  loc_exp_desc;
+
+
+   TRACE (Func_Entry, "co_reduce_intrinsic", NULL);
+
+   ir_idx = OPND_IDX((*result_opnd));
+   line = IR_LINE_NUM(ir_idx);
+   column = IR_COL_NUM(ir_idx);
+
+   IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx));
+   ATP_EXTERNAL_INTRIN(*spec_idx) = TRUE;
+
+   /* TODO: check that SOURCE and RESULT are same shape ... */
+
+   IR_RANK(ir_idx) = res_exp_desc->rank;
+
+EXIT:
+   /* must reset foldable and will_fold_later because there is no */
+   /* folder for this intrinsic in constructors.                  */
+
+   res_exp_desc->foldable = FALSE;
+   res_exp_desc->will_fold_later = FALSE;
+
+   TRACE (Func_Exit, "co_reduce_intrinsic", NULL);
+
+
+}
+/*end of co_reduce_intrinsic*/
+
+void    co_broadcast_intrinsic(opnd_type     *result_opnd,
+                               expr_arg_type *res_exp_desc,
+                               int           *spec_idx)
+{
+
+   int            line;
+   int            column;
+   int            ir_idx;
+   int            info_idx1;
+   int            info_idx2;
+   int            info_idx3;
+   int            info_idx4;
+   int            info_idx5;
+   int            list_idx1;
+   int            list_idx2;
+   int            list_idx3;
+   int            list_idx4;
+   int            list_idx5;
+   enum intrinsic_values intrin;
+
+
+   intrin = ATP_INTRIN_ENUM(*spec_idx);
+
+   TRACE (Func_Entry, "co_broadcast_intrinsic", NULL);
+
+   ir_idx = OPND_IDX((*result_opnd));
+   line = IR_LINE_NUM(ir_idx);
+   column = IR_COL_NUM(ir_idx);
+
+   IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx));
+   ATP_EXTERNAL_INTRIN(*spec_idx) = TRUE;
+
+
+   IR_RANK(ir_idx) = res_exp_desc->rank;
+   intrin = ATP_INTRIN_ENUM(*spec_idx);
+
+   if (intrin == Co_broadcast_Intrinsic) {
+       if (IR_LIST_CNT_R(ir_idx) == 5) {
+         list_idx1 = IR_IDX_R(ir_idx);
+         info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+         list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+         info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+
+         list_idx3 = IL_NEXT_LIST_IDX(list_idx2);
+         info_idx3 = IL_ARG_DESC_IDX(list_idx3);
+
+         list_idx4 = IL_NEXT_LIST_IDX(list_idx3);
+         info_idx4 = IL_ARG_DESC_IDX(list_idx4);
+
+         list_idx5 = IL_NEXT_LIST_IDX(list_idx4);
+         info_idx5 = IL_ARG_DESC_IDX(list_idx5);
+
+         if (IL_IDX(list_idx5) != NULL_IDX) {
+             PRINTMSG(line, 754, Error, column, "CO_BROADCAST");
+         }
+
+         /* copy over the first argument to the 5th "hidden" argument, used
+          * by the runtime to compute the size of the array */
+         COPY_OPND(IL_OPND(list_idx5), IL_OPND(list_idx1));
+         arg_info_list_base = arg_info_list_top;
+         arg_info_list_top = arg_info_list_base + 1;
+
+         if (arg_info_list_top >= arg_info_list_size) {
+             enlarge_info_list_table();
+         }
+
+         IL_ARG_DESC_IDX(list_idx5) = arg_info_list_top;
+         arg_info_list[arg_info_list_top] = arg_info_list[info_idx1];
+       }
+   }
+
+EXIT:
+   /* must reset foldable and will_fold_later because there is no */
+   /* folder for this intrinsic in constructors.                  */
+
+   res_exp_desc->foldable = FALSE;
+   res_exp_desc->will_fold_later = FALSE;
+
+   TRACE (Func_Exit, "co_broadcast_intrinsic", NULL);
+
+
+}
+/*end of co_broadcast_intrinsic*/
+
 /*atomic_intrinsic*/
 /******************************************************************************\
 |*                                                                            *|
@@ -3323,14 +3474,12 @@ void    atomic_intrinsic(opnd_type     *result_opnd,
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
    const enum intrinsic_values first_intrin = Atomic_Add_Intrinsic;
-   char*          intrin_names[8] = {"ATOMIC_ADD", "ATOMIC_AND",
-                                     "ATOMIC_CAS", "ATOMIC_REF",
-                                     "ATOMIC_DEFINE", "ATOMIC_OR",
+   char*          intrin_names[7] = {"ATOMIC_ADD", "ATOMIC_AND",
+                                     "ATOMIC_CAS", "ATOMIC_DEFINE",
+                                     "ATOMIC_OR",
                                      "ATOMIC_REF", "ATOMIC_XOR"};
 
    enum intrinsic_values intrin;
-
-
 
    TRACE (Func_Entry, "atomic_intrinsic", NULL);
 

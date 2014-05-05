@@ -206,6 +206,9 @@ void comm_xor_request(void *target, void *value, size_t nbytes, int proc);
 /* progress */
 void comm_service();
 
+void comm_poll_char_while_nonzero(char *);
+void comm_poll_char_while_zero(char *);
+
 /* exit */
 void comm_memory_free();
 void comm_exit(int status);

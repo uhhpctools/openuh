@@ -60,7 +60,7 @@ _SIZEOF_4   (DopeVectorType * source)
 	/* If source is a pointer/allocatable array, it must be
 	 * associated/allocated. */
 	if (source->p_or_a  &&  !source->assoc)
-		_lerror (_LELVL_ABORT, FENMPTAR, "SIZE");
+		_lerror (_LELVL_ABORT, FENMPTAR, "SIZEOF");
 
     /* determine the total size of the array */
     if (source->type_lens.type == DVTYPE_ASCII) {
@@ -83,8 +83,7 @@ _SIZEOF_4   (DopeVectorType * source)
  */
 
 _f_int8
-_SIZEOF_8   (DopeVectorType * source,
-	_f_int *dimptr)
+_SIZEOF_8   (DopeVectorType * source)
 {
         _f_int8 iresult;
         int elem_size;
@@ -95,7 +94,7 @@ _SIZEOF_8   (DopeVectorType * source,
 	/* If source is a pointer/allocatable array, it must be
 	 * associated/allocated. */
 	if (source->p_or_a  &&  !source->assoc)
-		_lerror (_LELVL_ABORT, FENMPTAR, "SIZE");
+		_lerror (_LELVL_ABORT, FENMPTAR, "SIZEOF");
 
     /* determine the total size of the array */
     if (source->type_lens.type == DVTYPE_ASCII) {
