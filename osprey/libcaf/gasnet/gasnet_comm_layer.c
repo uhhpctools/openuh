@@ -163,15 +163,10 @@ static sync_images_t sync_images_algorithm;
 static rma_ordering_t rma_ordering;
 
 typedef union {
-    short value; /* used for counter and ping-pong */
-    struct {
-        char sense;
-        char val;
-    } t; /* used for sense reversing */
+    short value;
 } sync_flag_t;
 static sync_flag_t *sync_flags = NULL;
-
-static gasnet_hsl_t sync_lock = GASNET_HSL_INITIALIZER;
+static char *sync_senses = NULL;
 
 /*non-blocking put*/
 static struct nb_handle_manager nb_mgr[2];
@@ -537,9 +532,7 @@ static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
 /* handler funtion for  sync images */
 static void handler_sync_request(gasnet_token_t token, int imageIndex)
 {
-    gasnet_hsl_lock(&sync_lock);
-    sync_flags[imageIndex].value++;
-    gasnet_hsl_unlock(&sync_lock);
+    SYNC_FETCH_AND_ADD(&sync_flags[imageIndex].value, 1);
 }
 
 typedef struct {
@@ -1516,8 +1509,8 @@ void comm_init()
     nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
 
-    if (sync_images_algorithm == SYNC_COUNTER) {
-      sync_flags = (sync_flag_t *) malloc(num_procs * sizeof(sync_flag_t));
+    if (sync_images_algorithm == SYNC_SENSE_REV) {
+      sync_senses = malloc(num_procs * sizeof(char));
     }
 
     if (enable_get_cache) {
@@ -1527,8 +1520,8 @@ void comm_init()
 
     /* initialize data structures to 0 */
     for (i = 0; i < num_procs; i++) {
-        if (sync_images_algorithm == SYNC_COUNTER) {
-          sync_flags[i].value = 0;
+        if (sync_images_algorithm == SYNC_SENSE_REV) {
+          sync_senses[i] = 0;
         }
         nb_mgr[PUTS].handles[i] = 0;
         nb_mgr[PUTS].min_nb_address[i] = 0;
@@ -1689,11 +1682,9 @@ void comm_init()
         (lock_t *) coarray_allocatable_allocate_(sizeof(lock_t), NULL);
 
     /* allocate flags for p2p synchronization via sync images */
-    if (sync_images_algorithm != SYNC_COUNTER) {
-        sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
-                num_procs * sizeof(sync_flag_t), NULL);
-        memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
-    }
+    sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
+        num_procs * sizeof(sync_flag_t), NULL);
+    memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
 
 
     /* start progress thread */
@@ -2363,7 +2354,6 @@ static inline void wait_on_all_pending_accesses()
     for (i = 0; i < num_procs; i++) {
         wait_on_all_pending_accesses_to_proc(i);
     }
-    gasnet_wait_syncnbi_all();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -2378,7 +2368,6 @@ static inline void wait_on_all_pending_puts()
     for (i = 0; i < num_procs; i++) {
         wait_on_all_pending_puts_to_proc(i);
     }
-    gasnet_wait_syncnbi_all();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -2471,13 +2460,6 @@ void comm_memory_free()
 
     if (gasnet_everything)
         comm_free(coarray_start_all_images[my_proc].addr);
-
-    /* for SYNC_COUNTER, we don't allocate the sync variables in the symmetric
-     * heap, so explicitly free here */
-    if (sync_images_algorithm == SYNC_COUNTER) {
-      if (sync_flags)
-        comm_free(sync_flags);
-    }
 
     if (coarray_start_all_images) {
         coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
@@ -2871,13 +2853,17 @@ void comm_sync_images(hashed_image_list_t *image_list, int image_count,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+
 static void sync_images_counter(hashed_image_list_t *image_list,
-                                     int image_count, int *status,
-                                     int stat_len, char *errmsg,
-                                     int errmsg_len)
+                                int image_count, int *status,
+                                int stat_len, char *errmsg,
+                                int errmsg_len)
 {
     hashed_image_list_t *list_item;
     int i;
+#if GASNET_PSHM
+    const gasnet_nodeinfo_t *my_node_info = &nodeinfo_table[my_proc];
+#endif
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2889,9 +2875,21 @@ static void sync_images_counter(hashed_image_list_t *image_list,
         }
 
         if (my_proc != q) {
-            int ret;
-            ret = gasnet_AMRequestShort1
-                (q, GASNET_HANDLER_SYNC_REQUEST, my_proc);
+            int ret = GASNET_OK;
+#if GASNET_PSHM
+            const gasnet_nodeinfo_t *target_node_info = &nodeinfo_table[q];
+            if (my_node_info->supernode == target_node_info->supernode) {
+                ssize_t ofst = target_node_info->offset;
+                short *sync_target = get_remote_address(sync_flags, q);
+                sync_target = (void*)((uintptr_t)sync_target + ofst);
+                SYNC_FETCH_AND_ADD(&sync_target[my_proc], 1);
+            } else
+#endif
+            {
+              ret = gasnet_AMRequestShort1
+                  (q, GASNET_HANDLER_SYNC_REQUEST, my_proc);
+            }
+
             if (ret != GASNET_OK) {
                 Error("GASNet AM request error");
             }
@@ -2935,9 +2933,8 @@ static void sync_images_counter(hashed_image_list_t *image_list,
             }
         }
 
-        gasnet_hsl_lock(&sync_lock);
-        sync_flags[q].value--;
-        gasnet_hsl_unlock(&sync_lock);
+        SYNC_FETCH_AND_ADD(&sync_flags[q].value, -1);
+
         if (enable_get_cache)
             refetch_cache(q);
     }
@@ -3043,10 +3040,11 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         }
 
         if (my_proc != q) {
-            char sense = sync_flags[q].t.sense % 2 + 1;
-            sync_flags[q].t.sense = sense;
-            comm_write(q, &sync_flags[my_proc].t.val, &sense,
-                    sizeof(sense), 1, NULL);
+            short sense;
+            sense = sync_senses[q] % 2 + 1;
+            sync_senses[q] = sense;
+            comm_nbi_write(q, &sync_flags[my_proc].value, &sense,
+                           sizeof sense);
         }
     }
 
@@ -3065,15 +3063,16 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
 
         check_for_error_stop();
 
-        while (!sync_flags[q].t.val) {
+        while (!sync_flags[q].value) {
             comm_service();
-            GASNET_BLOCKUNTIL(sync_flags[q].t.val ||
+
+            GASNET_BLOCKUNTIL(sync_flags[q].value ||
                               *error_stopped_image_exists ||
                               stopped_image_exists[q]);
 
             check_for_error_stop();
 
-            if (stopped_image_exists[q] && !sync_flags[q].t.val) {
+            if (stopped_image_exists[q] && !sync_flags[q].value) {
                 /* q has stopped */
                 if (status != NULL) {
                     *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -3089,10 +3088,10 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         }
 
         char x;
-        x = (char) SYNC_SWAP((char *)&sync_flags[q].t.val, 0);
-        if (x != sync_flags[q].t.sense) {
+        x = (char) SYNC_SWAP((char *)&sync_flags[q].value, 0);
+        if (x != sync_senses[q]) {
             /* already received the next notification */
-            sync_flags[q].t.val = x;
+            sync_flags[q].value = x;
         }
 
         if (enable_get_cache)
@@ -3911,6 +3910,24 @@ void comm_write(size_t proc, void *dest, void *src,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/* an implicit, non-blocking write. just a direct call into gasnet, without
+ * any non-blocking tracking
+ */
+void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
+{
+    void *remote_dest;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    remote_dest = get_remote_address(dest, proc);
+
+    PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+    gasnet_put_nbi(proc, remote_dest, src, nbytes);
+    PROFILE_RMA_STORE_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }

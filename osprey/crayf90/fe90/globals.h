@@ -2114,6 +2114,7 @@ struct	dump_flags_entry {
 	boolean		dsm			: 1;
 	boolean		cray_compatible		: 1;
 	boolean		pack_half_word		: 1;
+	boolean		target_realloc		: 1;
 	int		pvp_test;
 
         /* The rest of the options are only allowed in a debug compiler.      */

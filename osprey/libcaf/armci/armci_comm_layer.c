@@ -2159,8 +2159,8 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         if (my_proc != q) {
             short sense = sync_flags[q].t.sense % 2 + 1;
             sync_flags[q].t.sense = sense;
-            comm_write(q, &sync_flags[my_proc].t.val, &sense,
-                    sizeof(sense), 1, NULL);
+            comm_nbi_write(q, &sync_flags[my_proc].t.val, &sense,
+                           sizeof(sense));
         }
     }
 
@@ -2787,7 +2787,7 @@ void comm_write(size_t proc, void *dest, void *src,
 
         ARMCI_NbPut(src, remote_dest, nbytes, proc, handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "After ARMCI_Put to %p on image %lu.",
+                     "After ARMCI_NbPut to %p on image %lu.",
                      remote_dest, proc + 1);
 
         in_progress = (ARMCI_Test(handle) == 0);
@@ -2823,6 +2823,23 @@ void comm_write(size_t proc, void *dest, void *src,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+/* just a direct call into ARMCI which blocks only until local completion
+ */
+void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
+{
+    void *remote_dest;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    remote_dest = get_remote_address(dest, proc);
+
+    PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+    ARMCI_Put(src, remote_dest, nbytes, proc);
+    PROFILE_RMA_STORE_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
