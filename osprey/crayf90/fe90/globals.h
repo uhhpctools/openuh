@@ -517,6 +517,7 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Iqint_Intrinsic,
 				Iqnint_Intrinsic,
 				Irtc_Intrinsic,
+				Is_Contiguous_Intrinsic,
 				Isha_Intrinsic,
 				Ishc_Intrinsic,
 				Ishft_Intrinsic,
@@ -2860,6 +2861,7 @@ extern  void  mld_intrinsic     (opnd_type *, expr_arg_type *, int *);
 extern  void  mul_intrinsic     (opnd_type *, expr_arg_type *, int *);
 extern  void  mclr_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  readsm_intrinsic  (opnd_type *, expr_arg_type *, int *);
+extern  void  is_contiguous_intrinsic(opnd_type *, expr_arg_type *, int *);
 extern  void  ieee_finite_intrinsic  (opnd_type *, expr_arg_type *, int *);
 extern  void  ieee_real_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  transfer_intrinsic     (opnd_type *, expr_arg_type *, int *);

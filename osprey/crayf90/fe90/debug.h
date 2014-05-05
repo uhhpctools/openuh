@@ -587,6 +587,7 @@ char		*intrin_str[]		= {
 				"Iqint_Intrinsic",
 				"Iqnint_Intrinsic",
 				"Irtc_Intrinsic",
+				"Is_Contiguous_Intrinsic",
 				"Isha_Intrinsic",
 				"Ishc_Intrinsic",
 				"Ishft_Intrinsic",
