@@ -4890,6 +4890,7 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
 
     remote_dest = get_remote_address(dest, proc);
 
+#if GASNET_PSHM
     if (0 && shared_mem_rma_bypass &&
         node_info->supernode == nodeinfo_table[my_proc].supernode) {
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
@@ -4897,7 +4898,9 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
         remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
         memcpy(remote_dest, src, nbytes);
         PROFILE_RMA_STORE_END(proc);
-    } else {
+    } else
+#endif
+    {
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
         gasnet_put_nbi(proc, remote_dest, src, nbytes);
         PROFILE_RMA_STORE_END(proc);
