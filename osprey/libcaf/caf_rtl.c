@@ -1400,12 +1400,15 @@ void _SYNC_MEMORY(int *status, int stat_len, char *errmsg, int errmsg_len)
 void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
                   char *errmsg, int errmsg_len)
 {
+#ifdef SYNC_IMAGES_HASHED
     hashed_image_list_t hashed_images[image_count];
     hashed_image_list_t *image_list = NULL;
+#endif
     int new_image_count = image_count;
     int i;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_SYNC_STATEMENTS);
+#ifdef SYNC_IMAGES_HASHED
     for (i = 0; i < image_count; i++) {
         hashed_image_list_t *check_duplicate;
         check_remote_image(images[i]);
@@ -1420,6 +1423,10 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
 
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, image_list,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
+#else
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, images,
+                         new_image_count, status, stat_len, errmsg, errmsg_len);
+#endif
 
     PROFILE_FUNC_EXIT(CAFPROF_SYNC_STATEMENTS);
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");

@@ -101,9 +101,9 @@ Environment Variables:
                       PUT or GET transfers. By default it is 16.
 
    UHCAF_SYNC_IMAGES_ALGORITHM
-                      Specifies the algorithm to use for sync images operation:
-                      counter, ping_pong, or sense_reversing.  By default it
-                      is sense_reversing.
+                      Specifies the algorithm to use for sync images
+                      operation: counter, ping_pong, sense_reversing, or csr.
+                      By default it is sense_reversing.
 
    UHCAF_ALLOC_BYTE_ALIGNMENT
                       Specifies the byte alignment for allocations out of the
@@ -132,8 +132,8 @@ Environment Variables:
    UHCAF_COLLECTIVES_BUFSIZE
                       Specifies the size of the collectives buffer for use by
                       the CAF runtime when performing collectives using
-                      1-sided communication. By default, it is:
-                        MIN(4M, IMAGE_HEAP_SIZE / 2).
+                      1-sided communication. By default, it is 4M.
+
 
    ---------------------------------------------------------------------------
    Profiling (requires compiler to be configured with profiling enabled)
@@ -189,6 +189,15 @@ Environment Variables:
                       memory (or equivalent) after an assignment to co-indexed
                       variable and before the source is updated or the
                       co-indexed variable is subsequently read or written to.
+
+   UHCAF_COLLECTIVES_USE_CANARY
+                      Set use of a canary protocol for speeding up some
+                      collectives implemented using 1-sided operations. Will
+                      only work correctly for networks where the last byte of
+                      transferred to a remote memory is the last byte in the
+                      buffer. This is very experimental, and it is unlikely to
+                      work correctly in many cases. By default, it is set to 0.
+
 
    -------------
    DEPRECATED:
@@ -645,9 +654,6 @@ if [ -n "$num_images" ]; then
   set_env UHCAF_NUM_IMAGES $num_images
 elif [ -n "$UHCAF_NUM_IMAGES" ]; then
   num_images=$UHCAF_NUM_IMAGES
-else
-  set_env UHCAF_NUM_IMAGES 1
-  num_images=1
 fi
 
 ###########################################
@@ -719,8 +725,11 @@ else
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
           $launcher_name = aprun -o $launcher_name = srun -o \
           $launcher_name = amudprun -o $launcher_name = gasnetrun_ibv -o \
+          $launcher_name = gasnetrun_gemini -o \
           $launcher_name = gasnetrun_mpi \) ]; then
-    if [ $num_images -gt 1 ]; then
+    if [ - z "$num_images" ]; then
+      UHCAF_LAUNCHER_OPTS=" $UHCAF_LAUNCHER_OPTS"
+    elif [ -n "$num_images" -a "$num_images" -gt 0  ]; then
       UHCAF_LAUNCHER_OPTS=" -n $num_images $UHCAF_LAUNCHER_OPTS"
     else
       UHCAF_LAUNCHER_OPTS=" -n 1 $UHCAF_LAUNCHER_OPTS"
