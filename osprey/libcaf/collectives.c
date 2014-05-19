@@ -846,10 +846,10 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
                                 sz*elem_size+1 );
                 } else {
 
-                comm_nbi_write( partner-1,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size );
+                comm_write_x( partner-1,
+                              &((char*)work_buffers)[(k1-1)*elem_size],
+                              &((char*)base_buffer)[0],
+                              sz*elem_size );
 
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
@@ -895,10 +895,10 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
 
         } else {
 
-            comm_nbi_write( *result_image-1,
-                            &((char*)base_buffer)[0],
-                            &((char*)base_buffer)[0],
-                            sz*elem_size );
+            comm_write_x( *result_image-1,
+                          &((char*)base_buffer)[0],
+                          &((char*)base_buffer)[0],
+                          sz*elem_size );
 
             comm_nbi_write( *result_image-1,
                             &((char*)base_buffer)[sz*elem_size],
@@ -1085,10 +1085,10 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         } else {
 
 
-            comm_nbi_write( partner-1,
-                            &((char*)work_buffers)[0],
-                            &((char*)base_buffer)[0],
-                            sz*elem_size );
+            comm_write_x( partner-1,
+                          &((char*)work_buffers)[0],
+                          &((char*)base_buffer)[0],
+                          sz*elem_size );
 
             comm_nbi_write( partner-1,
                             &((char*)work_buffers)[sz*elem_size],
@@ -1147,10 +1147,10 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
                 } else {
 
-                comm_nbi_write( partner-1,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size );
+                comm_write_x( partner-1,
+                              &((char*)work_buffers)[(k1-1)*elem_size],
+                              &((char*)base_buffer)[0],
+                              sz*elem_size );
 
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
@@ -1189,10 +1189,10 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
         } else {
 
-            comm_nbi_write( partner-1,
-                            &((char*)base_buffer)[0],
-                            &((char*)base_buffer)[0],
-                            sz*elem_size );
+            comm_write_x( partner-1,
+                          &((char*)base_buffer)[0],
+                          &((char*)base_buffer)[0],
+                          sz*elem_size );
 
             comm_nbi_write( partner-1,
                             &((char*)base_buffer)[sz*elem_size],
