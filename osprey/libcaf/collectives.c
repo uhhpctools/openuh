@@ -58,6 +58,8 @@ extern unsigned long _num_images;
 void *collectives_buffer;
 size_t collectives_bufsize;
 
+int collectives_max_workbufs = 0;
+
 int enable_collectives_1sided;
 int enable_collectives_use_canary = 0;
 
@@ -768,25 +770,6 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     me = _this_image;
     p = _num_images;
 
-    elem_size = get_reduction_type_size(*elem_type, *charlen);
-
-    k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
-        base_buffer = coarray_allocatable_allocate_(2*(sz+1)*elem_size, NULL);
-        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
-        num_bufs = 1;
-        base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
-        base_buffer = collectives_buffer;
-        work_buffers = coarray_allocatable_allocate_((sz+1)*elem_size, NULL);
-        num_bufs = 1;
-        work_buffers_alloc = 1;
-    } else {
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
-    }
-
     /* find greatest power of 2 */
     q = 1;
     log2_p = 0;
@@ -798,6 +781,41 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         log2_p = log2_p + 1;
     }
 
+    elem_size = get_reduction_type_size(*elem_type, *charlen);
+
+    k = (sz+1)*elem_size;
+    if (collectives_bufsize < k) {
+        if (collectives_max_workbufs < 1) {
+          base_buffer = coarray_allocatable_allocate_((log2_p+1)*(sz+1)*elem_size, NULL);
+          num_bufs = log2_p;
+        } else {
+          base_buffer = coarray_allocatable_allocate_(
+                (MIN(log2_p,collectives_max_workbufs)+1)*(sz+1)*elem_size, NULL);
+          num_bufs = MIN(log2_p, collectives_max_workbufs);
+        }
+        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
+        base_buffer_alloc = 1;
+    } else if (collectives_bufsize < 2*k) {
+        base_buffer = collectives_buffer;
+        if (collectives_max_workbufs < 1) {
+          work_buffers = coarray_allocatable_allocate_(log2_p*(sz+1)*elem_size, NULL);
+          num_bufs = log2_p;
+        } else {
+          work_buffers = coarray_allocatable_allocate_(
+              (MIN(log2_p,collectives_max_workbufs))*(sz+1)*elem_size, NULL);
+          num_bufs = MIN(log2_p, collectives_max_workbufs);
+        }
+        work_buffers_alloc = 1;
+    } else {
+        base_buffer = collectives_buffer;
+        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
+        num_bufs = ((int)collectives_bufsize-k)/k;
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+    }
+
+
     pot_partners = malloc(log2_p*sizeof(int));
     partners = malloc(log2_p*sizeof(int));
 
@@ -807,7 +825,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     step = 1;
     for (i = 1; i <= log2_p; i += num_bufs) {
         k = 0;
-        for (j = 1; j <= MIN(num_bufs,log2_p); j++) {
+        for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
             k2 = j*(sz+1);
             ((char *)work_buffers)[(k2-1)*elem_size] = 0;
             if (((me-1)%(2*step)) < step) {
@@ -826,7 +844,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
             step = step * 2;
         }
 
-        for (j = 1; j <= MIN(num_bufs,log2_p); j++) {
+        for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
             if (j == 1 && k > 0) {
                 _SYNC_IMAGES(partners, k, NULL, 0, NULL, 0);
             }
@@ -1034,31 +1052,48 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     me = _this_image;
     p = _num_images;
 
-    elem_size = get_reduction_type_size(*elem_type, *charlen);
-
-    k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
-        base_buffer = coarray_allocatable_allocate_(2*(sz+1)*elem_size, NULL);
-        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
-        num_bufs = 1;
-        base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
-        base_buffer = collectives_buffer;
-        work_buffers = coarray_allocatable_allocate_((sz+1)*elem_size, NULL);
-        num_bufs = 1;
-        work_buffers_alloc = 1;
-    } else {
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
-    }
-
     /* find greatest power of 2 less than p */
     q = 1;
     log2_q = 0;
     while ( (2*q) <= p) {
         q = 2*q;
         log2_q = log2_q + 1;
+    }
+
+    elem_size = get_reduction_type_size(*elem_type, *charlen);
+
+    k = (sz+1)*elem_size;
+    if (collectives_bufsize < k) {
+        if (collectives_max_workbufs < 1) {
+          base_buffer = coarray_allocatable_allocate_((log2_q+1)*(sz+1)*elem_size, NULL);
+          num_bufs = log2_q;
+        } else {
+          base_buffer = coarray_allocatable_allocate_(
+                (MIN(log2_q,collectives_max_workbufs)+1)*(sz+1)*elem_size, NULL);
+          num_bufs = MIN(log2_q, collectives_max_workbufs);
+        }
+        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
+        base_buffer_alloc = 1;
+    } else if (collectives_bufsize < 2*k) {
+        base_buffer = collectives_buffer;
+
+        if (collectives_max_workbufs < 1) {
+          work_buffers = coarray_allocatable_allocate_(log2_q*(sz+1)*elem_size, NULL);
+          num_bufs = log2_q;
+        } else {
+          work_buffers = coarray_allocatable_allocate_(
+              (MIN(log2_q,collectives_max_workbufs))*(sz+1)*elem_size, NULL);
+          num_bufs = MIN(log2_q, collectives_max_workbufs);
+        }
+
+        work_buffers_alloc = 1;
+    } else {
+        base_buffer = collectives_buffer;
+        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
+        num_bufs = ((int)collectives_bufsize-k)/k;
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
     }
 
     partners = malloc(log2_q*sizeof(int));
@@ -1119,7 +1154,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     if (me <= q) {
         step = 1;
         for (i = 1; i <= log2_q; i += num_bufs) {
-            for (j = 1; j <= MIN(num_bufs, log2_q); j++) {
+            for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
                 k2 = j*(sz+1);
                 ((char *)work_buffers)[(k2-1)*elem_size] = 0;
                 if (((me-1)%(2*step)) < step) {
@@ -1129,7 +1164,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                 }
                 step = step*2;
             }
-            for (j = 1; j <= MIN(num_bufs, log2_q); j++) {
+            for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
                 if (j == 1) {
                     _SYNC_IMAGES(partners, MIN(num_bufs, log2_q), NULL, 0,
                                  NULL, 0);
