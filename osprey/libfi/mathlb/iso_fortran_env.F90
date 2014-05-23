@@ -43,8 +43,8 @@ module iso_fortran_env
   public
 
 #include "ieee_cpp_macros.h"
-  integer, parameter :: ATOMIC_INT_KIND = 8
-  integer, parameter :: ATOMIC_LOGICAL_KIND = 8
+  integer, parameter :: ATOMIC_INT_KIND = 4
+  integer, parameter :: ATOMIC_LOGICAL_KIND = 4
   integer, parameter, dimension(1) :: CHARACTER_KINDS  = (/1/)
   integer, parameter :: CHARACTER_STORAGE_SIZE = 8
   integer, parameter :: ERROR_UNIT = 0 ! See libf/open.c
@@ -76,7 +76,7 @@ module iso_fortran_env
 
   type :: EVENT_TYPE
       private
-      integer(kind=int64) :: e = 0
+      integer(kind=int32) :: e = 0
   end type EVENT_TYPE
 
 end module iso_fortran_env
