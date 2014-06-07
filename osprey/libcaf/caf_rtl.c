@@ -2013,6 +2013,9 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, image_list,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
 #else
+    for (i = 0; i < image_count; i++) {
+        check_remote_image(images[i]);
+    }
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, images,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
 #endif
