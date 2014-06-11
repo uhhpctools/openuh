@@ -2290,8 +2290,8 @@ void comm_init()
     }
 
     caf_shared_memory_size = static_symm_data_total_size;
-    image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
-                                   DEFAULT_IMAGE_HEAP_SIZE);
+    image_heap_size = get_env_size_with_unit(ENV_IMAGE_HEAP_SIZE,
+                                             DEFAULT_IMAGE_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
 
     gasnet_max_segsize = 2 * caf_shared_memory_size;

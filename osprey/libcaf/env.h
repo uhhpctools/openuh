@@ -76,5 +76,6 @@
 
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);
+size_t get_env_size_with_unit(const char *var_name, size_t default_size);
 
 #endif                          /* _ENV_H */

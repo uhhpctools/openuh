@@ -79,3 +79,51 @@ size_t get_env_size(const char *var_name, size_t default_size)
 
     return (size_t) atoll(val);
 }
+
+size_t get_env_size_with_unit(const char *var_name, size_t default_size)
+{
+    char *val;
+    size_t ret_val;
+    char *u;
+
+    if (var_name == NULL)
+        return default_size;
+
+    val = getenv(var_name);
+
+    if (val == NULL)
+        return default_size;
+
+    u = alloca(strlen(val));
+
+    ret_val = 0;
+    sscanf(val, "%ld", (long *)&ret_val);
+    sprintf(u, "%ld", (long) ret_val);
+    if (strlen(u) != strlen(val)) {
+        sscanf(val, "%ld%s", (unsigned long *)&ret_val, u);
+        if (strlen(u) != 0 && strlen(u) != 1) {
+            LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                    "Bad val for %s: %s", var_name, val);
+            ret_val = default_size;
+        } else if (strlen(u) != 0) {
+
+            if (strncasecmp(u, "k", strlen(u)) == 0) {
+                ret_val *= 1024L;
+            } else if (strncasecmp(u, "m", strlen(u)) == 0) {
+                ret_val *= 1024L*1024L;
+            } else if (strncasecmp(u, "g", strlen(u)) == 0) {
+                ret_val *= 1024L*1024L*1024L;
+            } else {
+                LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                        "Bad val for %s: %s", var_name, val);
+                ret_val = default_size;
+            }
+        }
+
+    }
+
+    if (ret_val == 0)
+        ret_val = default_size;
+
+    return ret_val;
+}
