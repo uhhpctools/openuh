@@ -8,6 +8,20 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-06-11: (3.0.37)
+
+* misc. improvements/fixes for CAF
+  * some performance improvements for GASNet implementation when running with
+    many images
+  * atomic and event variables are 4 bytes by default, but we allow both 4 and
+    8 byte atomic variables.
+  * fixes in collectives implementation
+  * adding some stats collection support which does not require the use of
+	Scalasca/EPIK with the runtime
+  * some improvements in cafrun launcher
+
+----------------------------------------------------------------------------
+
 2014-05-05: (3.0.36)
 
 * misc. improvements/fixes for CAF
