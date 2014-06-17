@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -21,6 +26,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -280,6 +296,9 @@ BOOL Enable_WFE_DFE = FALSE;
 #include "profile_type.h"
 INT32 Instrumentation_Phase_Num = PROFILE_PHASE_BEFORE_VHO;  /* 0 */
 INT32 Instrumentation_Type_Num  = WHIRL_PROFILE;             /* 1 */
+#ifdef OPENSHMEM_ANALYZER
+INT32 Control_Flow_Type_Num = -1;
+#endif
 BOOL Instrumentation_Enabled = FALSE;
 UINT32 Instrumentation_Actions = 0;
 BOOL Instrumentation_Unique_Output = FALSE; // always create unique output
@@ -887,6 +906,12 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_INT32,  OV_VISIBLE,     TRUE, "fb_type",       "",
     0, 0, 14,    &Instrumentation_Type_Num, NULL,
     "Types in the compiler where instrumentation needs to be done" },
+
+#ifdef OPENSHMEM_ANALYZER
+  { OVK_INT32,  OV_VISIBLE,     TRUE, "cfg_type",       "",
+    0, 0, INT32_MAX,    &Control_Flow_Type_Num, NULL,
+    "Types in the compiler where control flow needs to be done" },
+#endif
 
   { OVK_UINT32,  OV_INTERNAL,	TRUE, "instrument_action",		"",
     0, 0, UINT32_MAX,	&Instrumentation_Actions, NULL,

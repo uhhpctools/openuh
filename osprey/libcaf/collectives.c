@@ -754,6 +754,9 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
                 Error("unexpected reduction op (%d)", op);
         }
 
+        /* adding barrier here to ensure communication progress before
+         * entering MPI reduce routine */
+        comm_barrier_all();
         if (dtype != MPI_CHARACTER)
             do_mpi_reduce(source, *size, dtype, mpi_op, *result_image-1);
         else {
@@ -1038,6 +1041,9 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                 Error("unexpected reduction op (%d)", op);
         }
 
+        /* adding barrier here to ensure communication progress before
+         * entering MPI reduce routine */
+        comm_barrier_all();
         if (dtype != MPI_CHARACTER) {
             MPI_Allreduce(MPI_IN_PLACE, source, *size, dtype, mpi_op,
                           MPI_COMM_WORLD);
@@ -1376,6 +1382,9 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
 
 #ifdef MPI_AVAIL
     if (mpi_collectives_available && !enable_collectives_1sided) {
+        /* adding barrier here to ensure communication progress before
+         * entering MPI Bcast routine */
+        comm_barrier_all();
         MPI_Bcast(source, source_size, MPI_BYTE,
                   *source_image-1, MPI_COMM_WORLD);
     } else

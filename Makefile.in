@@ -83,6 +83,7 @@ BUILD_GNU4          = @BUILD_GNU4@
 
 ENABLE_COARRAYS     = @ENABLE_COARRAYS@
 BUILD_CAF_RUNTIME   = @BUILD_CAF_RUNTIME@
+ENABLE_OSA 			= @ENABLE_OSA@
 
 ifeq ($(MACHINE_TYPE), ia64)
 # ia64
@@ -400,7 +401,7 @@ endif
 install_compiler:
 	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
-		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME) @CROSS_TARGET@ 
+		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME) $(ENABLE_OSA) @CROSS_TARGET@
 endif
 install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")

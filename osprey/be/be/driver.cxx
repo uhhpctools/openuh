@@ -1,4 +1,18 @@
-/* 
+/*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
+  Copyright (C) 2010-2014 University of Houston.  All Rights Reserved.
+*/
+
+/*
+  Copyright (C)
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2010, Hewlett-Packard Development Company, L.P. All Rights Reserved.
  */
 
@@ -21,6 +35,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -164,6 +189,11 @@
 
 #ifdef _UH_COARRAYS
 #include "coarray_lower.h"              /* for CAF lowering interface */
+#endif
+
+#ifdef OPENSHMEM_ANALYZER
+#include <vector>
+using namespace std;
 #endif
 
 // 
@@ -1617,6 +1647,123 @@ BOOL Walk_And_Insert_Init_Buf(WN* wn, WN* block)
 }
 #endif
 
+#ifdef OPENSHMEM_ANALYZER
+
+WN_MAP  Inst_Parent_Map;
+#define Set_Parent(wn, p) (WN_MAP_Set(Inst_Parent_Map, wn, (void*)  p))
+#define Get_Parent(wn) ((WN*) WN_MAP_Get(Inst_Parent_Map, (WN*) wn))
+
+void OSA_Parentize (WN* wn)
+{
+  if (!OPCODE_is_leaf(WN_opcode(wn))) {
+    if (WN_opcode(wn) == OPC_BLOCK) {
+      WN *kid = WN_first(wn);
+      while (kid) {
+        Set_Parent(kid, wn);
+        OSA_Parentize(kid);
+        kid = WN_next(kid);
+      }
+    } else {
+      INT kidno;
+      for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+        WN *kid = WN_kid(wn, kidno);
+        if (kid) {
+          Set_Parent(kid, wn);
+          OSA_Parentize(kid);
+        }
+      }
+    }
+  }
+}
+
+void replace_call(WN *_wn,int value);
+void Specialize_OpenSHMEM_process_id(int id, int np, WN *pu)
+{
+  vector<WN *> remove_list;
+  Inst_Parent_Map = WN_MAP_Create(MEM_pu_pool_ptr);
+  Set_Parent(pu,NULL);
+  OSA_Parentize(pu);
+  // fdump_tree(stdout,pu);
+
+   for(WN_ITER* wni = WN_WALK_TreeIter(pu); wni != NULL;
+       wni = WN_WALK_TreeNext(wni)) {
+
+        WN *wn_current = WN_ITER_wn(wni);
+        OPERATOR opr = WN_operator( wn_current );
+        if (opr == OPR_CALL)
+          {
+            char *name = ST_name(WN_st(wn_current));
+            if(strcmp(name,"_my_pe") == 0) {
+              WN *comma_wn = Get_Parent(Get_Parent(wn_current)); /*add check for COMMA */
+
+	      //  fdump_tree(stdout,Get_Parent(Get_Parent(wn_current)));
+	      /* replace */
+              if(comma_wn!=NULL) {
+              remove_list.push_back(comma_wn);
+              replace_call(comma_wn,id);
+              }
+              /* need to delete comma */
+            }
+
+          }
+
+   }
+
+   for(int i =0; i<remove_list.size(); i++)
+     WN_DELETE_Tree (remove_list[i]);
+
+
+   // printf("*******after******\n");
+   //fdump_tree(stdout,pu);
+    WN_MAP_Delete(Inst_Parent_Map);
+}
+
+void replace_call(WN *_wn,int value)
+{
+    WN *new_wn = WN_Intconst( MTYPE_I4, value );
+    Set_Parent(new_wn, Get_Parent(_wn));
+    WN *parent = Get_Parent(_wn);
+    Is_True (parent != NULL, ("can't replace a node without a parent"));
+    if (WN_operator (parent) == OPR_BLOCK) {
+      /* Is_True (OPERATOR_has_next_prev (WN_operator (new_wn)),
+	 ("Invalid opcode passed to TREE_ITER::Replace ()"));*/
+      if (WN_first (parent) == _wn) {
+        WN_first (parent) = new_wn;
+        WN_prev (new_wn) = NULL;
+        WN_next (new_wn) = WN_next (_wn);
+        if (WN_next (_wn) == NULL)
+          WN_last (parent) = new_wn;
+        else
+          WN_prev (WN_next (_wn)) = new_wn;
+      } else if (WN_last (parent) == _wn) {
+        WN_last (parent) = new_wn;
+        WN_next (new_wn) = NULL;
+        WN_prev (new_wn) = WN_prev (_wn);
+        if (WN_prev (_wn) == NULL)
+          WN_first (parent) = new_wn;
+        else
+          WN_next (WN_prev (_wn)) = new_wn;
+      } else {
+	WN_prev (new_wn) = WN_prev (_wn);
+        WN_next (WN_prev (_wn)) = new_wn;
+        WN_next (new_wn) = WN_next (_wn);
+        WN_prev (WN_next (_wn)) = new_wn;
+      }
+    } else {
+
+      for(int i=0; i< WN_kid_count(parent); i++) {
+	if (WN_kid(parent,i) == _wn) {
+          WN_kid (parent, i) = new_wn;
+          break;
+        } // if
+
+      } // for
+    } // else
+
+} // function
+
+#endif /* defined(OPENSHMEM_ANALYZER) */
+
 static WN *
 Preprocess_PU (PU_Info *current_pu)
 {
@@ -1825,6 +1972,12 @@ Preprocess_PU (PU_Info *current_pu)
         WN_UH_Annotate(pu, PROFILE_PHASE_BEFORE_VHO, &MEM_pu_pool);
       }
   }
+
+#ifdef OPENSHMEM_ANALYZER
+  if(OSA_Flag && Control_Flow_Type_Num != -1)  {
+      Specialize_OpenSHMEM_process_id(Control_Flow_Type_Num, 1, pu);
+ }
+#endif
 
 #ifdef KEY
   /* Insert __cyg_profile_func_enter/exit instrumentation (Bug 570) */

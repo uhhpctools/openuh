@@ -175,6 +175,7 @@ BUILD_LIBUHINSTR            = @BUILD_LIBUHINSTR@
 TAU_ROOT                    = @TAU_ROOT@
 TAU_LIBS                    = @TAU_LIBS@
 EPIK_ROOT                   = @EPIK_ROOT@
+ENABLE_OSA   				= @ENABLE_OSA@
 
 ## CAF SUPPORT ##
 
@@ -703,6 +704,10 @@ endif
 
 ifeq ($(ENABLE_COARRAYS), YES)
 STD_COMPILE_OPTS += -D_UH_COARRAYS
+endif
+
+ifeq ($(ENABLE_OSA), YES)
+STD_COMPILE_OPTS += -DOPENSHMEM_ANALYZER
 endif
 
 

@@ -73,15 +73,22 @@ if [ -z "$5" ]; then
   BUILD_CAF_RUNTIME="NO"
 else
   BUILD_CAF_RUNTIME=$5
-fi 
+fi
 
 if [ -z "$6" ]; then
+  ENABLED_OSA="NO"
+else
+  ENABLED_OSA=$6
+fi
+
+
+if [ -z "$7" ]; then
 	CROSS_TARGET=""
 	if [ $1 = "PPC32" ]; then
 		ARCH="ppc"
 	fi
 else
-    CROSS_TARGET=$6
+    CROSS_TARGET=$7
 fi
 
 # set the build host
@@ -474,6 +481,13 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
     return 0
 }
 
+INSTALL_SHMEM_ANALYZER_SCRIPTS() {
+    INSTALL_EXEC_SUB osprey/scripts/callgraph  ${BIN_DIR}/callgraph
+    INSTALL_EXEC_SUB osprey/scripts/call  ${BIN_DIR}/call
+    cd ${PHASEPATH}/64; ${ROOT}/bin/opencc -m64 -ipa -c ${TOP_SRCDIR}/osprey/include/shmem.c
+    cd ${PHASEPATH}/32; ${ROOT}/bin/opencc -m32 -ipa -c ${TOP_SRCDIR}/osprey/include/shmem.c
+}
+
 # Install the CAF runtime library
 INSTALL_CAF_LIB () {
     #install uhcaf script
@@ -727,6 +741,9 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp.h  ${ROOT}/include/${VERSION}/omp.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
 
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/shmem.h
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/mpp/shmem.h
+
     [ "$ENABLED_CAF" = "YES" ] && INSTALL_DATA_SUB \
                 ${TOP_SRCDIR}/osprey/include/fort/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
     return 0
@@ -826,5 +843,15 @@ INSTALL_PREBUILD_PHASE
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
 [ "$ENABLED_CAF" = "YES" ] && INSTALL_CAF_EXTRA_LIB
 [ "$BUILD_CAF_RUNTIME" = "YES" ] && INSTALL_CAF_LIB
+
+# OPENSHMEM_ANALYZER start
+#echo "ENABLED_OSA: $ENABLED_OSA $1, $2, $3, $4, $5, $6, $7"
+[ "$ENABLED_OSA" = "YES" ] && INSTALL_SHMEM_ANALYZER_SCRIPTS
+# INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.c  ${PHASEPATH}/shmem.c
+# cd ${PHASEPATH}/64; ${ROOT}/bin/opencc -m64 -ipa -c ../shmem.c
+# cd ${PHASEPATH}/32; ${ROOT}/bin/opencc -m32 -ipa -c ../shmem.c
+
+# OPENSHMEM_ANALYZER end
+
 exit 0
 

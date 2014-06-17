@@ -20,7 +20,8 @@
  * with this program; if not, write the Free Software Foundation, Inc., 59
  * Temple Place - Suite 330, Boston MA 02111-1307, USA.
  */
-#define DRAGON
+
+
 #if defined(__GNUC__)
 #include <stdio.h>		/* for sys_errlist */
 #endif
@@ -73,6 +74,10 @@ extern void ipa_insert_whirl_obj_marker(void);
 
 #ifdef DRAGON
 extern int Dragon_Flag;
+#endif
+
+#ifdef OPENSHMEM_ANALYZER
+extern int OSA_Flag;
 #endif
 
 /* 
@@ -679,6 +684,14 @@ ipa_search_command_line(int argc,
 #ifdef DRAGON
            else if ((strcmp(string,"-dragon")) == 0) {
                 Dragon_Flag = TRUE;
+                    /* Blank out argument */
+                blank_arg(argv,i);
+                continue;
+            }
+#endif
+#ifdef OPENSHMEM_ANALYZER
+           else if ((strcmp(string,"-shmem-analyzer")) == 0) {
+                OSA_Flag = TRUE;
                     /* Blank out argument */
                 blank_arg(argv,i);
                 continue;

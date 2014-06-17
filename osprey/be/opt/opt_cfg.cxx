@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -40,6 +45,17 @@
 // This program is distributed in the hope that it would be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//
+// UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+// WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+// WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+// THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+// OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+// INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+// OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+// FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+// RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+// DISPOSAL OF THE SOFTWARE.
 //
 // Further, this software is distributed without any warranty that it
 // is free of the rightful claim of any third person regarding
@@ -104,6 +120,14 @@ static char *rcs_id = 	opt_cfg_CXX"$Revision: 1.30 $";
 #ifdef DRAGON
 #include "FGnode.h"     // HL ++
 #include "ir_reader.h"
+#endif
+
+#ifdef OPENSHMEM_ANALYZER
+#include "glob.h"
+#include <fstream>
+#include <vector>
+#include <string>
+using namespace std;
 #endif
 
 CFG::CFG(MEM_POOL *pool, MEM_POOL *lpool)
@@ -7357,4 +7381,587 @@ CFG::Freq_scale(SC_NODE * sc, float scale)
     }
   }
 }
-  
+
+#ifdef OPENSHMEM_ANALYZER
+char *cfgpuname;
+int CFGIsOpenSHMEM(char *input, int begin, int end);
+
+
+class osacfgedge {
+    public:
+        INT64 id;
+        INT64 attribute;
+        osacfgedge() {id=-1; attribute=0;};
+        ~osacfgedge() {};
+};
+
+class osacall {
+    public:
+        string callname;
+        INT64 line;
+        osacall() {line=0;callname="";}
+};
+
+class osacfgnode {
+    public:
+        INT64 deleted;
+        INT64 id;
+        INT64 simpid;
+        INT64 line;
+        string kindname;
+        vector<osacfgedge> edges;
+        vector<osacall> openshmem_calls;
+        osacfgnode(INT64 pid, INT64 pline, const char *kind) {
+            id = pid; line= pline; kindname = kind;
+            edges.clear(); openshmem_calls.clear();
+            simpid=-1;
+            deleted = 0;
+        };
+        ~osacfgnode() {edges.clear(); openshmem_calls.clear();};
+        INT64 ID() {
+            if(simpid==-1) return id;
+            else return simpid;
+
+        }
+};
+
+class osacfggraph {
+    public:
+        vector<osacfgnode> nodes;
+        void print();
+        void printnode(int id);
+        ofstream fout;
+        osacfggraph() {};
+        ~osacfggraph() {nodes.clear();};
+        INT64 succelem(INT64 id) ;
+        void simplify();
+        void relabel(void);
+        string getcallcolor(string name);
+};
+
+
+string osacfggraph::getcallcolor(string name) {
+    static string call;
+    char *node_name = (char *)name.c_str();
+    // syncrhonizations calls
+    if(CFGIsOpenSHMEM(node_name,98,107) || CFGIsOpenSHMEM(node_name,82,85) || CFGIsOpenSHMEM(node_name,186,188))
+        call="red";
+    else if (CFGIsOpenSHMEM(node_name,1,12)) // init, runtime queries
+        call="green";
+    else if (CFGIsOpenSHMEM(node_name,88,97)) // symetic memory management
+        call="yellow";
+    else if (CFGIsOpenSHMEM(node_name,108,128)) // atomics
+        call="orange";
+    else if (CFGIsOpenSHMEM(node_name,135,178)) // reductions
+        call="purple";
+    else if (CFGIsOpenSHMEM(node_name,179,181)) // broadcast
+        call="red";
+    else if (CFGIsOpenSHMEM(node_name,135,178)) // reductions
+        call="purple";
+    else if (CFGIsOpenSHMEM(node_name,13,81)) // IO
+        call="blue";
+    else // all others
+        call="black";
+    return call;
+
+}
+void osacfggraph::relabel(void) {
+
+    for(INT64 i=0;i<nodes.size();i++) {
+        if(nodes[i].kindname == "GOTO")
+        {
+            nodes[i].kindname = "STMTS";
+        }
+        if(nodes[i].kindname == "LOGIF")
+        {
+            nodes[i].kindname = "BRANCH";
+        }
+        if(nodes[i].kindname == "WHILEEND")
+        {
+            nodes[i].kindname = "LOOP";
+        }
+        if(nodes[i].kindname == "ENTRY")
+        {
+            nodes[i].kindname = "ENTRY";
+        }
+        if(nodes[i].kindname == "EXIT")
+        {
+            nodes[i].kindname = "EXIT";
+
+        }
+    }
+
+}
+
+INT64 osacfggraph::succelem(INT64 id) {
+    INT64 value=-1;
+    for(INT64 i=0;i<nodes.size();i++)
+    {
+        if(nodes[i].ID() ==id) {
+            value = i;
+            break;
+        }
+    }
+    if(value==-1) printf("\nWARNING: CFG node not found with id=%l",id);
+    return value;
+}
+
+void osacfggraph::simplify(void)
+{
+    for(INT64 i=0;i<nodes.size();i++) {
+        if(nodes[i].deleted) continue;
+        if(nodes[i].edges.size() == 1) {
+            INT64 sucid = succelem(nodes[i].edges[0].id);
+            if(nodes[sucid].edges.size() == 1) {
+                nodes[i].edges[0].id = nodes[sucid].edges[0].id;
+                nodes[sucid].deleted = 1;
+            }
+
+        }
+    }
+}
+
+void osacfggraph::printnode(int id) {
+    string sourcefile = Src_File_Name;
+    char charid[10000];
+    string nodename=nodes[id].kindname;
+    sprintf(charid,"%d",nodes[id].ID());
+    nodename+=charid;
+    string nodelabel=nodes[id].kindname;
+
+    if(nodes[id].line) {
+        char charid2[10000];
+        sprintf(charid2,"%d",nodes[id].line);
+        nodelabel  +="(";
+        nodelabel +=charid2;
+        nodelabel +=")";
+    }
+
+    string labelcolor="black";
+
+    fout << "\""<<nodename <<"\" [ style = \"filled\" penwidth = 1 fillcolor = \"white\" fontname = \"Courier New\" shape = \"Mrecord\" label =<<table border=\"0\" cellborder=\"\" cellpadding=\"2\" bgcolor=\"white\"> <tr><td bgcolor=\""<<labelcolor<<"\" align=\"center\" colspan=\"1\"><font color=\"white\">"<<nodelabel<<"</font></td></tr>"<<endl;
+
+    for(int i=0; i<nodes[id].openshmem_calls.size(); i++) {
+        string callcolor = getcallcolor(nodes[id].openshmem_calls[i].callname);
+        int j=i+1;
+        fout << "<tr><td align=\"left\" port=\"r"<<j<<"\">&#40;"<<i<<"&#41; "<<nodes[id].openshmem_calls[i].callname<<"</td><td bgcolor=\""<<callcolor<<"\" align=\"right\">"<<nodes[id].openshmem_calls[i].line <<"</td></tr>" <<endl;
+    }
+    fout <<"</table>>" << " URL=\"file:" << sourcefile<<".html#line"<< nodes[id].line <<"\""<<" ];" << endl;
+
+
+}
+void osacfggraph::print(void) {
+
+    int i;
+    string pu_file_name = Cur_PU_Name;
+
+    if(Control_Flow_Type_Num!=-1) {
+        char charid3[10000];
+        sprintf(charid3,"%d",Control_Flow_Type_Num);
+        pu_file_name  +="-pe";
+        pu_file_name +=charid3;
+    }
+
+    pu_file_name+=".dot";
+    fout.open(pu_file_name.c_str(),ios::out);
+    fout << "digraph flowgraph {\n";
+    fout << "node [color=grey, style=filled];\n";
+    fout << "node [fontname=\"Verdana\", size=\"30,30\"];\n";
+    if(Control_Flow_Type_Num==-1)
+        fout << "graph [ fontname = \"Arial\",fontsize = 20,style = \"bold\",label = \"flowgraph: " << Cur_PU_Name <<"\",ssize = \"30,60\"];\n";
+    else
+        fout << "graph [ fontname = \"Arial\",fontsize = 20,style = \"bold\",label = \"flowgraph: " << Cur_PU_Name <<" pe="<<Control_Flow_Type_Num <<"\",ssize = \"30,60\"];\n";
+    for(int i=0; i< nodes.size();i++) {
+        if (nodes[i].deleted) continue;
+        printnode(i);
+        // fout << "\"" <<nodes[i].kindname<<nodes[i].ID()<<"\"" <<" [URL=\"file:" << "replacemehtml"<<".c.html#line"<<"666666666"<<"\"];\n";
+        //if(nodes[i].openshmem_calls.size())
+        // fout << nodes[i].kindname<<nodes[i].ID()<<"[color=lightpink];"<<endl;
+        for(int j=0; j<nodes[i].edges.size(); j++) {
+            INT64 sucid = succelem(nodes[i].edges[j].id);
+            fout << nodes[i].kindname<<nodes[i].ID()<< " -> " << nodes[sucid].kindname<<nodes[sucid].ID() << endl;
+        }
+    }
+    fout << endl;
+    // printnode(0);
+    fout << "{ rank = sink; Legend [shape=none, margin=0, label=<" <<endl;
+    fout << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"1\">" << endl;
+    fout << "<TR><TD align=\"left\">Legend                </TD><TD>  </TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">I/O                   </TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Reductions            </TD> <TD BGCOLOR=\"purple\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Broadcast             </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Atomics               </TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Memory Mgt            </TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">State Queries         </TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Syncrhonizations      </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+    //     fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
+    //fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
+    fout << "</TABLE> >]; }" << endl;
+    fout << "}\n";
+    fout.close();
+}
+
+void CFG::Check_OpenSHMEM_Call(BB_NODE *tmp, osacfgnode &node) {
+    STMT_ITER wn_iter(tmp->Firststmt(), tmp->Laststmt());
+    for (wn_iter.First(); !wn_iter.Is_Empty(); wn_iter.Next()) {
+        WN* wn=wn_iter.Cur();
+        if (wn) {
+            if (WN_operator(wn) == OPR_CALL) {
+                if ( WN_has_sym( wn ) )
+                {
+                    char *name = ST_name( WN_st( wn ) );
+                    if(CFGIsOpenSHMEM(name,1,188)) {
+                        osacall tmpcall;
+                        tmpcall.callname = name;
+                        SRCPOS srcpos = WN_Get_Linenum(wn);
+                        USRCPOS linepos;
+                        USRCPOS_srcpos(linepos) = srcpos;
+                        tmpcall.line = USRCPOS_linenum(linepos);
+                        node.openshmem_calls.push_back(tmpcall);
+
+                    }
+
+                }
+            }
+            //
+            if (WN_operator(wn) == OPR_FUNC_ENTRY) {
+                if ( WN_has_sym( wn ) )
+                {
+                    cfgpuname = ST_name( WN_st( wn ) );
+
+                }
+
+            }
+
+            //
+            // endofif
+        } // enofif
+    } //endoffor
+
+}
+    void
+CFG::OpenSHMEM_Dump_CFG(FILE *fp, BOOL rpo, IDTYPE bb_id)
+{
+    int debug =0;
+    osacfggraph osacfg;
+
+    // Should we instead always print in source order (i.e. in order of
+    // basic block numbers)?
+
+
+    if (!WOPT_Enable_Source_Order && rpo && Entry_bb() != NULL)
+    {
+
+        RPOBB_ITER rpo_iter(this);
+        BB_NODE   *tmp;
+        FOR_ALL_ELEM(tmp, rpo_iter, Init()) {
+            // print if bb_id is not set or just print a particular BB
+            if (bb_id == -1 || bb_id == tmp->Id()) {
+                osacfgnode osanode(tmp->Id(), Srcpos_To_Line(tmp->Linenum()),tmp->Kind_name());
+                if(debug) {
+                    fprintf(fp,"\nNODE id=%d ****************",tmp->Id());
+                    fprintf(fp,"\nKIND=%s",tmp->Kind_name());
+                    //print nodes
+                    //	 fout << "\"" <<tmp->Kind_name()<<tmp->Id()<<"\"" <<" [URL=\"file:" << "replacemehtml"<<".c.html#line"<<"666666666"<<"\"];\n";
+
+                    if(tmp->Labnam())
+                        fprintf(fp,"\nLabel=%d",tmp->Labnam());
+                    fprintf(fp,"\nLINE=%d", Srcpos_To_Line(tmp->Linenum()));
+                    if(tmp->Next())
+                        fprintf(fp,"\nNEXT=%d",tmp->Next()->Id());
+                }
+                if (tmp->Hascall()) {
+                    Check_OpenSHMEM_Call(tmp,osanode);
+
+                }
+                if(debug) {
+                    fprintf(fp, "\nHas Call" );
+
+                    fprintf(fp,"\nSucc="); }
+                BB_LIST_ITER bb_list_iter(tmp->Succ());
+                BB_NODE *suctmp;
+                FOR_ALL_ELEM(suctmp, bb_list_iter, Init()) {
+                    if (suctmp) {
+                        //print edges
+                        osacfgedge ed;
+                        ed.id = suctmp->Id();
+                        osanode.edges.push_back(ed);
+                        if(debug)
+                            fprintf(fp, "%d ",suctmp->Id());
+                        //     fout << tmp->Kind_name()<<tmp->Id() << " -> " << suctmp->Kind_name()<<suctmp->Id() << endl;
+                    }
+                }
+                osacfg.nodes.push_back(osanode);
+            } // endof if
+        }
+
+    }
+    // osacfg.simplify();
+    osacfg.relabel();
+    osacfg.print();
+}
+
+int CFGIsOpenSHMEM(char *input, int begin, int end) {
+    int debug=0;
+    char shmem_name[190][50] ={
+        /*
+         * Initialization & rtl  // 0
+         */
+        "first_name",
+        "start_pes",   // 1
+        "shmem_init",
+        "shmem_finalize",
+        "shmem_my_pe",  // 4
+        "my_pe",
+        "_my_pe",
+        "shmem_num_pes",
+        "shmem_n_pes",
+        "num_pes",
+        "_num_pes",
+        "shmem_nodename",
+        "shmem_version",
+        /*
+         * I/O  // 13
+         */
+        "shmem_short_put",
+        "shmem_int_put",
+        "shmem_long_put",
+        "shmem_longlong_put",
+        "shmem_longdouble_put",
+        "shmem_double_put",
+        "shmem_float_put",
+        "shmem_putmem",
+        "shmem_put32",
+        "shmem_put64",
+        "shmem_put128",
+
+        // 24
+
+        "shmem_short_get",
+        "shmem_int_get",
+        "shmem_long_get",
+        "shmem_longlong_get",
+        "shmem_longdouble_get",
+        "shmem_double_get",
+        "shmem_float_get",
+        "shmem_getmem",
+        "shmem_get32",
+        "shmem_get64",
+        "shmem_get128",
+        // 35
+        "shmem_char_p",
+        "shmem_short_p",
+        "shmem_int_p",
+        "shmem_long_p",
+        "shmem_longlong_p",
+        "shmem_float_p",
+        "shmem_double_p",
+        "shmem_longdouble_p",
+        //43
+        "shmem_char_g",
+        "shmem_short_g",
+        "shmem_int_g",
+        "shmem_long_g",
+        "shmem_longlong_g",
+        "shmem_float_g",
+        "shmem_double_g",
+        "shmem_longdouble_g",
+
+        /*
+         * non-blocking I/O
+         */  //51
+        "shmem_short_put_nb",
+        "shmem_int_put_nb",
+        "shmem_long_put_nb",
+        "shmem_longlong_put_nb",
+        "shmem_longdouble_put_nb",
+        "shmem_double_put_nb",
+        "shmem_float_put_nb",
+        "shmem_putmem_nb",
+        "shmem_put32_nb",
+        "shmem_put64_nb",
+        "shmem_put128_nb",
+        /*
+         * strided I/O
+         */  //62
+        "shmem_double_iput",
+        "shmem_float_iput",
+        "shmem_int_iput",
+        "shmem_iput32",
+        "shmem_iput64",
+        "shmem_iput128",
+        "shmem_long_iput",
+        "shmem_longdouble_iput",
+        "shmem_longlong_iput",
+        "shmem_short_iput",
+        "shmem_double_iget",
+        "shmem_float_iget",
+        "shmem_int_iget",
+        "shmem_iget32",
+        "shmem_iget64",
+        "shmem_iget128",
+        "shmem_long_iget",
+        "shmem_longdouble_iget",
+        "shmem_longlong_iget",
+        "shmem_short_iget",
+        /*
+         * barriers
+         */ //82
+        "shmem_barrier_all",
+        "shmem_barrier",
+        "shmem_fence",
+        "shmem_quiet",
+        /*
+         * accessibility
+         */  //86
+        "shmem_pe_accessible",
+        "shmem_addr_accessible",
+        /*
+         * symmetric memory management
+         */  // 88
+        "shmalloc",
+        "shfree",
+        "shrealloc",
+        "shmemalign",
+        "shmem_malloc",
+        "shmem_free",
+        "shmem_realloc",
+        "shmem_memalign",
+        "sherror",
+        "shmem_error",
+        /*
+         * wait operations
+         *///98
+        "shmem_short_wait_until",
+        "shmem_int_wait_until",
+        "shmem_long_wait_until",
+        "shmem_longlong_wait_until",
+        "shmem_wait_until",
+        "shmem_short_wait",
+        "shmem_int_wait",
+        "shmem_long_wait",
+        "shmem_longlong_wait",
+        "shmem_wait",
+        /*
+         * atomic swaps
+         *///108
+        "shmem_int_swap",
+        "shmem_long_swap",
+        "shmem_longlong_swap",
+        "shmem_float_swap",
+        "shmem_double_swap",
+        "shmem_swap",
+        "shmem_int_cswap",
+        "shmem_long_cswap",
+        "shmem_longlong_cswap",
+        /*
+         * atomic fetch-{add,inc} & add,inc
+         */
+        //117
+        "shmem_int_fadd",
+        "shmem_long_fadd",
+        "shmem_longlong_fadd",
+        "shmem_int_finc",
+        "shmem_long_finc",
+        "shmem_longlong_finc",
+        "shmem_int_add",
+        "shmem_long_add",
+        "shmem_longlong_add",
+        "shmem_int_inc",
+        "shmem_long_inc",
+        "shmem_longlong_inc",
+        /*
+         * cache flushing
+         *///129
+        "shmem_clear_cache_inv",
+        "shmem_set_cache_inv",
+        "shmem_clear_cache_line_inv",
+        "shmem_set_cache_line_inv",
+        "shmem_udcflush",
+        "shmem_udcflush_line",
+        /*
+         * reductions
+         */
+        //135
+        "shmem_complexd_sum_to_all",
+        "shmem_complexf_sum_to_all",
+        "shmem_double_sum_to_all",
+        "shmem_float_sum_to_all",
+        "shmem_int_sum_to_all",
+        "shmem_long_sum_to_all",
+        "shmem_longdouble_sum_to_all",
+        "shmem_longlong_sum_to_all",
+        "shmem_short_sum_to_all",
+        "shmem_complexd_prod_to_all",
+        "shmem_complexf_prod_to_all",
+        "shmem_double_prod_to_all",
+        "shmem_float_prod_to_all",
+        "shmem_int_prod_to_all",
+        "shmem_long_prod_to_all",
+        "shmem_longdouble_prod_to_all",
+        "shmem_longlong_prod_to_all",
+        "shmem_short_prod_to_all",
+        "shmem_int_and_to_all",
+        "shmem_long_and_to_all",
+        "shmem_longlong_and_to_all",
+        "shmem_short_and_to_all",
+        "shmem_int_or_to_all",
+        "shmem_long_or_to_all",
+        "shmem_longlong_or_to_all",
+        "shmem_short_or_to_all",
+        "shmem_int_xor_to_all",
+        "shmem_long_xor_to_all",
+        "shmem_longlong_xor_to_all",
+        "shmem_short_xor_to_all",
+        "shmem_int_max_to_all",
+        "shmem_long_max_to_all",
+        "shmem_longlong_max_to_all",
+        "shmem_short_max_to_all",
+        "shmem_longdouble_max_to_all",
+        "shmem_float_max_to_all",
+        "shmem_double_max_to_all",
+        "shmem_int_min_to_all",
+        "shmem_long_min_to_all",
+        "shmem_longlong_min_to_all",
+        "shmem_short_min_to_all",
+        "shmem_longdouble_min_to_all",
+        "shmem_float_min_to_all",
+        "shmem_double_min_to_all",
+        /*
+         * broadcasts
+         */
+        //179
+        "shmem_broadcast32",
+        "shmem_broadcast64",
+        "shmem_sync_init",
+        /*
+         * collects
+         */
+        //182
+        "shmem_fcollect32",
+        "shmem_fcollect64",
+        "shmem_collect32",
+        "shmem_collect64",
+        /*
+         * locks/critical section
+         */
+        //186
+        "shmem_set_lock",
+        "shmem_clear_lock",
+        "shmem_test_lock"
+    };
+    for(int i=begin;i<=end;i++) {
+        if(strcmp(shmem_name[i],input)==0) {
+            if(debug) printf("\n*** OpenSHMEM call found: %s ***\n", shmem_name[i]);
+            return 1;
+
+        }
+
+    }
+    //  if(debug)
+    // printf("\nThis is the last SHMEM call: %s\n", shmem_name[188]);
+
+    return 0;
+}
+
+#endif

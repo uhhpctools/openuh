@@ -1004,6 +1004,9 @@ BOOL Use_UH_Instrumentation = FALSE;
 #ifdef _UH_COARRAYS
 BOOL Enable_Coarray = FALSE; /* -deepak */
 #endif
+#ifdef OPENSHMEM_ANALYZER
+BOOL OSA_Flag = FALSE;
+#endif
 
 #ifdef BACK_END
 /* back end phases options */

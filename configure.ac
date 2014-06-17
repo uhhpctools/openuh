@@ -45,6 +45,38 @@ AC_CANONICAL_TARGET
 #AC_PROG_CXX
 #AC_PROG_RANLIB
 
+# --------
+# save configure arguments
+# --------
+
+AC_SUBST([uh_config_arguments])
+
+changequote(,)dnl
+# Compile in configure arguments.
+if test -f configargs.h ; then
+	# Being re-configured.
+	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
+	uh_config_arguments="$uh_config_arguments : (reconfigured) $@"
+else
+   uh_config_arguments=$@
+fi
+
+# Double all backslashes and backslash all quotes to turn
+# uh_config_arguments into a C string.
+sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
+$uh_config_arguments
+EOF
+uh_config_arguments_str=`cat conftest.out`
+rm -f conftest.out
+
+cat > configargs.h <<EOF
+/* Generated automatically. */
+static const char configuration_arguments[] = "$uh_config_arguments_str";
+EOF
+changequote([,])dnl
+
+#####################
+
 # There are known bugs when building the compiler in 64 bit mode on x86 so,
 # unless the user specifies otherwise, we default to 32 bit mode as the
 # default on x86 64 bit platforms.
@@ -254,6 +286,17 @@ AS_IF([test "x$enable_dragon_support" = "xyes"], [
 ])
 AS_IF([test "x$enable_dragon_support" != "xyes"], [
   DRAGON_SUPPORT=NO
+])
+
+# enable OpenSHMEM Analyzer support
+AC_ARG_ENABLE([osa],
+  AC_HELP_STRING([--enable-osa], [Enables OpenSHMEM Analyzer]))
+
+AS_IF([test "x$enable_osa" = "xyes"], [
+  ENABLE_OSA=YES
+])
+AS_IF([test "x$enable_osa" != "xyes"], [
+  ENABLE_OSA=NO
 ])
 
 case "$BUILD_COMPILER" in
@@ -680,6 +723,7 @@ AC_SUBST([TAU_ROOT])
 AC_SUBST([TAU_LIBS])
 AC_SUBST([EPIK_ROOT])
 AC_SUBST([OPENUH_VERSION])
+AC_SUBST([ENABLE_OSA])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
@@ -713,11 +757,13 @@ AC_CONFIG_FILES([
 
 AC_CONFIG_FILES([
   osprey/scripts/omprun
+  osprey/scripts/callgraph
+  osprey/scripts/call
 ])
 
 if test "${BUILD_FORTRAN}" = "YES"; then
  AC_CONFIG_FILES([
-  osprey/targdir/whirl2f/Makefile      
+  osprey/targdir/whirl2f/Makefile
   osprey/targdir/crayf90/Makefile
   osprey/targdir/crayf90/fe90/Makefile
   osprey/targdir/crayf90/libf90sgi/Makefile
@@ -894,38 +940,6 @@ fi
 AC_OUTPUT
 
 
-# --------
-# save configure arguments
-# --------
-
-AC_SUBST([uh_config_arguments])
-
-changequote(,)dnl
-# Compile in configure arguments.
-if test -f configargs.h ; then
-	# Being re-configured.
-	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
-	uh_config_arguments="$uh_config_arguments : (reconfigured) $@"
-else
-   uh_config_arguments=$@
-fi
-
-# Double all backslashes and backslash all quotes to turn
-# uh_config_arguments into a C string.
-sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
-$uh_config_arguments
-EOF
-uh_config_arguments_str=`cat conftest.out`
-rm -f conftest.out
-
-cat > configargs.h <<EOF
-/* Generated automatically. */
-static const char configuration_arguments[] = "$uh_config_arguments_str";
-EOF
-changequote([,])dnl
-
-#"####################
-
 # -----------------------
 # Final Configure Report
 # -----------------------
@@ -970,6 +984,7 @@ AC_MSG_NOTICE([   BUILD_LIBUHINSTR               = $BUILD_LIBUHINSTR])
 AC_MSG_NOTICE([   TAU_ROOT                       = $TAU_ROOT])
 AC_MSG_NOTICE([   TAU_LIBS                       = $TAU_LIBS])
 ])
+AC_MSG_NOTICE([   ENABLE_OSA                     = $ENABLE_OSA])
 AC_MSG_NOTICE([])
 AC_MSG_NOTICE([********************************************************************])
 AC_MSG_NOTICE([])

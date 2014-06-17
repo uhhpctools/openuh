@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -18,6 +23,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -136,7 +152,11 @@ extern char *psclp_arg;
 // all of the others are basename only.
 extern int Epilog_Flag;
 static char* makefile_name = 0;         // name of the makefile
-static FILE* makefile = 0; 
+#ifndef OPENSHMEM_ANALYZER
+static FILE* makefile = 0;
+#else
+FILE* makefile = 0;
+#endif
 
 static vector<const char*>* infiles = 0;
 static vector<const char*>* outfiles = 0;
@@ -1016,6 +1036,13 @@ void ipacom_doit (const char* ipaa_filename)
 	    tmpdir, symlinksdir, link_cmdfile_name);
 #endif // TARG_SL
     fprintf(makefile, "\trm -r %s\n", symlinksdir);
+
+#ifdef OPENSHMEM_ANALYZER
+    if (OSA_Flag) {
+        fprintf(makefile, "\trm -r %s\n", outfile_basename);
+    }
+#endif
+
 #elif defined(TARG_LOONGSON)
     fprintf(makefile, "\t%s `cat %s `\n",
             link_line->front(),

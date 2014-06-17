@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -21,6 +26,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -128,6 +144,36 @@ using namespace std;
 #include "opt_defs.h"           // -ttALI tracing options
 #include "ir_reader.h"
 
+#ifdef OPENSHMEM_ANALYZER
+
+#include "symtab.h"
+#include "ipa_option.h"
+#include "ipc_symtab_merge.h"           // for AUX_ST
+//#include "ipc_pic.h"
+//#include "ld_ipa_interface.h"
+#include "opt_alias_interface.h"
+
+#include <stdarg.h>
+FILE* messagesout;
+FILE* IPL_temp_messagesout;
+#include <string.h>
+#include <fstream>
+using namespace std;
+#ifndef _LIGHTWEIGHT_INLINER
+extern const char* output_filename;
+#endif
+
+#define GET_LEFTMOST_LDA_(temp_wn, param, lda)   \
+  {for(temp_wn = WN_kid(param,0); temp_wn!=NULL && WN_operator(temp_wn)!=OPR_LDA; temp_wn=WN_kid(temp_wn,0)) {  \
+        lda = temp_wn;  \
+   }                    \
+   if (temp_wn!=NULL)   \
+        lda = temp_wn;  \
+  }
+//end_shmem
+
+#endif /* defined(OPENSHMEM_ANALZER) */
+
 #if !defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER)
 #include "ipa_nystrom_alias_analyzer.h"
 #endif
@@ -177,6 +223,15 @@ FB_FREQ Total_call_freq(0);
 FB_FREQ Total_cycle_count(0);
 #endif
 
+#ifdef OPENSHMEM_ANALYZER
+static char current_htmlsrc[1000];
+static char current_src[1000];
+/* TODO: figure out a better way to determine this */
+static const char *current_file_ext = ".c";
+vector<ST_IDX> initlist; // clear list before use;
+vector<int> initliststate; 
+#endif
+
 //-----------------------------------------------------------------------
 // NAME: Main_Entry
 // FUNCTION: Return the main entry point for the possible alternate entry
@@ -199,6 +254,31 @@ extern IPA_NODE* Main_Entry(IPA_NODE* ipan_alt)
   return IPA_Call_Graph->Graph()->Node_User(alt_entry_index);  
 } 
 
+#ifdef OPENSHMEM_ANALYZER
+void WriteLinkHTML(BOOL link, int line=0) {
+
+   vfprintf (messagesout,"<br>\n",NULL);
+
+   if(link) {
+
+     fprintf (messagesout,"<a href=\"file:");
+     fprintf (messagesout,current_htmlsrc);
+     fprintf  (messagesout,"#line%d",line);
+     fprintf (messagesout,"\">[view]</a>");
+   }
+
+}
+void WriteHTML (char * format, ...)
+{
+
+
+  va_list args;
+  va_start (args, format);
+  vfprintf (messagesout, format, args);
+  va_end (args);
+
+}
+#endif /* defined(OPENSHMEM_ANALYZER) */
 
 #ifndef _LIGHTWEIGHT_INLINER
 
@@ -541,6 +621,9 @@ IPA_Check_Optimization_Options (IP_FILE_HDR& hdr)
   {
     warned = true;
     Opt_Options_Inconsistent = TRUE;
+#ifdef OPENSHMEM_ANALYZER
+    if (!OSA_Flag)
+#endif
     ErrMsg (EC_Ipa_Options);
     return;
   }
@@ -573,7 +656,11 @@ IPA_Check_Optimization_Options (IP_FILE_HDR& hdr)
     	warned = true;
 	Opt_Options_Inconsistent = TRUE;
 	current_options.clear();
-    	ErrMsg (EC_Ipa_Options);
+#ifdef OPENSHMEM_ANALYZER
+    if (!OSA_Flag)
+#endif
+    ErrMsg (EC_Ipa_Options);
+
 	return;
     }
   }
@@ -4160,6 +4247,644 @@ IPA_NODE::Print(FILE *fp, IPA_CALL_GRAPH *cg)
    }
 }
 
+#ifdef OPENSHMEM_ANALYZER
+
+int IPA_CALL_GRAPH::IsOpenSHMEM(char *input, int begin, int end)
+{
+  int debug=0;
+  char shmem_name[190][50] ={
+ /*
+  * Initialization & rtl  // 0
+ */
+    "first_name",
+    "start_pes",   // 1
+    "shmem_init",
+    "shmem_finalize",
+    "shmem_my_pe",  // 4
+    "my_pe",
+    "_my_pe",
+    "shmem_num_pes",
+    "shmem_n_pes",
+    "num_pes",
+    "_num_pes",
+    "shmem_nodename",
+    "shmem_version",
+/*
+ * I/O  // 13
+ */
+     "shmem_short_put",
+     "shmem_int_put",
+     "shmem_long_put",
+     "shmem_longlong_put",
+     "shmem_longdouble_put",
+     "shmem_double_put",
+     "shmem_float_put",
+     "shmem_putmem",
+     "shmem_put32",
+     "shmem_put64",
+     "shmem_put128",
+
+      // 24
+
+     "shmem_short_get",
+     "shmem_int_get",
+     "shmem_long_get",
+     "shmem_longlong_get",
+     "shmem_longdouble_get",
+     "shmem_double_get",
+     "shmem_float_get",
+     "shmem_getmem",
+     "shmem_get32",
+     "shmem_get64",
+     "shmem_get128",
+    // 35
+     "shmem_char_p",
+     "shmem_short_p",
+     "shmem_int_p",
+     "shmem_long_p",
+     "shmem_longlong_p",
+     "shmem_float_p",
+     "shmem_double_p",
+     "shmem_longdouble_p",
+    //43
+     "shmem_char_g",
+     "shmem_short_g",
+     "shmem_int_g",
+     "shmem_long_g",
+     "shmem_longlong_g",
+     "shmem_float_g",
+     "shmem_double_g",
+     "shmem_longdouble_g",
+
+/*
+ * non-blocking I/O
+ */  //51
+     "shmem_short_put_nb",
+     "shmem_int_put_nb",
+     "shmem_long_put_nb",
+     "shmem_longlong_put_nb",
+     "shmem_longdouble_put_nb",
+     "shmem_double_put_nb",
+     "shmem_float_put_nb",
+     "shmem_putmem_nb",
+     "shmem_put32_nb",
+     "shmem_put64_nb",
+     "shmem_put128_nb",
+/*
+ * strided I/O
+ */  //62
+     "shmem_double_iput",
+     "shmem_float_iput",
+     "shmem_int_iput",
+     "shmem_iput32",
+     "shmem_iput64",
+     "shmem_iput128",
+     "shmem_long_iput",
+     "shmem_longdouble_iput",
+     "shmem_longlong_iput",
+     "shmem_short_iput",
+     "shmem_double_iget",
+     "shmem_float_iget",
+     "shmem_int_iget",
+     "shmem_iget32",
+     "shmem_iget64",
+     "shmem_iget128",
+     "shmem_long_iget",
+     "shmem_longdouble_iget",
+     "shmem_longlong_iget",
+     "shmem_short_iget",
+/*
+ * barriers
+ */ //82
+     "shmem_barrier_all",
+     "shmem_barrier",
+     "shmem_fence",
+     "shmem_quiet",
+/*
+ * accessibility
+ */  //86
+     "shmem_pe_accessible",
+     "shmem_addr_accessible",
+/*
+ * symmetric memory management
+ */  // 88
+     "shmalloc",
+     "shfree",
+     "shrealloc",
+     "shmemalign",
+     "shmem_malloc",
+     "shmem_free",
+     "shmem_realloc",
+     "shmem_memalign",
+     "sherror",
+     "shmem_error",
+/*
+ * wait operations
+ *///98
+     "shmem_short_wait_until",
+     "shmem_int_wait_until",
+     "shmem_long_wait_until",
+     "shmem_longlong_wait_until",
+     "shmem_wait_until",
+     "shmem_short_wait",
+     "shmem_int_wait",
+     "shmem_long_wait",
+     "shmem_longlong_wait",
+     "shmem_wait",
+/*
+ * atomic swaps
+ *///108
+     "shmem_int_swap",
+     "shmem_long_swap",
+     "shmem_longlong_swap",
+     "shmem_float_swap",
+     "shmem_double_swap",
+     "shmem_swap",
+     "shmem_int_cswap",
+     "shmem_long_cswap",
+     "shmem_longlong_cswap",
+/*
+ * atomic fetch-{add,inc} & add,inc
+ */
+    //117
+     "shmem_int_fadd",
+     "shmem_long_fadd",
+     "shmem_longlong_fadd",
+     "shmem_int_finc",
+     "shmem_long_finc",
+     "shmem_longlong_finc",
+     "shmem_int_add",
+     "shmem_long_add",
+     "shmem_longlong_add",
+     "shmem_int_inc",
+     "shmem_long_inc",
+     "shmem_longlong_inc",
+/*
+ * cache flushing
+ *///129
+     "shmem_clear_cache_inv",
+     "shmem_set_cache_inv",
+     "shmem_clear_cache_line_inv",
+     "shmem_set_cache_line_inv",
+     "shmem_udcflush",
+     "shmem_udcflush_line",
+/*
+ * reductions
+ */
+//135
+
+"shmem_complexd_sum_to_all",
+"shmem_complexf_sum_to_all",
+"shmem_double_sum_to_all",
+"shmem_float_sum_to_all",
+"shmem_int_sum_to_all",
+"shmem_long_sum_to_all",
+"shmem_longdouble_sum_to_all",
+"shmem_longlong_sum_to_all",
+"shmem_short_sum_to_all",
+"shmem_complexd_prod_to_all",
+"shmem_complexf_prod_to_all",
+"shmem_double_prod_to_all",
+"shmem_float_prod_to_all",
+"shmem_int_prod_to_all",
+"shmem_long_prod_to_all",
+"shmem_longdouble_prod_to_all",
+"shmem_longlong_prod_to_all",
+"shmem_short_prod_to_all",
+"shmem_int_and_to_all",
+"shmem_long_and_to_all",
+"shmem_longlong_and_to_all",
+"shmem_short_and_to_all",
+"shmem_int_or_to_all",
+"shmem_long_or_to_all",
+"shmem_longlong_or_to_all",
+"shmem_short_or_to_all",
+"shmem_int_xor_to_all",
+"shmem_long_xor_to_all",
+"shmem_longlong_xor_to_all",
+"shmem_short_xor_to_all",
+"shmem_int_max_to_all",
+"shmem_long_max_to_all",
+"shmem_longlong_max_to_all",
+"shmem_short_max_to_all",
+"shmem_longdouble_max_to_all",
+"shmem_float_max_to_all",
+"shmem_double_max_to_all",
+"shmem_int_min_to_all",
+"shmem_long_min_to_all",
+"shmem_longlong_min_to_all",
+"shmem_short_min_to_all",
+"shmem_longdouble_min_to_all",
+"shmem_float_min_to_all",
+"shmem_double_min_to_all",
+/*
+ * broadcasts
+ */
+//179
+     "shmem_broadcast32",
+     "shmem_broadcast64",
+     "shmem_sync_init",
+/*
+ * collects
+ */
+//182
+     "shmem_fcollect32",
+     "shmem_fcollect64",
+     "shmem_collect32",
+     "shmem_collect64",
+/*
+ * locks/critical section
+ */
+//186
+     "shmem_set_lock",
+     "shmem_clear_lock",
+     "shmem_test_lock"
+     };
+  for(int i=begin;i<=end;i++) {
+    if(strcmp(shmem_name[i],input)==0) {
+      if(debug) printf("\n*** OpenSHMEM call found: %s ***\n", shmem_name[i]);
+      return 1;
+
+    }
+
+  }
+  //  if(debug)
+  // printf("\nThis is the last SHMEM call: %s\n", shmem_name[188]);
+
+  return 0;
+}
+
+void IPA_CALL_GRAPH::OpenSHMEM_IO_Checks()
+{
+
+  int debug=0;
+  IPA_NODE_ITER cg_iter(this, PREORDER);
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+
+      IPA_NODE* node = cg_iter.Current();
+      if(debug) printf(".\n");
+      if (node) {
+          strcpy(current_src,(char *) node->Input_File_Name());
+
+          for(int itr=0; itr<strlen(current_src); itr++)
+              if (current_src[itr] == '\%') current_src[itr] = '/';
+
+
+          int len = strlen(current_src);
+          current_src[(len)-2] = '\0';
+          strcat(current_src, current_file_ext);
+
+          strcpy(current_htmlsrc,current_src);
+          strcat(current_htmlsrc,".html");
+
+          if(debug) printf("+\n");
+          IPA_NODE_CONTEXT context(node); // turns on the tables per PU.
+
+          WN* wn = node->Whirl_Tree(TRUE);
+          WN* root = wn;
+          if(wn==NULL) {
+              if(debug) printf("Value of node wn=NULL");
+              continue;
+          }
+          if(debug) printf("#\n");
+          if (WN_operator(wn) != OPR_FUNC_ENTRY) {
+              if(debug)
+                  printf("SHMEMChecker: not a func entry");
+          }
+
+          initlist.clear();
+          initliststate.clear();
+          if(debug) printf("@\n");
+          WN* body = WN_func_body( wn );
+          WN* stmt;
+          WN* arr_alias_wn[100]; // buffer to be filled by alias checks
+
+          for ( stmt = WN_first( body ); stmt; stmt = WN_next( stmt ) )
+          {
+              if(debug) printf("*\n");
+              Tree_Walk_Node( stmt, stmt, body, NULL, root);
+          }
+          //  Dump_alias_mgr(alias_mgr, (body) , stdout);
+          //  Delete_Alias_Manager (alias_mgr , MEM_pu_nz_pool_ptr);
+      } // if node
+  }  // for cg_iter
+}
+
+void appendfile(FILE *source, FILE *target)
+{
+  int ch =  fgetc(source);
+  while( ch != EOF ) {
+      fputc(ch,target);
+       ch =  fgetc(source);
+  }
+
+}
+
+void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
+{
+    int debug=0;
+    char init_names[3][20] = {
+        "start_pes",
+        "shmem_init",
+        "shmem_finalize"
+    };
+    ofstream fout;
+    char *cg_filename=NULL;
+    char *message_filename=NULL;
+    if (print) {
+#ifndef _LIGHTWEIGHT_INLINER
+        int len = strlen (output_filename);
+        cg_filename = new char[len+5];
+        message_filename = new char[len+5];
+        strcpy(cg_filename,output_filename);
+        strcpy(message_filename, output_filename);
+        strcat(cg_filename,".dot");
+        strcat(message_filename,".msg");
+        messagesout  = fopen (message_filename,"w");
+
+        fout.open(cg_filename,ios::out);
+        fout << "digraph callgraph {\n";
+        //  fout << "size=\"36,36\";\n";
+        fout << "node [color=grey, style=filled];\n";
+        fout << "node [fontname=\"Verdana\", size=\"30,30\"];\n";
+        fout << "graph [ fontname = \"Arial\",fontsize = 20,style = "
+                " \"bold\",label = \"callgraph: " << output_filename <<
+                "\",ssize = \"30,60\"];\n";
+
+#endif
+    }
+    char good_state[4] = "fip";
+    int state = 0;
+    int init = 0;
+    int fini = 0;
+
+    //testing
+    IPA_NODE_ITER cg_iter(this, PREORDER);
+
+    for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+
+        IPA_NODE* node = cg_iter.Current();
+        if (node) {
+
+            //     printf("\nNODE: ");
+            //    printf(IPA_Node_Name(node));
+            //    printf("\n");
+            char *node_name = IPA_Node_Name(node);
+
+            // check fo shmem calls then another condition will kick in here
+
+            if(strcmp(init_names[0],node_name)==0 ||
+                    strcmp(init_names[1],node_name)==0 ||
+                    strcmp(init_names[2],node_name)==0 ) {
+
+                switch(node_name[6])
+                {
+                    case 'f':
+                        fini++;
+                        if(init==0)
+                            state++;
+                        break;
+                    case 'i':
+                    case 'p':
+
+                        init++;
+                        if(state==1) {
+                            state++;
+                        }
+                        break;
+                }
+
+
+
+
+
+                //  printf("\nFound OpenSHMEM call: %s", node_name);
+
+            }
+
+        }
+    }
+
+    if(fini==0) {
+        printf("\n*** OpenSHMEM Warning: no call to %s found ***\n", init_names[2]);
+        WriteLinkHTML(FALSE);
+        WriteHTML("\n*** OpenSHMEM Warning: no call to %s found ***\n", init_names[2]);
+    }
+    if(init==0)  {
+        printf("\n*** OpenSHMEM Warning: no call to %s or %s found ***\n", init_names[0], init_names[1]);
+        WriteLinkHTML(FALSE);
+        WriteHTML("\n*** OpenSHMEM Warning: no call to %s or %s found ***\n", init_names[0], init_names[1]);
+    }
+    if(init>=1 && state==0 && fini>=1) {
+        printf("\n*** OpenSHMEM Warning: call %s appears before call %s or %s *** \n", init_names[2], init_names[0], init_names[1]);
+        WriteLinkHTML(FALSE);
+        WriteHTML("\n*** OpenSHMEM Warning: call %s appears before call %s or %s *** \n", init_names[2], init_names[0], init_names[1]);
+    }
+    if(debug)
+        printf("\nthe sates are init=%d, fini=%d, state=%d\n",init,fini,state);
+
+    //testing
+    init=fini=0;
+    char *filename=NULL;
+    char *dirname=NULL;
+    char previous[500] = "";
+    IPA_NODE_ITER cg_iter2(this, PREORDER);
+    for (cg_iter2.First(); !cg_iter2.Is_Empty(); cg_iter2.Next()) {
+
+        IPA_NODE* node = cg_iter2.Current();
+        if (node) {
+            IPA_NODE_CONTEXT context(node);
+            //  printf("Visiting %s\n",IPA_Node_Name(node));
+            IPA_Call_Graph->Map_Callsites(node);
+            //      BOOL seen_callee = FALSE;
+            WN *WnTree =  node->Whirl_Tree();
+            SRCPOS srcpos = WN_Get_Linenum(WnTree);
+            USRCPOS linepos;
+            USRCPOS_srcpos(linepos) = srcpos;
+
+            int line = USRCPOS_linenum(linepos);
+
+            // dump_tree(WnTree);
+            //      IPA_IR_Filename_Dirname(srcpos,filename,dirname);
+            //      if(filename!=NULL && dirname!=NULL)
+
+            IPA_SUCC_ITER succ_iter(node);
+            char *name = IPA_Node_Name(node);
+            char html[500];
+            char localmsg[500];
+            succ_iter.First();
+            if(IsOpenSHMEM(name)==0 && !succ_iter.Is_Empty()) {
+                char *object = (char *)node->Input_File_Name();
+
+                for(int itr=0; itr<strlen(object); itr++)
+                    if (object[itr] == '\%') object[itr] = '/';
+
+                int len = strlen(object);
+                strcpy(html,object);
+                html[(len)-2] = '\0';
+                fout << "\"" <<name <<"\"" <<" [URL=\"file:" << html<<current_file_ext<<".html#line"<<line<<"\"];\n";
+                strcpy(localmsg,html);
+                strcat(localmsg,".c.msg");
+
+                IPL_temp_messagesout = fopen(localmsg,"r");
+                if(IPL_temp_messagesout!=NULL) {
+                    //  printf("\nThe file was open: %s\n",localmsg);
+                    if(strcmp(previous,localmsg)!=0) {
+                        appendfile(IPL_temp_messagesout, messagesout);
+                        strcpy(previous,localmsg);
+                    }
+                    /* OSCAR TODO */
+                    fclose(IPL_temp_messagesout);
+
+                }
+            }
+
+            //      for (; !succ_iter.Is_Empty(); succ_iter.Next())
+
+
+            vector<IPA_EDGE*> backward;
+            for (succ_iter.First_Succ(); !succ_iter.Is_Empty(); succ_iter.Next_Succ()) {
+                backward.push_back(succ_iter.Current_Edge());
+            }
+
+            //      for (succ_iter.First_Succ(); !succ_iter.Is_Empty(); succ_iter.Next_Succ())
+            //       IPA_EDGE *ed = succ_iter.Current_Edge();
+            for(int i=backward.size()-1; i>=0; i--) {
+
+                if (IPA_NODE* callee = Callee(backward[i])) {
+                    //   seen_callee = TRUE;
+                    int callsite_linenum=0;
+                    USRCPOS callsite_srcpos;
+                    //	 WN *call_wn = ed->Whirl_Node();
+                    WN *call_wn = backward[i]->Whirl_Node();
+                    if(call_wn == NULL) {
+                        callsite_linenum=0;
+
+                    }
+                    else {
+                        USRCPOS_srcpos(callsite_srcpos) = WN_Get_Linenum (call_wn);
+                        callsite_linenum = USRCPOS_linenum(callsite_srcpos);
+                    }
+                    char *node_name = IPA_Node_Name(callee);
+                    char *parent_name = IPA_Node_Name(node);
+
+
+                    if(IsOpenSHMEM(node_name)) {
+                        fout << parent_name << "[color=lightblue];\n";
+                        fout << node_name << "[color=lightpink];\n";
+                        fout << parent_name;
+                        fout <<" -> ";
+                        fout << node_name;
+                        // syncrhonizations calls
+                        if(IsOpenSHMEM(node_name,98,107) || IsOpenSHMEM(node_name,82,85) || IsOpenSHMEM(node_name,186,188))
+                            fout << " [style=filled,color=red," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,1,12)) // init, runtime queries
+                            fout << " [style=dashed,color=green," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,88,97)) // symetic memory management
+                            fout << " [color=yellow," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,108,128)) // atomics
+                            fout << " [color=orange," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,135,178)) // reductions
+                            fout << " [color=purple," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,179,181)) // broadcast
+                            fout << " [style=dashed,color=red," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,135,178)) // reductions
+                            fout << " [color=purple," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else if (IsOpenSHMEM(node_name,13,81)) // IO
+                            fout << " [color=blue," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        else // all others
+                            fout << " [color=black," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+
+
+                    } else {
+
+                        fout << parent_name;
+                        fout <<" -> ";
+                        fout << node_name;
+                        fout << " [URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+
+                    }
+                    if(strcmp(init_names[0],node_name)==0 ||
+                            strcmp(init_names[1],node_name)==0 ||
+                            strcmp(init_names[2],node_name)==0 ) {
+                        if(debug)
+                            printf("\nOpenSHMEM callee=%s\n",node_name);
+                        switch(node_name[6])
+                        {
+                            case 'f':
+                                fini++;
+                                break;
+                            case 'i':
+                            case 'p':
+                                init++;
+                                break;
+
+                        } // switch
+                    } //comp
+
+                } //if
+            } //for
+            if(filename!=NULL) {
+                delete [] filename;
+                filename=NULL;
+            }
+            if(dirname!=NULL) {
+                delete [] dirname;
+                dirname = NULL;
+            }
+
+        }  //if
+    } // for
+
+
+
+
+    if(init>1) {
+        printf("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
+               "initialization call found ***\n");
+        WriteLinkHTML(FALSE);
+        WriteHTML("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
+                "initialization call found ***\n");
+    }
+    if(fini>1) {
+        printf("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
+               "finalization call found ***\n");
+        WriteLinkHTML(FALSE);
+        WriteHTML("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
+                "finalization call found ***\n");
+
+    }
+    if(debug) {
+        printf("\nthe sates are init=%d, fini=%d, state=%d\n",init,fini,state);
+    }
+
+
+    if (print) {
+        fout << endl;
+        fout << "{ rank = sink; Legend [shape=none, margin=0, label=<" <<endl;
+        fout << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"1\">" << endl;
+        fout << "<TR><TD>Legend:</TD><TD>  </TD></TR>" << endl;
+        fout << "<TR><TD>I/O</TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
+        fout << "<TR><TD>Reductions</TD> <TD BGCOLOR=\"purple\"></TD></TR>" << endl;
+        fout << "<TR><TD>Broadcast</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+        fout << "<TR><TD>Atomics</TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
+        fout << "<TR><TD>Memory Mgt</TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
+        fout << "<TR><TD>State Queries</TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
+        fout << "<TR><TD>Syncrhonizations</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+        fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
+        fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
+        fout << "</TABLE> >]; }" << endl;
+        fout << "}\n";
+        delete [] cg_filename;
+        delete [] message_filename;
+        fout.close();
+    }
+
+}
+
+//end_shmem
+#endif /* defined(OPENSHMEM_ANALYZER) */
+
 // ---------------------------------------------
 // Print all node indices in the specified order
 // ---------------------------------------------
@@ -4266,4 +4991,898 @@ Pred_Is_Root(const IPA_NODE* node)
 }
 
 #endif // _LIGHTWEIGHT_INLINER
+
+#ifdef OPENSHMEM_ANALYZER
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_IPUT(WN *wn)
+{
+    int const_length3=0, const_length4=0, const_length5=0;
+
+    SRCPOS srcpos = WN_Get_Linenum(wn);
+    USRCPOS linepos;
+    USRCPOS_srcpos(linepos) = srcpos;
+    int line = USRCPOS_linenum(linepos);
+    WN * temp_wn=NULL;
+    WN *lda=NULL, *lda2=NULL;
+
+    WN *param =  WN_kid(wn,0); // First parameter
+    GET_LEFTMOST_LDA_(temp_wn, param, lda)
+
+        WN *param2 = WN_kid(wn,1); // Second parameter
+    GET_LEFTMOST_LDA_(temp_wn, param2, lda2)
+
+        WN *param3 = WN_kid(wn,2);
+    WN *u8const3 = WN_kid(param3,0);
+    if(WN_operator(u8const3)== OPR_INTCONST)
+        const_length3=1;
+
+    WN *param4 = WN_kid(wn,3);
+    WN *u8const4 = WN_kid(param4,0);
+    if(WN_operator(u8const4)== OPR_INTCONST)
+        const_length4=1;
+
+    WN *param5 = WN_kid(wn,4);
+    WN *u8const5 = WN_kid(param5,0);
+    if(WN_operator(u8const5)== OPR_INTCONST)
+        const_length5=1;
+
+
+
+    ST *st = WN_st(lda);
+    ST *st2 = WN_st(lda2);
+    if(WN_operator(lda) == OPR_LDA && WN_operator(lda2)== OPR_LDA) {
+        switch (ST_sclass(st)) {
+
+            case SCLASS_PSTATIC:
+            case SCLASS_COMMON:
+            case SCLASS_UGLOBAL:
+            case SCLASS_EXTERN:
+            case SCLASS_FSTATIC:
+            case SCLASS_DGLOBAL:
+                break;
+
+            default:
+                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
+                       "arg1 of %s (line=%d, file=%s) ***\n",
+                       ST_name( WN_st( wn ) ),line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
+                       "in arg1 of %s (line=%d, file=%s) ***\n",
+                       ST_name( WN_st( wn ) ),line,current_src);
+                break;
+
+        }
+
+        if (TY_kind(ST_type(st)) == KIND_ARRAY) {
+            // printf("array size of mtype %ld",TY_size(TY_etype(ST_type(st))));
+            // todo: fix short circuit conditional.
+            long target_size = (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)));
+
+
+
+            if(((WN_const_val(u8const5)*WN_const_val(u8const3)) > target_size) && const_length5 && const_length3) {
+                unsigned long ab =  WN_const_val(u8const5)*WN_const_val(u8const3);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
+                       "arg1 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                printf(" elements with access of %lu elements (line=%d, file=%s) "
+                       " ***\n",ab,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
+                        "of %s arg1 of %ld", ST_name(WN_st(wn)),
+                        (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                WriteHTML(" elements with access of %lu elements "
+                       "(line=%d, file=%s) ***\n",ab,line,current_src);
+            }
+        }
+        if (TY_kind(ST_type(st2)) == KIND_ARRAY) {
+            long source_size = (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)));
+            if ( ( (WN_const_val(u8const5)*WN_const_val(u8const4)) > source_size) &&
+                const_length4 && const_length5) {
+                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const4);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
+                        "arg2 of %llu", ST_name(WN_st(wn)),
+                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                printf(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n", ab,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
+                        "of %s arg2 of %ld", ST_name(WN_st(wn)),
+                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                WriteHTML(" elements with access of %lu elements "
+                       "(line=%d, file=%s) ***\n", ab,line,current_src);
+            }
+        }
+
+    }
+}
+
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_IGET(WN *wn)
+{
+    int const_length3=0, const_length4=0, const_length5=0;
+
+    SRCPOS srcpos = WN_Get_Linenum(wn);
+    USRCPOS linepos;
+    USRCPOS_srcpos(linepos) = srcpos;
+    int line = USRCPOS_linenum(linepos);
+    WN *temp_wn=NULL,*lda=NULL, *lda2=NULL;
+
+    WN *param =  WN_kid(wn,0); // First parameter
+    GET_LEFTMOST_LDA_(temp_wn, param, lda)
+
+        WN *param2 = WN_kid(wn,1); // Second parameter
+    GET_LEFTMOST_LDA_(temp_wn, param2, lda2)
+
+        WN *param3 = WN_kid(wn,2);
+    WN *u8const3 = WN_kid(param3,0);
+    if(WN_operator(u8const3)== OPR_INTCONST)
+        const_length3=1;
+
+    WN *param4 = WN_kid(wn,3);
+    WN *u8const4 = WN_kid(param4,0);
+    if(WN_operator(u8const4)== OPR_INTCONST)
+        const_length4=1;
+
+    WN *param5 = WN_kid(wn,4);
+    WN *u8const5 = WN_kid(param5,0);
+    if(WN_operator(u8const5)== OPR_INTCONST)
+        const_length5=1;
+
+
+
+    ST *st = WN_st(lda);
+    ST *st2 = WN_st(lda2);
+    if(WN_operator(lda) == OPR_LDA && WN_operator(lda2)== OPR_LDA) {
+        switch (ST_sclass(st2)) {
+
+            case SCLASS_PSTATIC:
+            case SCLASS_COMMON:
+            case SCLASS_UGLOBAL:
+            case SCLASS_EXTERN:
+            case SCLASS_FSTATIC:
+            case SCLASS_DGLOBAL:
+                break;
+
+            default:
+                printf("\n*** OpenSHMEM Warning: non-symmetric variable "
+                       "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                       line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
+                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                        line,current_src);
+                break;
+
+        }
+
+        if (TY_kind(ST_type(st)) == KIND_ARRAY) {
+            // printf("array size of mtype %ld",TY_size(TY_etype(ST_type(st))));
+            // todo: fix short circuit conditional.
+            long target_size = (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)));
+
+
+
+            if (((WN_const_val(u8const5)*WN_const_val(u8const3)) > target_size)
+                 && const_length5 && const_length3) {
+                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const3);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
+                       "arg1 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                printf(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n", ab,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of "
+                       "%s arg1 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                WriteHTML(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n", ab,line,current_src);
+            }
+        }
+        if (TY_kind(ST_type(st2)) == KIND_ARRAY) {
+            long source_size = (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)));
+            if (((WN_const_val(u8const5)*WN_const_val(u8const4)) > source_size) &&
+                 const_length4 && const_length5) {
+                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const4);
+                printf("\n*** OpenSHMEM Warning: out of bounds access "
+                       "of %s arg2 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                printf(" elements with access of %lu elements "
+                       "(line=%d, file=%s) ***\n",ab,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
+                       "of %s arg2 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                WriteHTML(" elements with access of %lu elements "
+                       "(line=%d, file=%s) ***\n",ab,line,current_src);
+
+            }
+
+        }
+    }
+}
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
+{
+    int const_length=0;
+
+    SRCPOS srcpos = WN_Get_Linenum(wn);
+    USRCPOS linepos;
+    USRCPOS_srcpos(linepos) = srcpos;
+    int line = USRCPOS_linenum(linepos);
+    WN *temp_wn=NULL,*lda=NULL, *lda2=NULL;
+
+    WN *param =  WN_kid(wn,0); // First parameter
+    GET_LEFTMOST_LDA_(temp_wn, param, lda);
+
+    WN *param2 = WN_kid(wn,1); // Second parameter
+    GET_LEFTMOST_LDA_(temp_wn, param2, lda2);
+
+    WN *param3 = WN_kid(wn,2);
+    WN *u8const = WN_kid(param3,0);
+    if(WN_operator(u8const)== OPR_INTCONST)
+        const_length=1;
+    Check_OpenSHMEM_Initvars(lda,line,1 );
+
+    if(WN_operator(lda) == OPR_LDA && WN_operator(lda2)== OPR_LDA) {
+        ST *st = WN_st(lda);
+        ST *st2 = WN_st(lda2);
+
+        switch (ST_sclass(st)) {
+
+            case SCLASS_PSTATIC:
+            case SCLASS_COMMON:
+            case SCLASS_UGLOBAL:
+            case SCLASS_EXTERN:
+            case SCLASS_FSTATIC:
+            case SCLASS_DGLOBAL:
+                break;
+
+            default:
+                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
+                       "arg1 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                       line, current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
+                       "in arg1 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                       line, current_src);
+                break;
+
+        }
+
+        if (TY_kind(ST_type(st)) == KIND_ARRAY ) {
+            // printf("array size of mtype %ld",TY_size(TY_etype(ST_type(st))));
+            // todo: fix short circuit conditional.
+            if((WN_const_val(u8const) >
+               (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))) &&
+               const_length) {
+                unsigned int ab = WN_const_val(u8const);
+                printf("\n*** OpenSHMEM Warning: out of bounds access "
+                       "of %s arg1 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                printf(" elements with access of %u elements (line=%d, "
+                       "file=%s) ***\n",ab,line, current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
+                       "of %s arg1 of %ld", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
+                WriteHTML(" elements with access of %u elements (line=%d, "
+                        "file=%s) ***\n",ab,line, current_src);
+
+            }
+
+            // todo: need to add iget, pshmem, _np
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put4")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put32")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put32_nb")==0) {
+                if (TY_size(TY_etype(ST_type(st))) != 4) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line, current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage "
+                            "class of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
+
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put8")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put64")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put64_nb")==0 ) {
+                if (TY_size(TY_etype(ST_type(st))) != 8) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line, current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage "
+                            "class of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
+
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put128")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put128_nb")==0) {
+                if (TY_size(TY_etype(ST_type(st))) != 16) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                            "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                }
+            }
+        }
+
+        if (TY_kind(ST_type(st2)) == KIND_ARRAY )
+        {
+            if((WN_const_val(u8const) >
+                (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)))) &&
+                const_length ) {
+                unsigned long ab = WN_const_val(u8const);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of "
+                       "%s arg2 of %llu", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                printf(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n" , ab,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
+                        "of %s arg2 of %llu", ST_name(WN_st(wn)),
+                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                WriteHTML(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n" , ab,line,current_src);
+
+            }
+
+            // todo: need to add iget, pshmem, _np
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put4")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put32")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put32_nb")==0 ) {
+                if (TY_size(TY_etype(ST_type(st2))) != 4) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put8")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put64")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put64_nb")==0 ) {
+                if (TY_size(TY_etype(ST_type(st2))) != 8) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                            "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_put128")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_put128_nb")==0) {
+                if (TY_size(TY_etype(ST_type(st2))) != 16) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+                }
+            }
+
+
+        }
+
+    }
+}
+
+int IPA_CALL_GRAPH::Check_stlist(ST_IDX idx)
+{
+    int i, found =0;
+    //  printf("size of initlist=%d\n",initlist.size());
+    for(i=0; i<initlist.size(); i++)
+    {
+        // printf("comparing idx=%d with idx=%d",initlist[i],idx);
+        if(initlist[i]==idx) {
+            return initliststate[i];
+
+        }
+    }
+    return found;
+}
+
+void IPA_CALL_GRAPH::Populate_stlist(WN *wn, WN* stmt, WN *block)
+{
+    OPERATOR opr = WN_operator( wn );
+
+    // Traverse Block
+    if ( opr == OPR_BLOCK ) {
+
+        WN *node;
+        for ( node = WN_first( wn ); node; node = WN_next( node ) )
+            Populate_stlist( node, node, wn);
+    }
+
+    // Traverse the kids of the current statement
+    for ( INT32 i = 0; i < WN_kid_count( wn ); i++ )
+        Populate_stlist( WN_kid( wn, i ), wn, block);
+
+
+    switch (opr) {
+        case OPR_STID:
+            ST *st = WN_st(wn);
+            ST_IDX st_idx = ST_st_idx(st);
+
+
+            //  printf("found st_idx in stid=%d",st_idx);
+            WN *return_wn = NULL;
+            return_wn =WN_prev(wn);
+            WN *shmemcall=NULL;
+            if (return_wn!=NULL) {
+                // shmemcall=WN_prev(return_wn);
+                shmemcall=return_wn;
+                if(shmemcall!=NULL) {
+                    // dump_tree(shmemcall);
+                    if(WN_has_sym(shmemcall) && WN_operator(shmemcall)==OPR_CALL) {
+                        if( IsOpenSHMEM(ST_name(WN_st(shmemcall)),88,88) ||
+                            IsOpenSHMEM(ST_name(WN_st(shmemcall)),90,90) ||
+                            IsOpenSHMEM(ST_name(WN_st(shmemcall)),92,92) ||
+                            IsOpenSHMEM(ST_name(WN_st(shmemcall)),94,94)) {
+                            initlist.push_back(st_idx);
+                            initliststate.push_back(1);
+                        }
+                    }
+                }
+            }
+            break;
+    }
+}
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_Initvars(WN *lda, int line, int arg )
+{
+
+    int earlyexit1=0;
+    int earlyexit2=0;
+    if(WN_operator(lda) == OPR_LDID /* && WN_operator(lda2) == OPR_LDID */) {
+        ST *st = WN_st(lda);
+        //   ST *st2 = WN_st(lda2);
+
+        //  ST_IDX st2_idx = WN_st_idx(lda2);
+        ST_IDX st_idx = ST_st_idx(st);
+        //  ST_IDX st2_idx = ST_st_idx(st2);
+        // Check if global data
+#ifndef _LIGHTWEIGHT_INLINER
+        if (ST_sclass(st) == SCLASS_UGLOBAL || ST_sclass(st) == SCLASS_DGLOBAL ||
+                ST_sclass(st) == SCLASS_COMMON  || ST_sclass(st) == SCLASS_EXTERN ||
+                ST_sclass(st) == SCLASS_FSTATIC || ST_sclass(st) ==SCLASS_DGLOBAL  ) {
+            //  Clear_ST_is_global_as_local(st);
+            if(AUX_ST_modcount(Aux_St_Table[st_idx])==0) {
+
+                printf("\n*** OpenSHMEM Warning: Uninitialized global "
+                        "pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n",
+                        ST_name(st),line, current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: Uninitialized global "
+                        " pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n",
+                        ST_name(st),line, current_src);
+
+            }
+            earlyexit1=1;
+        }
+       /*
+           if (ST_sclass(st2) == SCLASS_UGLOBAL || ST_sclass(st2) == SCLASS_DGLOBAL ||
+               ST_sclass(st2) == SCLASS_COMMON  || ST_sclass(st2) == SCLASS_EXTERN ||
+               ST_sclass(st2) == SCLASS_FSTATIC || ST_sclass(st2) ==SCLASS_DGLOBAL  ) {
+          // Clear_ST_is_global_as_local(st2);
+          if(AUX_ST_modcount(Aux_St_Table[st2_idx])==0) {
+
+            printf("\n*** OpenSHMEM Warning: Uninitialized global pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st2),line,current_src);
+            WriteLinkHTML(TRUE,line);
+            WriteHTML("\n*** OpenSHMEM Warning: Uninitialized global pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st2),line,current_src);
+
+          }
+          earlyexit2=1;
+          }
+       */
+    // int n=12;
+     //     Clear_ST_is_global_as_local(st);
+     // dump_tree(root);
+       /* remove oscar
+     if (Check_stlist(st_idx)==0 && earlyexit1==0)
+
+      {
+        if(ST_sym_class(st) == CLASS_PREG) {
+        printf("\n*** OpenSHMEM Warning: Uninitialized local pointer in arg%d of OpenSHMEM call (line=%d, file=%s) ***\n", arg,line,current_src);
+        WriteLinkHTML(TRUE,line);
+        WriteHTML("\n*** OpenSHMEM Warning: Uninitialized local pointer in arg%d of OpenSHMEM call (line=%d, file=%s) ***\n", arg,line,current_src);
+
+	}
+        else {
+	 printf("\n*** OpenSHMEM Warning: Uninitialized local pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st),line,current_src);
+         WriteHTML("\n*** OpenSHMEM Warning: Uninitialized local pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st),line,current_src);
+	  //  printf("Data has not been initialized in arg1 stidx=%d",st_idx);
+        }
+       }
+       */
+     /*
+      if (Check_stlist(st2_idx)==0 && earlyexit2==0)
+       {
+	 printf("\n*** OpenSHMEM Warning: Uninitialized local pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st2),line,current_src);
+         WriteLinkHTML(TRUE,line);
+         WriteHTML("\n*** OpenSHMEM Warning: Uninitialized local pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(st2),line,current_src);
+	  //  printf("Data has not been initialized in arg1 stidx=%d",st_idx);
+       }
+     */
+     /*
+     printf("Stidx=%d\n",st_idx);
+     n = AUX_ST_modcount(Aux_St_Table[st_idx]);
+
+   // fprintf(TFile, "%s is modified this number=%d  ", ST_name (st),n);// , AUX_ST_modcount(Aux_St_Table[st_idx]));
+   // fprintf(TFile, "%s is modified this number= ", ST_name (st2));//, AUX_ST_modcount(Aux_St_Table[st2_idx]));
+     */
+
+#endif
+
+    }
+}
+
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
+{
+
+
+    int const_length = 0;
+    SRCPOS srcpos = WN_Get_Linenum(wn);
+    USRCPOS linepos;
+    USRCPOS_srcpos(linepos) = srcpos;
+    int line = USRCPOS_linenum(linepos);
+    WN* temp_wn=NULL, *lda=NULL, *lda2=NULL;
+
+    WN *param =  WN_kid(wn,1); // Second parameter
+    GET_LEFTMOST_LDA_(temp_wn, param, lda);
+
+    WN *param2 = WN_kid(wn,0); // Second parameter
+    GET_LEFTMOST_LDA_(temp_wn, param2, lda2);
+
+    WN *param3 = WN_kid(wn,2);
+    WN *u8const = WN_kid(param3,0);
+    if(WN_operator(u8const)== OPR_INTCONST)
+        const_length=1;
+
+    Check_OpenSHMEM_Initvars(lda,line,2 );
+
+    if(WN_operator(lda) == OPR_LDA && WN_operator(lda2)== OPR_LDA) {
+
+        ST *st = WN_st(lda);
+        ST *st2 = WN_st(lda2);
+
+        switch (ST_sclass(st)) {
+
+            case SCLASS_PSTATIC:
+            case SCLASS_COMMON:
+            case SCLASS_UGLOBAL:
+            case SCLASS_EXTERN:
+            case SCLASS_FSTATIC:
+            case SCLASS_DGLOBAL:
+                break;
+
+            default:
+                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
+                       "arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                       line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
+                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                        line,current_src);
+                break;
+
+
+        }
+
+        if (TY_kind(ST_type(st)) == KIND_ARRAY )
+        {
+            // printf("array size of mtype %ld",TY_size(TY_etype(ST_type(st))));
+
+            if((WN_const_val(u8const) > (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))) && const_length    ) {
+                unsigned long ba= WN_const_val(u8const);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
+                       "arg2 of %llu elements with access of",ST_name(WN_st(wn)),
+                       ((TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))));
+                printf(" %lu elements (line=%d, file=%s) ***\n",ba,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of %s "
+                       "arg2 of %llu elements with access of",ST_name(WN_st(wn)),
+                       ((TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))));
+                WriteHTML(" %lu elements (line=%d, file=%s) ***\n",ba,line,
+                        current_src);
+
+            }
+
+            // todo: need to add iget, pshmem, _np
+            if (strcmp(ST_name(WN_st(wn)),"shmem_get4")==0 ||
+                strcmp(ST_name(WN_st(wn)),"shmem_get32")==0 ) {
+                if (TY_size(TY_etype(ST_type(st))) != 4) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_get8")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_get64")==0 ) {
+                if (TY_size(TY_etype(ST_type(st))) != 8) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_get128")==0) {
+                if (TY_size(TY_etype(ST_type(st))) != 16) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                }
+            }
+
+        }
+
+        if (TY_kind(ST_type(st2)) == KIND_ARRAY )
+        {
+            if((WN_const_val(u8const) > (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)))) && const_length    ) {
+                // printf("here!!!");
+                unsigned long ab= WN_const_val(u8const);
+                printf("\n*** OpenSHMEM Warning: out of bounds access of "
+                        "%s arg1 of size %llu", ST_name(WN_st(wn)),
+                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                printf(" elements with access of %lu elements (line=%d, "
+                       "file=%s) ***\n",ab ,line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of "
+                       "%s arg1 of size %ld", ST_name(WN_st(wn)),
+                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
+                WriteHTML(" elements with access of %lu elements (line=%d, "
+                        "file=%s) ***\n",ab ,line,current_src);
+
+            }
+
+            // todo: need to add iget, pshmem, _np
+            if(strcmp(ST_name(WN_st(wn)),"shmem_get4")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_get32")==0 ) {
+                if (TY_size(TY_etype(ST_type(st2))) != 4) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class of "
+                           "%s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_get8")==0 ||
+               strcmp(ST_name(WN_st(wn)),"shmem_get64")==0 ) {
+                if (TY_size(TY_etype(ST_type(st2))) != 8) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line, current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
+
+                }
+            }
+
+            if(strcmp(ST_name(WN_st(wn)),"shmem_get128")==0) {
+                if (TY_size(TY_etype(ST_type(st2))) != 16) {
+                    printf("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    printf(" (line=%d, file=%s) ***\n",line,current_src);
+                    WriteLinkHTML(TRUE,line);
+                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
+                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+                           TY_size(TY_etype(ST_type(st2))));
+                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+                }
+            }
+
+        }
+
+    }
+
+}
+
+
+void IPA_CALL_GRAPH::Tree_Walk_Node( WN *wn, WN *stmt, WN *block, WN *parent, WN *root)
+{
+
+
+    OPERATOR opr = WN_operator( wn );
+
+    // Traverse Block
+    if ( opr == OPR_BLOCK ) {
+
+        WN *node;
+        for ( node = WN_first( wn ); node; node = WN_next( node ) )
+            Tree_Walk_Node( node, node, wn, NULL, root );
+    }
+
+    // Traverse the kids of the current statement
+    for ( INT32 i = 0; i < WN_kid_count( wn ); i++ )
+        Tree_Walk_Node( WN_kid( wn, i ), wn, block, wn,root );
+
+
+    switch (opr) {
+        case OPR_PICCALL:
+        case OPR_CALL:
+        case OPR_INTRINSIC_CALL:
+        case OPR_IO:
+            {
+                if ( WN_has_sym( wn ) ) {
+                    char *name = ST_name( WN_st( wn ) );
+                    //  char *tmp_name = new char[strlen(name)+1];
+                    //  strcpy(tmp_name,name);
+                    // for (int i=0; i<strlen(name);i++)
+                    //    tmp_name[i] = tolower(tmp_name[i]);
+
+                    //  printf(tmp_name);
+                    //  if(strcmp(tmp_name,"start_pes")==0)
+                    //   start_pe_found = 1;
+
+                    //	 char *substring = strstr(name,"shmem");
+                    // if(substring !=NULL) {
+
+                    //   char *putget = strstr(substring,"_get");
+                    //   if(putget !=NULL)
+                    int debug=0;
+                    if(IsOpenSHMEM(name,24,34))
+                    {
+                        if(debug) printf("\n***Check_OpenSHMEM_Get");
+                        Check_OpenSHMEM_Get(wn,root);
+                    }
+                    if(IsOpenSHMEM(name,13,23) || IsOpenSHMEM(name,51,61))
+                    {
+                        if(debug) printf("\n***Check_OpenSHMEM_Put");
+                        Check_OpenSHMEM_Put(wn);
+
+                    } // else
+                    if(IsOpenSHMEM(name,62,71)) {
+
+                        if(debug) printf("\n***Check_OpenSHMEM_IPUT");
+
+                        Check_OpenSHMEM_IPUT(wn);
+
+                    }
+                    if(IsOpenSHMEM(name,72,81)) {
+
+                        if(debug) printf("\n***Check_OpenSHMEM_IGET");
+                        Check_OpenSHMEM_IGET(wn);
+
+                    }
+                    if(IsOpenSHMEM(name,35,50) || /*g p */
+                            IsOpenSHMEM(name,87,87) || /*accessibility */
+                            IsOpenSHMEM(name,98,128)|| /* atomics */
+                            IsOpenSHMEM(name,131,132) || /* cache inv */
+                            IsOpenSHMEM(name,134,134))    /* cache flush */
+                    {
+                        if(debug) printf("\n***Check_OpenSHMEM_General_check");
+
+                        Check_OpenSHMEM_General(wn);
+
+                    }
+
+                    if(IsOpenSHMEM(name, 88,88) || /* shmalloc */
+                            IsOpenSHMEM(name, 90,90) || /* shrealloc */
+                            IsOpenSHMEM(name, 92,92) || /* shmem_malloc */
+                            IsOpenSHMEM(name, 94,94))   /* shmem_realloc */
+                    {
+                        Mark_OpenSHMEM_pointers(wn);
+                    }
+
+
+                    // } // if substring
+
+                } // has_sym
+            } // case
+            break;
+
+        default:
+            break;
+    }
+
+
+}
+void IPA_CALL_GRAPH::Mark_OpenSHMEM_pointers(WN *wn)
+{
+    //  dump_tree(wn);
+    // dump_tree(WN_next(wn));
+    // dump_tree(WN_next(WN_next(wn)));
+}
+
+void IPA_CALL_GRAPH::Check_OpenSHMEM_General(WN *wn)
+{
+    int const_length = 0;
+    SRCPOS srcpos = WN_Get_Linenum(wn);
+    USRCPOS linepos;
+    USRCPOS_srcpos(linepos) = srcpos;
+    int line = USRCPOS_linenum(linepos);
+
+    WN *param =  WN_kid(wn,0); // First parameter
+    WN *lda = WN_kid(param,0); // LDA 0
+
+    if(WN_operator(lda) == OPR_LDA) {
+        ST *st = WN_st(lda);
+
+        switch (ST_sclass(st)) {
+
+            case SCLASS_PSTATIC:
+            case SCLASS_COMMON:
+            case SCLASS_UGLOBAL:
+            case SCLASS_EXTERN:
+            case SCLASS_FSTATIC:
+            case SCLASS_DGLOBAL:
+                break;
+
+            default:
+                printf("\n*** OpenSHMEM Warning: non-symmetric variable "
+                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                        line,current_src);
+                WriteLinkHTML(TRUE,line);
+                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
+                       "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
+                       line,current_src);
+                break;
+        }
+    }
+}//end_shmem
+
+#endif /* defined(OPENSHMEM_ANALYZER) */
 
