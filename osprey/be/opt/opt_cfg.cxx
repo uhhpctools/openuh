@@ -7593,7 +7593,7 @@ void osacfggraph::print(void) {
     fout << "<TR><TD align=\"left\">Atomics               </TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">Memory Mgt            </TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">State Queries         </TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
-    fout << "<TR><TD align=\"left\">Syncrhonizations      </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Synchronizations      </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
     //     fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
     //fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
     fout << "</TABLE> >]; }" << endl;
