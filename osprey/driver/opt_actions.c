@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -24,6 +29,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -101,6 +117,12 @@ int instrumentation_invoked = UNDEFINED;
 int selective_instrumentation_invoked = UNDEFINED;
 int profile_type = 0;
 boolean ftz_crt = FALSE;
+
+#ifdef OPENSHMEM_ANALYZER
+int control_flow_type = 0;
+boolean osa = FALSE;
+#endif
+
 //int isa = UNDEFINED;
 int proc = UNDEFINED;
 #ifdef TARG_X8664
@@ -1352,6 +1374,30 @@ Process_fb_type ( char*  typename )
   profile_type |= tmp; 
 }
 
+#ifdef OPENSHMEM_ANALYZER
+void
+Process_cfg ( char*  typename )
+{
+  char str[20];
+  int flag, tmp;
+  cfg_type = string_copy(typename);
+  sprintf(str,"cfg_type=%s",cfg_type);
+  flag = add_string_option (O_OPT_, str);
+  add_option_seen(flag);
+
+  sscanf (typename, "%d", &tmp);
+  control_flow_type |= tmp;
+}
+
+void
+Process_osa ()
+{
+     osa = TRUE;
+     toggle ( &ipa, TRUE );
+     add_option_seen ( O_IPA );
+}
+
+#endif
 
 void
 Process_fb_create ( char *fname )

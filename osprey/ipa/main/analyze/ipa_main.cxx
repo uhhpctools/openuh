@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -21,6 +26,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -116,9 +132,26 @@ BOOL Dragon_CFG_Phase=FALSE;
 
 #include "ipa_nystrom_alias_analyzer.h"
 
+#ifdef OPENSHMEM_ANALYZER
+#include <unistd.h>
+#include "opt_alias_interface.h"
+
+#ifndef _LIGHTWEIGHT_INLINER
+extern const char* output_filename;
+#endif
+
+extern "C" void cleanup_all_files (void);
+extern "C" void remove_temp_dir (void);
+#endif
+
 #include "ipa_pcg.h"
 
 FILE* STDOUT = stdout; 
+
+#ifdef OPENSHMEM_ANALYZER
+extern FILE* makefile;
+void IPA_OpenSHMEM_Check(IPA_CALL_GRAPH* cg);
+#endif
 
 #ifdef DRAGON
 char* Dragon_Symbol_Name(INT i,char** function_name, IPA_NODE *ipan)
@@ -1350,6 +1383,12 @@ Perform_Interprocedural_Analysis() { // ipa/main/analyze/ipa_main.cxx
       Preprocess_struct_access();
 #endif // KEY
 
+#ifdef OPENSHMEM_ANALYZER
+    if (OSA_Flag) {
+      IPA_OpenSHMEM_Check(IPA_Call_Graph);
+    }
+#endif
+
     // Call preopt on each node if requested
     if (IPA_Enable_Preopt_Set && IPA_Enable_Preopt) {
       IPA_NODE_ITER cg_iter(IPA_Call_Graph, POSTORDER);
@@ -1465,3 +1504,304 @@ Perform_Interprocedural_Analysis() { // ipa/main/analyze/ipa_main.cxx
      fflush (stderr);
    }
 }
+
+#ifdef OPENSHMEM_ANALYZER
+
+int IPA_IsOpenSHMEM(char *);
+
+void IPA_OpenSHMEM_Check(IPA_CALL_GRAPH* cg)
+{
+    int debug=0;
+    if(debug)
+        //printf("\n ***Entering OpenSHMEM Checker**** \n");
+        if(debug)
+            cg->Print_vobose(stdout);
+    cg->OpenSHMEM_Init_Checks(TRUE);
+    cg->OpenSHMEM_IO_Checks();
+    if(debug) printf("\n*** Exiting OpenSHMEM IO checks ***");
+    fclose(makefile);
+    cleanup_all_files();
+    // remove_temp_dir();
+
+#ifndef _LIGHTWEIGHT_INLINER
+    int pid = fork();
+    if(pid == 0) {
+        execlp("callgraph","callgraph",output_filename,NULL);
+        printf("\n**** OpenSHMEM Analyzer was not able to create the "
+               "OpenSHMEM callgraph. Check if the callgraph executable "
+               "is in your $PATH variable ****\n");
+        exit(0);
+    }
+#endif
+    //  cg_debug();
+
+    //   Signal_Cleanup (0);
+    exit(0);
+}
+
+int IPA_IsOpenSHMEM(char *input)
+{
+    int debug=1;
+    char shmem_name[190][50] ={
+        /*
+         * Initialization & rtl  // 0
+         */
+        "first_name",
+        "start_pes",   // 1
+        "shmem_init",
+        "shmem_finalize",
+        "shmem_my_pe",  // 4
+        "my_pe",
+        "_my_pe",
+        "shmem_num_pes",
+        "shmem_n_pes",
+        "num_pes",
+        "_num_pes",
+        "shmem_nodename",
+        "shmem_version",
+        /*
+         * I/O  // 13
+         */
+        "shmem_short_put",
+        "shmem_int_put",
+        "shmem_long_put",
+        "shmem_longlong_put",
+        "shmem_longdouble_put",
+        "shmem_double_put",
+        "shmem_float_put",
+        "shmem_putmem",
+        "shmem_put32",
+        "shmem_put64",
+        "shmem_put128",
+
+        // 24
+
+        "shmem_short_get",
+        "shmem_int_get",
+        "shmem_long_get",
+        "shmem_longlong_get",
+        "shmem_longdouble_get",
+        "shmem_double_get",
+        "shmem_float_get",
+        "shmem_getmem",
+        "shmem_get32",
+        "shmem_get64",
+        "shmem_get128",
+        // 35
+        "shmem_char_p",
+        "shmem_short_p",
+        "shmem_int_p",
+        "shmem_long_p",
+        "shmem_longlong_p",
+        "shmem_float_p",
+        "shmem_double_p",
+        "shmem_longdouble_p",
+        //43
+        "shmem_char_g",
+        "shmem_short_g",
+        "shmem_int_g",
+        "shmem_long_g",
+        "shmem_longlong_g",
+        "shmem_float_g",
+        "shmem_double_g",
+        "shmem_longdouble_g",
+
+        /*
+         * non-blocking I/O
+         */  //51
+        "shmem_short_put_nb",
+        "shmem_int_put_nb",
+        "shmem_long_put_nb",
+        "shmem_longlong_put_nb",
+        "shmem_longdouble_put_nb",
+        "shmem_double_put_nb",
+        "shmem_float_put_nb",
+        "shmem_putmem_nb",
+        "shmem_put32_nb",
+        "shmem_put64_nb",
+        "shmem_put128_nb",
+        /*
+         * strided I/O
+         */  //62
+        "shmem_double_iput",
+        "shmem_float_iput",
+        "shmem_int_iput",
+        "shmem_iput32",
+        "shmem_iput64",
+        "shmem_iput128",
+        "shmem_long_iput",
+        "shmem_longdouble_iput",
+        "shmem_longlong_iput",
+        "shmem_short_iput",
+        //72
+        "shmem_double_iget",
+        "shmem_float_iget",
+        "shmem_int_iget",
+        "shmem_iget32",
+        "shmem_iget64",
+        "shmem_iget128",
+        "shmem_long_iget",
+        "shmem_longdouble_iget",
+        "shmem_longlong_iget",
+        "shmem_short_iget",
+        /*
+         * barriers
+         */ //82
+        "shmem_barrier_all",
+        "shmem_barrier",
+        "shmem_fence",
+        "shmem_quiet",
+        /*
+         * accessibility
+         */  //86
+        "shmem_pe_accessible",
+        "shmem_addr_accessible",
+        /*
+         * symmetric memory management
+         */  // 88
+        "shmalloc",
+        "shfree",
+        "shrealloc",
+        "shmemalign",
+        "shmem_malloc",
+        "shmem_free",
+        "shmem_realloc",
+        "shmem_memalign",
+        "sherror",
+        "shmem_error",
+        /*
+         * wait operations
+         *///98
+        "shmem_short_wait_until",
+        "shmem_int_wait_until",
+        "shmem_long_wait_until",
+        "shmem_longlong_wait_until",
+        "shmem_wait_until",
+        "shmem_short_wait",
+        "shmem_int_wait",
+        "shmem_long_wait",
+        "shmem_longlong_wait",
+        "shmem_wait",
+        /*
+         * atomic swaps
+         *///108
+        "shmem_int_swap",
+        "shmem_long_swap",
+        "shmem_longlong_swap",
+        "shmem_float_swap",
+        "shmem_double_swap",
+        "shmem_swap",
+        "shmem_int_cswap",
+        "shmem_long_cswap",
+        "shmem_longlong_cswap",
+        /*
+         * atomic fetch-{add,inc} & add,inc
+         */
+        //117
+        "shmem_int_fadd",
+        "shmem_long_fadd",
+        "shmem_longlong_fadd",
+        "shmem_int_finc",
+        "shmem_long_finc",
+        "shmem_longlong_finc",
+        "shmem_int_add",
+        "shmem_long_add",
+        "shmem_longlong_add",
+        "shmem_int_inc",
+        "shmem_long_inc",
+        "shmem_longlong_inc",
+        /*
+         * cache flushing
+         *///129
+        "shmem_clear_cache_inv",
+        "shmem_set_cache_inv",
+        "shmem_clear_cache_line_inv",
+        "shmem_set_cache_line_inv",
+        "shmem_udcflush",
+        "shmem_udcflush_line",
+        /*
+         * reductions
+         */
+        //135
+        "shmem_complexd_sum_to_all",
+        "shmem_complexf_sum_to_all",
+        "shmem_double_sum_to_all",
+        "shmem_float_sum_to_all",
+        "shmem_int_sum_to_all",
+        "shmem_long_sum_to_all",
+        "shmem_longdouble_sum_to_all",
+        "shmem_longlong_sum_to_all",
+        "shmem_short_sum_to_all",
+        "shmem_complexd_prod_to_all",
+        "shmem_complexf_prod_to_all",
+        "shmem_double_prod_to_all",
+        "shmem_float_prod_to_all",
+        "shmem_int_prod_to_all",
+        "shmem_long_prod_to_all",
+        "shmem_longdouble_prod_to_all",
+        "shmem_longlong_prod_to_all",
+        "shmem_short_prod_to_all",
+        "shmem_int_and_to_all",
+        "shmem_long_and_to_all",
+        "shmem_longlong_and_to_all",
+        "shmem_short_and_to_all",
+        "shmem_int_or_to_all",
+        "shmem_long_or_to_all",
+        "shmem_longlong_or_to_all",
+        "shmem_short_or_to_all",
+        "shmem_int_xor_to_all",
+        "shmem_long_xor_to_all",
+        "shmem_longlong_xor_to_all",
+        "shmem_short_xor_to_all",
+        "shmem_int_max_to_all",
+        "shmem_long_max_to_all",
+        "shmem_longlong_max_to_all",
+        "shmem_short_max_to_all",
+        "shmem_longdouble_max_to_all",
+        "shmem_float_max_to_all",
+        "shmem_double_max_to_all",
+        "shmem_int_min_to_all",
+        "shmem_long_min_to_all",
+        "shmem_longlong_min_to_all",
+        "shmem_short_min_to_all",
+        "shmem_longdouble_min_to_all",
+        "shmem_float_min_to_all",
+        "shmem_double_min_to_all",
+        /*
+         * broadcasts
+         */
+        //179
+        "shmem_broadcast32",
+        "shmem_broadcast64",
+        "shmem_sync_init",
+        /*
+         * collects
+         */
+        //182
+        "shmem_fcollect32",
+        "shmem_fcollect64",
+        "shmem_collect32",
+        "shmem_collect64",
+        /*
+         * locks/critical section
+         */
+        //186
+        "shmem_set_lock",
+        "shmem_clear_lock",
+        "shmem_test_lock"
+    };
+    for(int i=1;i<189;i++) {
+        if(strcmp(shmem_name[i],input)==0) {
+            if(debug) printf("\n*** OpenSHMEM call: %s ***\n", shmem_name[i]);
+            return 1;
+
+        }
+
+    }
+    if(debug)
+        printf("\nThis is the last SHMEM call: %s\n", shmem_name[188]);
+
+    return 0;
+}
+
+#endif /* defined(OPENSHMEM_ANALYZER) */

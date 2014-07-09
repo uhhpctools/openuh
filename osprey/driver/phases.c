@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -26,6 +31,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -93,6 +109,9 @@ char *fb_phase = NULL;         /* from -fb_phase=<phase> */
 char *fb_type = NULL;          /* from -fb_type=<type> */
 char *source_file = NULL;
 char *coco_setfile = NULL;	/* -fcoco[=setfile]	bug 9058 */
+#ifdef OPENSHMEM_ANALYZER
+char *cfg_type = NULL;
+#endif
 
 boolean multiple_source_files = FALSE;
 
@@ -115,6 +134,9 @@ extern boolean Use_UH_Instrumentation;
 boolean nocpp_flag = FALSE;
 #ifdef DRAGON
 extern boolean Dragon_Flag;     /* Lei Huang 10/24/02 */
+#endif
+#ifdef OPENSHMEM_ANALYZER
+extern int osa;
 #endif
 char *global_toolroot = NULL;
 char *ld_library_path = NULL;
@@ -3146,6 +3168,11 @@ run_ld (void)
         }
 
         add_string(args, concat_strings("-L", our_path));
+#ifdef OPENSHMEM_ANALYZER
+        if (osa) {
+          add_string(args, concat_strings(our_path,"/shmem.o"));
+        }
+#endif
         free(our_path);
 
 	    // Tell ipa_link about the source language.
@@ -3355,7 +3382,28 @@ run_compiler (int argc, char *argv[])
 	if (execute_flag) {
 		check_existence_of_phases();
 	}
+
+
 	input_source = source_file;
+
+#ifdef OPENSHMEM_ANALYZER
+    if (osa) {
+        char output_html[500];
+        strcpy(output_html,source_file);
+        strcat(output_html,".html");
+        /* TODO: handle other languages */
+        if(invoked_lang == L_cc)  {
+            int pid = fork();
+            if (pid==0) {
+                execlp("code2html","code2html","-lC","-n","-N",source_file,
+                        output_html,NULL);
+                printf("\n**** OpenSHMEM Analyzer was not able to find code2html."
+                        "Check if it is in your the $PATH variable ****\n");
+                exit(0);
+            }
+        }
+    }
+#endif /* defined(OPENSHMEM_ANALYZER) */
 
 	// Set stack size to the hard limit.  Bug 3212.
 	set_stack_size();
@@ -3402,6 +3450,22 @@ run_compiler (int argc, char *argv[])
 			    cmd_line_updated = TRUE;
 			}
 			add_file_args (args, phase_order[i]);
+
+#ifdef OPENSHMEM_ANALYZER
+            /*
+               if(phase_order[i] == P_ipl) {
+                   int ii=0, NPROCS=4;
+                   for(ii=0; ii< NPROCS; ii++)
+                       run_phase (phase_order[i],
+                                  get_full_phase_name(phase_order[i]),
+                                  args);
+               }
+               commenting for Demo
+               */
+#endif
+
+
+
 			if (has_current_errors()) break;
 #ifdef DRAGON
             /********************************

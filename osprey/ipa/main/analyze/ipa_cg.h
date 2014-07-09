@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -17,6 +22,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -106,6 +122,10 @@ using namespace std;
 
 #ifndef fb_whirl_INCLUDED
 #include "fb_whirl.h"
+#endif
+
+#ifdef OPENSHMEM_ANALYZER
+#include "opt_alias_interface.h"
 #endif
 
 // forward class declarations to minimize included headers
@@ -1217,6 +1237,23 @@ public:
   void Print_vobose (FILE*);
   void Print_vobose (FILE*, TRAVERSAL_ORDER, BOOL);
 
+#ifdef OPENSHMEM_ANALYZER
+  void OpenSHMEM_Init_Checks(BOOL print);
+  void OpenSHMEM_IO_Checks();
+  int IsOpenSHMEM(char *, int begin=1, int end=188);
+  void Check_OpenSHMEM_Put(WN *wn);
+  void Check_OpenSHMEM_Get(WN *wn, WN *root);
+  void Check_OpenSHMEM_IPUT(WN *wn);
+  void Check_OpenSHMEM_IGET(WN *wn);
+  void Check_OpenSHMEM_General(WN *wn);
+  void Mark_OpenSHMEM_pointers(WN *wn);
+  void Tree_Walk_Node(WN *wn, WN *stmt, WN *block, WN *parent=NULL, WN* root=NULL);
+  void Populate_stlist(WN *wn, WN * stmt, WN *block);
+  int Check_stlist(ST_IDX idx);
+  void Check_OpenSHMEM_Initvars(WN *lda, int line, int arg );
+  void OpenSHMEM_Alias_Checks(WN *, /*struct*/ ALIAS_MANAGER * am);
+#endif
+
   
   // map callsites in the caller to WN nodes
   void Map_Callsites(IPA_NODE* caller);
@@ -1519,6 +1556,11 @@ public:
 
   void First () { _node_idx = _node_iter.First_Succ(); }
   void Next ()  { _node_idx = _node_iter.Next_Succ();  }
+
+#ifdef OPENSHMEM_ANALYZER
+  void First_Succ ()  { _node_idx = _node_iter.First_Succ();  }
+  void Next_Succ () { _node_idx = _node_iter.Next_Succ();}
+#endif
     
   BOOL Is_Empty () const { return (_node_idx == INVALID_NODE_INDEX); }
     
@@ -1572,6 +1614,11 @@ public:
 
   void First () { _node_idx = _node_iter.First_Pred(); }
   void Next ()  { _node_idx = _node_iter.Next_Pred();  }
+
+#ifdef OPENSHMEM_ANALYZER
+  void First_Succ ()  { _node_idx = _node_iter.First_Succ();  }
+  void Next_Succ () { _node_idx = _node_iter.Next_Succ();}
+#endif
     
   BOOL Is_Empty () const { return (_node_idx == INVALID_NODE_INDEX); }
     

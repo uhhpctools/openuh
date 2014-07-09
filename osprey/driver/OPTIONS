@@ -1,4 +1,9 @@
 %
+% Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+% Oak Ridge National Laboratory
+%
+
+%
 % Copyright 2005-2008 NVIDIA Corporation.  All rights reserved.
 %
 
@@ -21,6 +26,17 @@
 %  This program is distributed in the hope that it would be useful, but
 %  WITHOUT ANY WARRANTY; without even the implied warranty of
 %  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+%
+%  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+%  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+%  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+%  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+%  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+%  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+%  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+%  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+%  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+%  DISPOSAL OF THE SOFTWARE.
 %
 %  Further, this software is distributed without any warranty that it is
 %  free of the rightful claim of any third person regarding infringement 
@@ -351,6 +367,14 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 
 -fb-type=%s Process_fb_type(optargs);   ALL    N     ""
         "Option need for the type of profiles"
+
+#ifdef OPENSHMEM_ANALYZER
+-fcfg=%s Process_cfg(optargs);   ALL    N     ""
+        "Speficies the OpenSHMEM Control Flow Analysis"
+
+-shmem-analyzer Process_osa();   ALL    ipap,b,i    self
+        "Enables OpenSHMEM Analyzer"
+#endif
 
 -frandom-seed%s	;	ALL	N	"-frandom-seed=%s"
 	"specify random seed (string) for internal random number generator"

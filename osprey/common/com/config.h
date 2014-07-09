@@ -735,6 +735,10 @@ extern BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
 extern BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
 extern BOOL Use_UH_Instrumentation;
 
+#ifdef OPENSHMEM_ANALYZER
+extern BOOL OSA_Flag;
+#endif
+
 #ifdef _UH_COARRAYS
 extern BOOL Enable_Coarray; /* -deepak */
 #endif

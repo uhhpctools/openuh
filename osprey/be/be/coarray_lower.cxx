@@ -121,7 +121,15 @@ typedef struct {
 typedef struct {
   ST *handle_st;
   BOOL deferred;
+  WN *prior_stmt_dep; /* points to statement after which wait on
+                         handle should be inserted if !deferred,
+                         otherwise it is NULL -- currently not used */
 } ACCESS_HDL;
+
+typedef struct {
+  BOOL is_cor;
+  int  cor_depth;
+} COR_INFO;
 
 
 /***********************************************************************
@@ -130,6 +138,7 @@ typedef struct {
 
 static BOOL caf_prelower_initialized = FALSE;
 static MEM_POOL caf_pool;
+static WN_MAP Caf_COR_Info_Map;
 static WN_MAP Caf_Parent_Map;
 static WN_MAP Caf_LCB_Map;
 static WN_MAP Caf_Visited_Map;
@@ -238,12 +247,34 @@ static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
         strlen( &Str_Table[(st)->u1.name_idx]) == strlen(name) \
         && !strncmp( &Str_Table[(st)->u1.name_idx], name, strlen(name))
 
+static void Set_COR_Info(WN *wn, COR_INFO *info)
+{
+    int dat = info->is_cor;
+    dat = dat << 16;
+    dat = dat | info->cor_depth;
+    WN_MAP_Set(Caf_COR_Info_Map, wn, (void *)dat);
+}
+
+static void Get_COR_Info(WN *wn, COR_INFO *info)
+{
+    int dat = (int) WN_MAP_Get(Caf_COR_Info_Map, (WN *)wn);
+    info->is_cor = dat >> 16;
+    info->cor_depth = dat & 0xFFFF;
+}
 
 
 /***********************************************************************
  * Local function declarations
  ***********************************************************************/
 
+static void Set_COR_Info(WN *wn, COR_INFO *info);
+static void Get_COR_Info(WN *wn, COR_INFO *info);
+
+static void unfold_nested_cors_in_block(WN *block);
+static void unfold_nested_cors_in_stmt(WN *node, WN *stmt, WN *block, BOOL is_nested=FALSE);
+static inline void set_and_update_cor_depth(WN *w, BOOL c, INT d);
+static inline void update_cor_depth(WN *w);
+static int find_kid_num(WN *parent, WN *kid);
 static BOOL is_load_operation(WN *node);
 static BOOL is_convert_operation(WN *node);
 static void gen_auto_target_symbol(ST *sym);
@@ -302,6 +333,7 @@ static TY_IDX get_array_type(const ST * array_st);
 static BOOL is_contiguous_access(WN *remote_access, INT8 rank);
 static BOOL is_vector_access(WN *remote_access);
 static TY_IDX create_arr1_type(TYPE_ID elem_type, INT16 ne);
+static BOOL is_assignment_stmt(WN *stmt);
 
 static ST* gen_lcbptr_symbol(TY_IDX tyi, const char *rootname);
 
@@ -487,7 +519,7 @@ Generate_Param( WN *arg, UINT32 flag )
 
 WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 {
-    BOOL is_main;
+    BOOL is_main = FALSE;
     static BOOL global_coarrays_processed = FALSE;
 
     WN *func_body, *func_exit_stmts;
@@ -498,6 +530,9 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
       /* create NULL coarray and array types */
       null_coarray_type = create_arr1_type(MTYPE_V, 0);
       Set_TY_is_coarray(null_coarray_type);
+      Set_ARB_dimension(TY_arb(null_coarray_type), 1);
+      Set_ARB_codimension(TY_arb(null_coarray_type), 1);
+
       null_array_type = create_arr1_type(MTYPE_V, 0);
 
       caf_prelower_initialized = TRUE;
@@ -514,6 +549,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     init_caf_extern_symbols();
 
     /* Create Parent Map for WHIRL tree */
+    Caf_COR_Info_Map = WN_MAP_Create(&caf_pool);
     Caf_Parent_Map = WN_MAP_Create(&caf_pool);
     Caf_LCB_Map = WN_MAP_Create(&caf_pool);
     Caf_Visited_Map = WN_MAP_Create(&caf_pool);
@@ -532,12 +568,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
             if (ST_sclass(sym) == SCLASS_PSTATIC) {
                 set_coarray_tsize(ST_type(sym));
                 gen_save_coarray_symbol(sym);
-                /* don't allot space for this symbol in global memory, if
-                 * uninitialized */
-                if (!ST_is_initialized(sym)) {
-                    Set_ST_type(sym, null_coarray_type);
-                    Set_ST_is_not_used(sym);
-                }
             }
         } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
             if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
@@ -598,10 +628,47 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         global_coarrays_processed = TRUE;
     }
 
-    /* for support for character coarrays
-     **/
-    WN *lhs_ref_param_wn = NULL;
-    WN *rhs_ref_param_wn = NULL;
+    WN_TREE_CONTAINER<PRE_ORDER> wcpre(func_body);
+    WN_TREE_CONTAINER<PRE_ORDER> ::iterator wipre, curr_wipre=NULL, temp_wipre = NULL;
+
+    for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+        ST *st1;
+        TY_IDX ty1, ty2, ty3;
+        TY_IDX coarray_type;
+        TY_IDX elem_type;
+        WN *replace_wn = NULL;
+        WN *image;
+        WN *coindexed_arr_ref;
+        WN *direct_coarray_ref;
+        WN *wn = wipre.Wn();
+        WN *wn_next;
+
+        switch (WN_operator(wn)) {
+            case OPR_ARRAY:
+            case OPR_ARRSECTION:
+
+                coindexed_arr_ref =
+                    expr_is_coindexed(wn, &image, &coarray_type,
+                                      &direct_coarray_ref);
+
+                if (image == NULL || is_vector_access(coindexed_arr_ref)
+                        //|| Was_Visited(coindexed_arr_ref)
+                    )
+                    break;
+
+                set_and_update_cor_depth(coindexed_arr_ref, TRUE, 1);
+
+                /* skip ahead */
+                while ( wipre.Wn() != direct_coarray_ref) wipre++;
+
+                //Set_Visited(coindexed_arr_ref);
+
+                break;
+        }
+    }
+
+    unfold_nested_cors_in_block(func_body);
+
 
     /* Pass 1: Traverse PU, searching for:
      *   (1) CAF intrinsics (this_image, num_images, sync_images)
@@ -609,14 +676,20 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
      *   (3) co-subscripted array section references: "standardize" and, for now, go
      *       ahead and generate 1-sided GET/PUT calls
      */
-    WN_TREE_CONTAINER<PRE_ORDER> wcpre(func_body);
-    WN_TREE_CONTAINER<PRE_ORDER> ::iterator wipre, curr_wipre=NULL, temp_wipre = NULL;
+
+    /* for support for character coarrays
+     **/
+    WN *lhs_ref_param_wn = NULL;
+    WN *rhs_ref_param_wn = NULL;
+
     BOOL defer_sync_just_seen = FALSE;
     ST *handle_var = NULL;
     BOOL pragma_preamble_done = FALSE;
     BOOL do_loop_start_node = FALSE;
     WN *do_loop_stmt_node = NULL;
     WN *sync_blk = WN_CreateBlock();
+    BOOL stmt_is_assignment = FALSE;
+
     for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
         WN *insert_blk;
         WN *wn = wipre.Wn();
@@ -668,6 +741,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
           }
 
           stmt_node = wn;
+          stmt_is_assignment = is_assignment_stmt(stmt_node);
+
           wn_arrayexp = NULL;
           if (WN_operator(parent) == OPR_BLOCK) {
               blk_node = parent;
@@ -794,7 +869,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 Set_Visited(coindexed_arr_ref);
 
-                if ( array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
+                if ( stmt_is_assignment &&
+                     array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
                     /* coarray write ... */
 
                     if (elem_type == TY_IDX_ZERO) {
@@ -847,14 +923,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                                 WN_COPY_Tree(stmt_node),
                                                 TRUE);
 
-
-                        /* if storing to local image, we need to release the
-                         * source LCB */
-                        /*
-                        insert_wnx = Generate_Call_release_lcb(
-                                WN_Lda(Pointer_type, 0, LCB_st) );
-                        WN_INSERT_BlockLast( WN_then(if_local_wn), insert_wnx);
-                        */
 
                         /* setup else block for storing to remote image ... */
 
@@ -933,9 +1001,21 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         LHS_is_preg = TRUE;
                     }
 
-                    if ( is_lvalue(RHS_wn) && !is_convert_operation(RHS_wn) &&
-                         !do_loop_start_node &&
-                         (!LHS_has_arrsection ||
+                    BOOL coindexed_arr_is_RHS = stmt_is_assignment &&
+                                               is_lvalue(RHS_wn) &&
+                                               !is_convert_operation(RHS_wn) &&
+                                               !do_loop_start_node;
+                    WN *node = coindexed_arr_ref;
+
+                    while (coindexed_arr_is_RHS && node != RHS_wn) {
+                        node = Get_Parent(node);
+                        if (WN_operator(node) == OPR_ARRAY ||
+                                WN_operator(node) == OPR_ARRSECTION) {
+                            coindexed_arr_is_RHS = FALSE;
+                        }
+                    }
+
+                    if ( coindexed_arr_is_RHS && (!LHS_has_arrsection ||
                           get_inner_arrsection(coindexed_arr_ref)) &&
                          !LHS_is_coindexed &&
                          !LHS_is_preg &&
@@ -1499,15 +1579,54 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         }
     }
 
+    /* reconstruct parent and COR_Info map */
+
+    Parentize(func_body);
+
+    COR_INFO cleared_cor_info;
+    cleared_cor_info.is_cor = FALSE;
+    cleared_cor_info.cor_depth = 0;
+    for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+        ST *st1;
+        TY_IDX ty1, ty2, ty3;
+        TY_IDX coarray_type;
+        TY_IDX elem_type;
+        WN *replace_wn = NULL;
+        WN *image;
+        WN *coindexed_arr_ref;
+        WN *direct_coarray_ref;
+        WN *wn = wipre.Wn();
+        WN *wn_next;
+
+        Set_COR_Info(wn, &cleared_cor_info);
+
+        switch (WN_operator(wn)) {
+            case OPR_ARRAY:
+            case OPR_ARRSECTION:
+
+                coindexed_arr_ref =
+                    expr_is_coindexed(wn, &image, &coarray_type,
+                                      &direct_coarray_ref);
+
+                if (image == NULL || is_vector_access(coindexed_arr_ref))
+                    break;
+
+                set_and_update_cor_depth(coindexed_arr_ref, TRUE, 1);
+
+                /* skip ahead */
+                while ( wipre.Wn() != direct_coarray_ref) wipre++;
+
+                break;
+        }
+    }
 
     /* Pass 3: Generate Communication for coindexed array section accesses
      * TODO: Move this to later back-end phase?
      */
     curr_wipre = NULL;
     temp_wipre = NULL;
-    /* reconstruct parent map */
-    Parentize(func_body);
     for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+        COR_INFO wn_cor_info;
         ST *image_st = NULL;
         WN *insert_blk = NULL;
         WN *wn = wipre.Wn();
@@ -1525,6 +1644,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         WN *coindexed_arr_ref;
         WN *direct_coarray_ref;
 
+        Get_COR_Info(wn, &wn_cor_info);
+        if (wn_cor_info.cor_depth == 0)
+            continue;
+
         parent = wipre.Get_parent_wn();
 
         /* if its a statement, set stmt_node and also set blk_node to
@@ -1534,6 +1657,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
              WN_operator(wn) != OPR_BLOCK &&
              WN_operator(wn) != OPR_FUNC_ENTRY)) {
           stmt_node = wn;
+          stmt_is_assignment = is_assignment_stmt(stmt_node);
           wn_arrayexp = NULL;
           if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
         }
@@ -1554,7 +1678,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 if (is_vector_access(coindexed_arr_ref)) break;
 
-                if ( array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
+                if ( stmt_is_assignment &&
+                     array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
 
                     /* coarray write */
 
@@ -1784,12 +1909,14 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
       wnx = WN_first(func_exit_stmts);
     }
     WN_Delete(func_exit_stmts);
+    func_exit_stmts = NULL;
 
     save_coarray_symbol_map.clear();
     save_target_symbol_map.clear();
     auto_target_symbol_map.clear();
 
 
+    WN_MAP_Delete(Caf_COR_Info_Map);
     WN_MAP_Delete(Caf_Parent_Map);
     WN_MAP_Delete(Caf_LCB_Map);
     WN_MAP_Delete(Caf_Visited_Map);
@@ -1806,6 +1933,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
     WN *func_body;
 
     /* Create Parent Map for WHIRL tree */
+    Caf_COR_Info_Map = WN_MAP_Create(&caf_pool);
     Caf_Parent_Map = WN_MAP_Create(&caf_pool);
     Caf_LCB_Map = WN_MAP_Create(&caf_pool);
     Caf_Visited_Map = WN_MAP_Create(&caf_pool);
@@ -1819,6 +1947,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
     WN *lhs_ref_param_wn = NULL;
     WN *rhs_ref_param_wn = NULL;
 
+    BOOL stmt_is_assignment = FALSE;
 
     /*
      *  Find co-subscripted array references, and generate LCBs.
@@ -1860,6 +1989,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
              WN_operator(wn) != OPR_BLOCK &&
              WN_operator(wn) != OPR_FUNC_ENTRY)) {
           stmt_node = wn;
+          stmt_is_assignment = is_assignment_stmt(stmt_node);
           wn_arrayexp = NULL;
           if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
         }
@@ -1894,7 +2024,8 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
 
                 Set_Visited(coindexed_arr_ref);
 
-                if ( array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
+                if ( stmt_is_assignment &&
+                     array_ref_on_LHS(coindexed_arr_ref, &elem_type) ) {
                     /* handle remote write */
 
                     if (elem_type == TY_IDX_ZERO) {
@@ -2382,9 +2513,25 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
         }
     }
 
+    ST *sym;
+    UINT32 i;
+    FOREACH_SYMBOL(CURRENT_SYMTAB, sym, i) {
+        if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
+            if (ST_sclass(sym) == SCLASS_PSTATIC) {
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_coarray_type);
+                    Set_ST_is_not_used(sym);
+                }
+            }
+        }
+    }
+
     /* remove statements in caf_delete_list and clear the list */
     delete_caf_stmts_in_delete_list();
 
+    WN_MAP_Delete(Caf_COR_Info_Map);
     WN_MAP_Delete(Caf_Parent_Map);
     WN_MAP_Delete(Caf_LCB_Map);
     WN_MAP_Delete(Caf_Visited_Map);
@@ -3824,10 +3971,30 @@ static void array_ref_remove_cosubscripts(WN *arr_parent, WN *arr, TY_IDX ty)
 
   /* if it is rank 0, then replace the array reference with kid 0 */
   if (rank == 0) {
+      WN *tmp;
+      tmp = WN_COPY_Tree(WN_kid0(arr));
+
+      if ((WN_operator(arr_parent) == OPR_ARRAY ||
+          WN_operator(arr_parent) == OPR_ARRSECTION) &&
+          (WN_operator(tmp) == OPR_LDA ||
+           WN_operator(tmp) == OPR_LDID)) {
+
+          TY_IDX ty = WN_ty(tmp);
+          if (TY_kind(ty) == KIND_POINTER) {
+              ty = TY_pointed(ty);
+          }
+          if (TY_kind(ty) == KIND_ARRAY) {
+              ty = Ty_Table[ty].u2.etype;
+          }
+          ty = get_type_at_offset(ty, WN_offset(tmp), TRUE, TRUE);
+          ty = Make_Pointer_Type(ty);
+          WN_set_ty(tmp, ty);
+
+      }
       if (WN_kid1(arr_parent) == arr) {
-          WN_kid1(arr_parent) = WN_COPY_Tree(WN_kid0(arr));
+          WN_kid1(arr_parent) = WN_COPY_Tree(tmp);
       } else if (WN_kid0(arr_parent) == arr) {
-          WN_kid0(arr_parent) = WN_COPY_Tree(WN_kid0(arr));
+          WN_kid0(arr_parent) = WN_COPY_Tree(tmp);
       } else {
           Is_True(0, ("unexpected parent tree in array_ref_remove_cosubscripts"));
       }
@@ -4733,8 +4900,12 @@ static BOOL array_ref_on_LHS(WN *wn, TY_IDX *ty)
         //*ty = TY_IDX_ZERO;
         *ty = TY_pointed(WN_ty(parent));
         return TRUE;
-    } else if (WN_operator(parent) == OPR_ARRAYEXP) {
-        WN *node = Get_Parent(parent);
+    } else {
+        WN *node = parent;
+        while (WN_operator(node) == OPR_ARRAYEXP ||
+               WN_operator(node) == OPR_ADD) {
+            node = Get_Parent(parent);
+        }
         if (WN_operator(node) == OPR_ISTORE) {
             TYPE_ID desc = WN_desc(node);
             if (desc == MTYPE_M) {
@@ -5724,3 +5895,211 @@ static WN* gen_local_image_condition(WN *image, WN *orig_stmt_copy, BOOL is_writ
 
     return if_local_wn;
 } /* gen_local_image_condition */
+
+static BOOL is_assignment_stmt(WN *stmt)
+{
+    return stmt && OPCODE_is_store(WN_opcode(stmt));
+}
+
+static int find_kid_num(WN *parent, WN *kid)
+{
+    Is_True(parent == Get_Parent(kid), ("parent is not the parent"));
+
+    int kid_count = WN_kid_count(parent);
+    int i;
+    for (i = 0; i < kid_count; i++) {
+        if (kid == WN_kid(parent, i)) break;
+    }
+
+    Is_True(i < kid_count, ("kid not found in parent tree"));
+
+    return i;
+}
+
+static inline void set_and_update_cor_depth(WN *w, BOOL c, INT d)
+{
+    COR_INFO info;
+    info.is_cor = c;
+    info.cor_depth = d;
+
+    Set_COR_Info(w, &info);
+    update_cor_depth(w);
+}
+
+static inline void update_cor_depth(WN *w)
+{
+    WN *wp;
+    int curr_depth;
+
+    COR_INFO info;
+    Get_COR_Info(w, &info);
+
+    curr_depth = info.cor_depth;
+
+    wp = Get_Parent(w);
+    while (wp) {
+        Get_COR_Info(wp, &info);
+        if (info.is_cor) {
+            info.cor_depth += curr_depth;
+            curr_depth = info.cor_depth;
+        } else if (info.cor_depth < curr_depth) {
+            info.cor_depth = curr_depth;
+        } else {
+            curr_depth = info.cor_depth;
+        }
+        Set_COR_Info(wp, &info);
+        wp = Get_Parent(wp);
+    }
+}
+
+static void unfold_nested_cors_in_block(WN *block)
+{
+    COR_INFO node_core_info;
+    WN *s, *s_next;
+
+    Get_COR_Info(block, &node_core_info);
+
+    if (node_core_info.cor_depth < 2) return;
+
+    for (s = WN_first(block); s; s = s_next) {
+        s_next = WN_next(s);
+        Get_COR_Info(s, &node_core_info);
+        if (node_core_info.cor_depth < 2) continue;
+
+        unfold_nested_cors_in_stmt(s, s, block);
+    }
+}
+
+static void unfold_nested_cors_in_stmt(WN *node, WN *stmt, WN *block, BOOL is_nested)
+{
+    static WN *wn_arrayexp = NULL;
+
+    COR_INFO node_cor_info;
+
+    ST *lcbptr_st;
+    WN *transfer_size_wn;
+    ST *st1;
+    TY_IDX ty1, ty2, ty3;
+    TY_IDX coarray_type;
+    TY_IDX elem_type;
+    WN *replace_wn = NULL;
+    WN *image;
+    WN *coindexed_arr_ref;
+    WN *direct_coarray_ref;
+    WN *insert_wnx;
+
+    if (WN_operator(node) == OPR_BLOCK) {
+        unfold_nested_cors_in_block(node);
+        return;
+        /* does not reach */
+    }
+
+    Get_COR_Info(node, &node_cor_info);
+    if (node_cor_info.cor_depth == 0) return;
+
+    if (WN_operator(node) == OPR_ARRAYEXP) {
+        wn_arrayexp = node;
+    }
+
+    if (is_nested && node_cor_info.is_cor) {
+        if (WN_operator(node) == OPR_ARRAY ||
+            WN_operator(node) == OPR_ARRSECTION) {
+
+            coindexed_arr_ref = expr_is_coindexed(node, &image, &coarray_type,
+                                                  &direct_coarray_ref);
+
+            /* TODO: rename this function to something else. It doesn't have
+             * to be RHS of an assignment statement */
+            if (!array_ref_on_RHS(coindexed_arr_ref, &elem_type) ||
+                image == NULL || is_vector_access(coindexed_arr_ref)) {
+                goto recurse;
+            }
+
+            Is_True(image != NULL && !is_vector_access(coindexed_arr_ref),
+                    ("cor info for this node is incorrect"));
+
+            /* create destination LCB for co-indexed term */
+
+            WN *new_stmt_node;
+            ST *LCB_st;
+            WN *xfer_sz_node;
+            INT num_codim;
+
+            /* create LCB for coindexed array ref */
+            LCB_st = gen_lcbptr_symbol(
+                    Make_Pointer_Type(elem_type,FALSE),
+                    "LCB" );
+            xfer_sz_node = get_transfer_size(coindexed_arr_ref,
+                    elem_type);
+            insert_wnx = Generate_Call_acquire_lcb(
+                    xfer_sz_node,
+                    WN_Lda(Pointer_type, 0, LCB_st));
+
+            WN_INSERT_BlockBefore(block, stmt, insert_wnx);
+            Parentize(insert_wnx);
+            Set_Parent(insert_wnx, block);
+
+            /* create "normalized" assignment from remote coarray */
+            num_codim = coindexed_arr_ref == direct_coarray_ref ?
+                get_coarray_corank(coarray_type) : 0;
+            WN *nested_cor_parent_copy =
+                WN_COPY_Tree_With_Map(Get_Parent(node));
+            new_stmt_node = get_lcb_assignment(
+                    nested_cor_parent_copy,
+                    num_codim,
+                    LCB_st);
+
+            WN_INSERT_BlockBefore(block, stmt, new_stmt_node);
+            Parentize(new_stmt_node);
+            Set_Parent(new_stmt_node, block);
+            update_cor_depth(nested_cor_parent_copy);
+
+            /* recursively unfold nested CORs in new statement */
+            unfold_nested_cors_in_stmt(new_stmt_node, new_stmt_node, block);
+
+            /* replace term in RHS */
+            WN *load = get_load_parent(coindexed_arr_ref);
+            if (load) WN_offset(load) = 0;
+            substitute_lcb(coindexed_arr_ref, LCB_st,
+                    wn_arrayexp, &replace_wn);
+            WN *parent = Get_Parent(coindexed_arr_ref);
+            int kid_num = find_kid_num(parent, coindexed_arr_ref);
+            WN_kid(parent, kid_num) = replace_wn;
+            WN_DELETE_Tree(coindexed_arr_ref);
+            Parentize(replace_wn);
+            Set_Parent(replace_wn, parent);
+            node = replace_wn;
+
+            /* walk up tree, updating COR info of AST */
+            set_and_update_cor_depth(replace_wn, FALSE, 0);
+
+            /* call to release LCB */
+            insert_wnx = Generate_Call_release_lcb(
+                    WN_Lda(Pointer_type, 0, LCB_st));
+
+            WN_INSERT_BlockAfter(block, stmt, insert_wnx);
+            Parentize(insert_wnx);
+            Set_Parent(insert_wnx, block);
+
+        }
+    }
+
+recurse:
+    /* not an array, so check kids */
+    int kid_count = WN_kid_count(node);
+    for (int i = 0; i < kid_count; i++) {
+        WN *k = WN_kid(node, i);
+        COR_INFO kid_cor_info;
+        Get_COR_Info(k, &kid_cor_info);
+
+        is_nested = is_nested || node_cor_info.is_cor;
+        if (kid_cor_info.cor_depth > 1 ||
+            (is_nested && kid_cor_info.cor_depth == 1)) {
+            unfold_nested_cors_in_stmt(k, stmt, block, is_nested);
+            /* get updated node COR info */
+            Get_COR_Info(node, &node_cor_info);
+        }
+
+    }
+}
+

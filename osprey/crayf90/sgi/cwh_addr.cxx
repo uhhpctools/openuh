@@ -2251,7 +2251,7 @@ cwh_addr_address_ST(ST * st, OFFSET_64 off, TY_IDX ty)
          return wn;
       }
 
-      wn = cwh_addr_ldid(st,0,ST_type(st));
+      wn = cwh_addr_ldid(st,0,Make_Pointer_Type(ty,FALSE));
       if (off != 0)
         wn = cwh_expr_bincalc(OPR_ADD,wn,WN_Intconst(Pointer_Mtype,off));
 

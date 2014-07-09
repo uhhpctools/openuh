@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os uh_config_arguments BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION ENABLE_OSA LIBLIST subdirs LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -796,6 +796,7 @@ Optional Features:
   --enable-cafrt-dtraces  Enable CAF Runtime Diagnostic Tracing Functionality
   --enable-cafrt-profiles Enable CAF Runtime Profiling Functionality
   --enable-dragon-support Supports UH Dragon Analysis Tool
+  --enable-osa            Enables OpenSHMEM Analyzer
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
   --enable-whirl-id       Enable debugging ID in WHIRL node
@@ -1389,6 +1390,36 @@ test -n "$target_alias" &&
 #AC_PROG_CXX
 #AC_PROG_RANLIB
 
+# --------
+# save configure arguments
+# --------
+
+
+
+# Compile in configure arguments.
+if test -f configargs.h ; then
+	# Being re-configured.
+	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
+	uh_config_arguments="$uh_config_arguments : (reconfigured) $@"
+else
+   uh_config_arguments=$@
+fi
+
+# Double all backslashes and backslash all quotes to turn
+# uh_config_arguments into a C string.
+sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
+$uh_config_arguments
+EOF
+uh_config_arguments_str=`cat conftest.out`
+rm -f conftest.out
+
+cat > configargs.h <<EOF
+/* Generated automatically. */
+static const char configuration_arguments[] = "$uh_config_arguments_str";
+EOF
+
+#####################
+
 # There are known bugs when building the compiler in 64 bit mode on x86 so,
 # unless the user specifies otherwise, we default to 32 bit mode as the
 # default on x86 64 bit platforms.
@@ -1752,6 +1783,26 @@ fi
 if test "x$enable_dragon_support" != "xyes"; then
 
   DRAGON_SUPPORT=NO
+
+fi
+
+
+# enable OpenSHMEM Analyzer support
+# Check whether --enable-osa or --disable-osa was given.
+if test "${enable_osa+set}" = set; then
+  enableval="$enable_osa"
+
+fi;
+
+if test "x$enable_osa" = "xyes"; then
+
+  ENABLE_OSA=YES
+
+fi
+
+if test "x$enable_osa" != "xyes"; then
+
+  ENABLE_OSA=NO
 
 fi
 
@@ -2258,11 +2309,12 @@ export GCC_CONFIGURE_CFLAGS
 
 
 
+
 # List of configurable files to create in object directory.
                                                                                                                                                                                                                                                                     ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
 
 
-          ac_config_files="$ac_config_files osprey/scripts/omprun"
+                              ac_config_files="$ac_config_files osprey/scripts/omprun osprey/scripts/callgraph osprey/scripts/call"
 
 
 if test "${BUILD_FORTRAN}" = "YES"; then
@@ -2974,6 +3026,8 @@ do
   "osprey/targdir/orc_intel/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/orc_intel/Makefile" ;;
   "osprey/targdir/libkapi/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libkapi/Makefile" ;;
   "osprey/scripts/omprun" ) CONFIG_FILES="$CONFIG_FILES osprey/scripts/omprun" ;;
+  "osprey/scripts/callgraph" ) CONFIG_FILES="$CONFIG_FILES osprey/scripts/callgraph" ;;
+  "osprey/scripts/call" ) CONFIG_FILES="$CONFIG_FILES osprey/scripts/call" ;;
   "osprey/targdir/whirl2f/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/whirl2f/Makefile" ;;
   "osprey/targdir/crayf90/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/crayf90/Makefile" ;;
   "osprey/targdir/crayf90/fe90/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/crayf90/fe90/Makefile" ;;
@@ -3119,6 +3173,7 @@ s,@target@,$target,;t t
 s,@target_cpu@,$target_cpu,;t t
 s,@target_vendor@,$target_vendor,;t t
 s,@target_os@,$target_os,;t t
+s,@uh_config_arguments@,$uh_config_arguments,;t t
 s,@BASH_PATH@,$BASH_PATH,;t t
 s,@MPICC_PATH@,$MPICC_PATH,;t t
 s,@MACHINE_TYPE@,$MACHINE_TYPE,;t t
@@ -3173,6 +3228,7 @@ s,@TAU_ROOT@,$TAU_ROOT,;t t
 s,@TAU_LIBS@,$TAU_LIBS,;t t
 s,@EPIK_ROOT@,$EPIK_ROOT,;t t
 s,@OPENUH_VERSION@,$OPENUH_VERSION,;t t
+s,@ENABLE_OSA@,$ENABLE_OSA,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t
@@ -3619,36 +3675,6 @@ fi
 
 
 
-# --------
-# save configure arguments
-# --------
-
-
-
-# Compile in configure arguments.
-if test -f configargs.h ; then
-	# Being re-configured.
-	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
-	uh_config_arguments="$uh_config_arguments : (reconfigured) $@"
-else
-   uh_config_arguments=$@
-fi
-
-# Double all backslashes and backslash all quotes to turn
-# uh_config_arguments into a C string.
-sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
-$uh_config_arguments
-EOF
-uh_config_arguments_str=`cat conftest.out`
-rm -f conftest.out
-
-cat > configargs.h <<EOF
-/* Generated automatically. */
-static const char configuration_arguments[] = "$uh_config_arguments_str";
-EOF
-
-#"####################
-
 # -----------------------
 # Final Configure Report
 # -----------------------
@@ -3738,6 +3764,8 @@ echo "$as_me:    TAU_LIBS                       = $TAU_LIBS" >&6;}
 
 fi
 
+{ echo "$as_me:$LINENO:    ENABLE_OSA                     = $ENABLE_OSA" >&5
+echo "$as_me:    ENABLE_OSA                     = $ENABLE_OSA" >&6;}
 { echo "$as_me:$LINENO: " >&5
 echo "$as_me: " >&6;}
 { echo "$as_me:$LINENO: ********************************************************************" >&5

@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -28,6 +33,17 @@
 // This program is distributed in the hope that it would be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//
+// UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+// WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+// WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+// THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+// OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+// INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+// OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+// FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+// RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+// DISPOSAL OF THE SOFTWARE.
 //
 // Further, this software is distributed without any warranty that it
 // is free of the rightful claim of any third person regarding
@@ -1586,6 +1602,13 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
   Is_True(comp_unit->Cfg()->Verify_cfg(),
 	  ("Verify CFG wrong after MU and CHI"));
 
+#ifdef OPENSHMEM_ANALYZER
+  if(OSA_Flag && Control_Flow_Type_Num==-1) {
+      comp_unit->Cfg()->OpenSHMEM_Dump_CFG(stdout);
+      //  comp_unit->Cfg()->Print(stdout);
+  }
+#endif
+
   SET_OPT_PHASE("Create SSA Representation");
   // create ssa representation
   comp_unit->Ssa()->Construct(comp_unit->Htable(),
@@ -1689,6 +1712,12 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 	 comp_unit->Cfg()->Feedback()->Verify( comp_unit->Cfg(),
 					       "after Dead Code Elimination" );
   }
+
+#ifdef OPENSHMEM_ANALYZER
+  if (OSA_Flag && Control_Flow_Type_Num!=-1) {
+      comp_unit->Cfg()->OpenSHMEM_Dump_CFG(stdout);
+  }
+#endif
 
 #ifdef KEY
   if (WOPT_Enable_Warn_Uninit && phase == MAINOPT_PHASE)

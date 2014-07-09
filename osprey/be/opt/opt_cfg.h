@@ -164,6 +164,10 @@ class OPT_TAIL;
 class LMV_CFG_ADAPTOR; 
 class LOOP_UNROLL_UTIL;
 
+#ifdef OPENSHMEM_ANALYZER
+class  osacfgnode;
+#endif
+
 class CFG {
 friend class EXITBB_ITER;
 friend class OPT_TAIL;
@@ -455,6 +459,11 @@ public:
   BOOL	       Trace(void) const { return _trace; }
   void         Print(FILE *fp=stderr, 
 		     BOOL dfs_order = TRUE, IDTYPE bb_id = (IDTYPE) -1);
+#ifdef OPENSHMEM_ANALYZER
+  void         OpenSHMEM_Dump_CFG(FILE *fp=stderr,
+             BOOL dfs_order = TRUE, IDTYPE bb_id = (IDTYPE) -1);
+  void         Check_OpenSHMEM_Call(BB_NODE *, osacfgnode &node );
+#endif
   void         PrintLoopVis(BB_LOOP * loop, int & id);
   void         PrintVis(BOOL draw_loops);
   void         PrintCDVis(void);

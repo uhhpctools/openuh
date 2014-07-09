@@ -1,4 +1,9 @@
 /*
+  Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
+  Oak Ridge National Laboratory
+*/
+
+/*
  * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -17,6 +22,17 @@
   This program is distributed in the hope that it would be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+
+  UT-BATTELLE, LLC AND THE GOVERNMENT MAKE NO REPRESENTATIONS AND DISCLAIM ALL
+  WARRANTIES, BOTH EXPRESSED AND IMPLIED.  THERE ARE NO EXPRESS OR IMPLIED
+  WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR THAT
+  THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY PATENT, COPYRIGHT, TRADEMARK,
+  OR OTHER PROPRIETARY RIGHTS, OR THAT THE SOFTWARE WILL ACCOMPLISH THE
+  INTENDED RESULTS OR THAT THE SOFTWARE OR ITS USE WILL NOT RESULT IN INJURY
+  OR DAMAGE.  THE USER ASSUMES RESPONSIBILITY FOR ALL LIABILITIES, PENALTIES,
+  FINES, CLAIMS, CAUSES OF ACTION, AND COSTS AND EXPENSES, CAUSED BY,
+  RESULTING FROM OR ARISING OUT OF, IN WHOLE OR IN PART THE USE, STORAGE OR
+  DISPOSAL OF THE SOFTWARE.
 
   Further, this software is distributed without any warranty that it is
   free of the rightful claim of any third person regarding infringement 
@@ -95,6 +111,10 @@ static char *rcs_id = 	opt_alias_mgr_CXX"$Revision: 1.7 $";
 #include "glob.h"
 #include "pu_info.h"
 #include "nystrom_alias_analyzer.h"
+
+#ifdef OPENSHMEM_ANALYZER
+#include "wn_tree_util.h"
+#endif
 
 static BOOL in_ipa_pu_list(char *function_name);
 static BOOL in_pure_call_list(char *function_name);
@@ -1533,6 +1553,107 @@ ALIAS_MANAGER::Print( const WN *wn, FILE *fp ) const
     }
   }
 }
+
+#ifdef OPENSHMEM_ANALYZER
+//Verify whether the given WHIRL node is aliased with other locations or not
+INT32
+ALIAS_MANAGER::Verify_Alias_With_Others(WN * wn)
+{
+    INT32  i, self = Id(wn);
+    for (i =  Preg_id()+2; i <= Vec()->Lastidx(); i++) {
+        if(i != self) {
+            for (INT32 oldid = Preg_id() + 2; oldid <= i; oldid++) {
+                if (Rule()->Aliased_Memop(Pt(oldid),
+                            Pt(i), Pt(oldid)->Ty(), Pt(i)->Ty(), TRUE)) {
+                    if(oldid == self) {
+                        printf("\n *** OpenSHMEM Warning: Alias detected for "
+                                "memory reference ");
+                        printf("%s with a memory reference which is: ",
+                                 ST_name(WN_st_idx(wn)));
+                        if (Pt(i)->Base_kind() == BASE_IS_FIXED) {
+                            printf("user-defined ptr");
+                        } else {
+                            printf(" a dynamic pointer; ");
+                        }
+                        if (Pt(i)->Local()) printf(" a local reference; ");
+                        if (Pt(i)->Global()) printf(" a global reference. ");
+                        printf("***\n");
+                        return TRUE;
+                    }
+                }
+            }
+        }
+    }
+
+    return FALSE;
+}
+//end_shmem
+
+//  C interfaces
+
+//start_shmem
+INT32 Verify_Alias(struct ALIAS_MANAGER * am, WN * wn)
+{
+    return am->Verify_Alias_With_Others(wn);
+}
+
+void Print_Info(struct ALIAS_MANAGER * am, WN * wn)
+{
+    int i = am->Id(wn);
+    if(am->Pt(i)->Base_kind()==BASE_IS_FIXED) printf("user-declared; ");
+    else printf("dynamic pointer; ");
+    if (am->Pt(i)->Local()) printf(" local; ");
+    if (am->Pt(i)->Global()) printf(" global");
+}
+
+BOOL Find_all_alias(const struct ALIAS_MANAGER * am, WN * src, WN * func_body,
+        WN ** arr_alias_id, WN ** arr_stmt, INT32 arr_length, BOOL is_blocking)
+{
+    BOOL is_src_aliased=FALSE;
+    INT32 idx=0;
+    ALIAS_RESULT result;
+
+    WN_TREE_CONTAINER<POST_ORDER> wcpre(func_body);
+    WN_TREE_CONTAINER<POST_ORDER> :: iterator wipre, temp_iter;
+    OPERATOR op;
+    WN * stmt;
+
+    wipre =  wcpre.begin();
+    WN * target=wipre.Wn();
+    WN * end_wn=NULL;
+
+    stmt=target;
+    while(WN_operator(target) != OPR_FUNC_ENTRY) {
+        if(target==src && is_blocking) {
+            break;
+        } else if (target!=src) {
+            op = WN_operator(target);
+            if ((op==OPR_LDID || op==OPR_STID || op==OPR_ISTORE ||
+                 op==OPR_ILOAD) && am->Id(target)>2){
+                result = Aliased(am, src,target, TRUE);
+                if(result == POSSIBLY_ALIASED /* || result==SAME_LOCATION*/){
+                    if(idx==arr_length) break;
+                    if((idx!=0 && arr_stmt[idx-1]!=stmt)|| (idx==0)) {
+                        /*This avoids  duplicate entries in the buffers in case of
+                          multiple aliases in the same statement
+                          */
+                        arr_alias_id[idx]=target;
+                        arr_stmt[idx++]=stmt;
+                    }
+                    is_src_aliased=TRUE;
+                }
+            }
+        } else if(target==src && !is_blocking) {
+        }
+        wipre++;
+        target  =  wipre.Wn();
+        stmt = (OPERATOR_is_stmt(WN_operator(target)) ||
+                OPERATOR_is_call(WN_operator(target))) ?  target : stmt;
+    }
+    return is_src_aliased;
+}
+
+#endif /* defined(OPENSHMEM_ANALYZER) */
 
 
 //  C interface to ALIAS_MANAGER::Print

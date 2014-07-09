@@ -116,6 +116,9 @@ bfd_boolean demangling;
 #ifdef DRAGON
 int Dragon_Flag;
 #endif
+#ifdef OPENSHMEM_ANALYZER
+int OSA_Flag;
+#endif
 int Epilog_Flag;
 int UH_Autoscope_Flag; /* Laks 08/11/06 */
 int UH_Apocost_Flag; /* Laks 08/11/06 */

@@ -994,6 +994,10 @@ prescan_options (int argc, char *argv[])
     if (!strcasecmp(argv[i], "-ipa") ||
 	!strcmp(argv[i], "-Ofast")) {	// -Ofast implies -ipa.  Bug 3856.
       ipa = TRUE;
+#ifdef OPENSHMEM_ANALYZER
+    } else if (!strcmp(argv[i], "-shmem-analyzer")) {
+      ipa = TRUE;
+#endif
     } else if (!strcmp(argv[i], "-keep")) {	// bug 2181
       keep_flag = TRUE;
     } else if (!strcmp(argv[i], "-save_temps")) {

@@ -116,6 +116,10 @@ extern BOOL Dragon_Flag;        /* Lei Huang 09/16/02 */
 extern BOOL Dragon_CFG_Phase;   /* Lei Huang 10/23/02 */
 #endif
 
+#ifdef OPENSHMEM_ANALYZER
+extern BOOL OSA_Flag;
+#endif
+
 extern BOOL Use_UH_Instrumentation;
 
 #ifdef _UH_COARRAYS
@@ -415,6 +419,12 @@ Process_Command_Line (INT argc, char **argv)
 		    Show_Progress = TRUE;
 		    break;
 		}
+#ifdef OPENSHMEM_ANALYZER
+		if (!strcmp( cp, "hmem-analyzer" )) {
+		  OSA_Flag = TRUE;
+		}
+		break;
+#endif
 #if defined(TARG_SL)
 	    case 'i':
 		if (strcmp (cp, "pisr") == 0) {
@@ -480,7 +490,7 @@ Process_Command_Line (INT argc, char **argv)
 		}
 
 		break;
-              
+
 	    default:		    /* What's this? */
 		ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );
 		break;
