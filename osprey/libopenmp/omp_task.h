@@ -98,8 +98,6 @@ struct omp_task {
   struct omp_task *prev;
   struct omp_task *next;
 
-  ompc_lock_t lock;
-
   omp_task_flags_t flags;
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_task omp_task_t;

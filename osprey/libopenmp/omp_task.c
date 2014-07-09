@@ -237,7 +237,11 @@ void __ompc_task_exit()
 
   /* only try to free parent or put it back on queue if it was a deferred
    * task and it has no more children (since child tasks may attempt to update
-   * num_children field of parent when they exit) */
+   * num_children field of parent when they exit).
+   *
+   * TODO: Actually, there is a possible data race here which could cause the
+   * task to never be freed (very unlikely, though). See the TODO note in
+   * __ompc_task_switch for a possible solution.  */
   if (current_task->parent &&
       __ompc_task_is_deferred(current_task->parent) && num_siblings == 0 &&
       __ompc_task_state_is_finished(current_task->parent)) {
@@ -300,8 +304,20 @@ void __ompc_task_switch(omp_task_t *new_task)
   if (new_task->num_children == 0) {
     __ompc_task_delete(new_task);
   } else {
+    /* TODO: There appears to be a data race here. The last child will check
+     * for whether state is in the FINISHED state.  If it checks this before
+     * it can be set here, then new_task will never be freed.
+     *
+     * A possible solution is to do a compare-and-swap operation on the state
+     * field.  Set it to FINISHED if it is in the RUNNING state. At the same
+     * time, the last child will also do a compare-and-swap operation on the
+     * state field, setting it to CHILDLESS if it is in the RUNNING state (in
+     * __ompc_task_exit).
+     *
+     * So, if the returned state value here is CHILDLESS, that means we can
+     * delete the task right here. If it is RUNNING, then we allow the last
+     * child to delete the task.  */
     __ompc_task_set_state(new_task, OMP_TASK_FINISHED);
-    __ompc_unlock(&new_task->lock);
   }
 
   __omp_current_task = orig_task;
