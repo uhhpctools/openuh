@@ -2659,7 +2659,7 @@ void comm_poll_char_while_zero(char *c)
   }
 }
 
-void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)
+void comm_atomic_define(size_t proc, INT4 *atom, INT4 val)
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
@@ -2668,7 +2668,27 @@ void comm_atomic_define(size_t proc, INT8 *atom, INT8 val)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom)
+void comm_atomic8_define(size_t proc, INT8 *atom, INT8 val)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    comm_atomic_store_request(atom, &val, sizeof val, proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_atomic_ref(INT4 *val, size_t proc, INT4 *atom)
+{
+    INT8 x;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    x = 0;
+    comm_fadd_request(atom, &x, sizeof *val, proc, val);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_atomic8_ref(INT8 *val, size_t proc, INT8 *atom)
 {
     INT8 x;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");

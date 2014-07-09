@@ -140,8 +140,11 @@ void comm_strided_write(size_t proc,
                         size_t stride_levels, int ordered,
                         comm_handle_t * hdl);
 
-void comm_atomic_define(size_t proc, INT8 *atom, INT8 val);
-void comm_atomic_ref(INT8 *val, size_t proc, INT8 *atom);
+void comm_atomic_define(size_t proc, INT4 *atom, INT4 val);
+void comm_atomic8_define(size_t proc, INT8 *atom, INT8 val);
+
+void comm_atomic_ref(INT4 *val, size_t proc, INT4 *atom);
+void comm_atomic8_ref(INT8 *val, size_t proc, INT8 *atom);
 
 /* TODO: vector, non-contiguous read and write operations  */
 
