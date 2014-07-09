@@ -8,6 +8,20 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-07-09: (3.0.38)
+
+* adding OpenSHMEM Analyzer (OSA) into OpenUH main trunk
+  * invoke OSA by compiling with -shmem-analyzer option
+  * adjusts format of warning messages produced by OSA
+
+* misc. improvements/fixes for CAF
+  * fixes for handling expressions with nested cosubscripted terms, and array
+    component accesses of scalar coarrays
+  * fixes for collectives when using MPI reduce/broadcast routines to ensure
+    communication progress
+
+----------------------------------------------------------------------------
+
 2014-06-11: (3.0.37)
 
 * misc. improvements/fixes for CAF
