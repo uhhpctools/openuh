@@ -212,8 +212,7 @@ void profile_rma_store_begin(int proc, int nelem)
     if (stats_enabled)
         profile_record_put(proc, nelem);
 
-    if (epik_enabled)
-        elg_put_1ts(proc, rma_prof_rid, nelem);
+    PROFILE_PUT_START(proc, rma_prof_rid, nelem);
 
     in_rma_region = 1;
 }
@@ -225,8 +224,7 @@ void profile_rma_store_end(int proc)
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
 
-    if (epik_enabled)
-        elg_put_1te_remote(proc, rma_prof_rid);
+    PROFILE_PUT_END_REMOTE(proc, rma_prof_rid);
 
     in_rma_region = 0;
 }
@@ -248,8 +246,7 @@ void profile_rma_load_begin(int proc, int nelem)
     if (stats_enabled)
         profile_record_get(proc, nelem);
 
-    if (epik_enabled)
-        elg_get_1ts_remote(proc, rma_prof_rid, nelem);
+    PROFILE_GET_START_REMOTE(proc, rma_prof_rid, nelem);
 
     in_rma_region = 1;
 }
@@ -261,8 +258,7 @@ void profile_rma_load_end(int proc)
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
 
-    if (epik_enabled)
-        elg_get_1te(proc, rma_prof_rid);
+    PROFILE_GET_END(proc, rma_prof_rid);
 
     in_rma_region = 0;
 }
@@ -279,8 +275,7 @@ void profile_rma_nbstore_end(int proc, int rid)
     if (!profiling_enabled || !(prof_groups & CAFPROF_PUT))
         return;
 
-    if (epik_enabled)
-        elg_put_1te_remote(proc, rid);
+    PROFILE_PUT_END_REMOTE(proc, rid);
 
     /* remove this RMA from the save list */
     tmp.rmaid = rid;
@@ -319,8 +314,7 @@ void profile_rma_nbload_end(int proc, int rid)
         return;
     rma_node_t *rma_node, tmp;
 
-    if (epik_enabled)
-        elg_get_1te(proc, rid);
+    PROFILE_GET_END(proc, rid);
 
     /* remove this RMA from the save list */
     tmp.rmaid = rid;
@@ -368,8 +362,7 @@ void profile_rma_end_all_nbstores()
         return;
 
     DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
-        if (epik_enabled)
-            elg_put_1te_remote(rma_node->target, rma_node->rmaid);
+        PROFILE_PUT_END_REMOTE(rma_node->target, rma_node->rmaid);
         DL_DELETE(saved_store_rma_list, rma_node);
     }
 }
@@ -382,8 +375,7 @@ void profile_rma_end_all_nbstores_to_proc(int proc)
 
     DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
         if (rma_node->target == proc) {
-            if (epik_enabled)
-                elg_put_1te_remote(proc, rma_node->rmaid);
+            PROFILE_PUT_END_REMOTE(proc, rma_node->rmaid);
             DL_DELETE(saved_store_rma_list, rma_node);
         }
     }
@@ -396,8 +388,7 @@ void profile_rma_end_all_nbloads()
         return;
 
     DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
-        if (epik_enabled)
-            elg_put_1te(rma_node->target, rma_node->rmaid);
+        PROFILE_GET_END(rma_node->target, rma_node->rmaid);
         DL_DELETE(saved_load_rma_list, rma_node);
     }
 }
@@ -410,8 +401,7 @@ void profile_rma_end_all_nbloads_to_proc(int proc)
 
     DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
         if (rma_node->target == proc) {
-            if (epik_enabled)
-                elg_put_1te(proc, rma_node->rmaid);
+            PROFILE_GET_END(proc, rma_node->rmaid);
             DL_DELETE(saved_load_rma_list, rma_node);
         }
     }

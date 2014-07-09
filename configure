@@ -1959,7 +1959,7 @@ echo "$as_me: error: --with-tau-makefile= should be specified along with --enabl
    { (exit 1); exit 1; }; }
 fi
 
-if test "${CAFRT_ENABLE_PROFILES}" = "YES" -a -z "${EPIK_ROOT}"; then
+if test "${CAFRT_ENABLE_PROFILES}" = "NO" -a -n "${EPIK_ROOT}"; then
   { { echo "$as_me:$LINENO: error: --with-epik= should be specified along with --enable-cafrt-profiles
    " >&5
 echo "$as_me: error: --with-epik= should be specified along with --enable-cafrt-profiles

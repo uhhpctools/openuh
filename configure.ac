@@ -396,7 +396,7 @@ if test "${BUILD_LIBUHINSTR}" = "YES" -a -z "${TAU_MAKEFILE}"; then
    )
 fi
 
-if test "${CAFRT_ENABLE_PROFILES}" = "YES" -a -z "${EPIK_ROOT}"; then
+if test "${CAFRT_ENABLE_PROFILES}" = "NO" -a -n "${EPIK_ROOT}"; then
   AC_MSG_ERROR(
    [--with-epik= should be specified along with --enable-cafrt-profiles]
    )

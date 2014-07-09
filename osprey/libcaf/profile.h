@@ -69,7 +69,7 @@ typedef enum caf_prof_groups {
 
 /* existence of esd_open means episode and epilog library should be available
  * */
-extern int esd_open();
+extern void esd_open();
 #pragma weak esd_open
 
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)                        ((void) 1)
@@ -114,9 +114,6 @@ extern int esd_open();
 #define PROFILE_GET_CACHE_WRITE_THROUGH(proc)                        ((void) 1)
 
 #else
-
-#include <epik_user.h>
-#include <elg_trc.h>
 
 /* EPIK Dummy Interfaces */
 
@@ -203,55 +200,9 @@ extern const char *CAFPROF_GRP_COMM;
 extern const char *CAFPROF_GRP_SYNC;
 extern const char *CAFPROF_GRP_COLL;
 
-extern void esd_enter(elg_ui4);
-extern void esd_exit(elg_ui4);
-
-#define PROFILE_REGION_ENTRY(rname,grp,rtype)    \
-    static int _##rname##_init = 0; \
-    static elg_ui4 _##rname##_rid; \
-    if (epik_enabled && (prof_groups&(grp))) { \
-        if (!_##rname##_init) { \
-            int fid = esd_def_file(__FILE__); \
-            _##rname##_rid = esd_def_region(#rname , fid, __LINE__, ELG_NO_LNO, \
-                    "CAF" , rtype); \
-            _##rname##_init = 1; \
-        } \
-        esd_enter(_##rname##_rid); \
-    }
-
-#define PROFILE_FUNC_ENTRY(grp) \
-    static int _prof_func_init = 0; \
-    static elg_ui4 _prof_func_rid; \
-    if (epik_enabled && (prof_groups&(grp))) { \
-        if (!_prof_func_init) { \
-            int fid = esd_def_file(__FILE__); \
-            const char *group_name; \
-            if (CAFPROF_MEM_ALLOC & grp) \
-                group_name = CAFPROF_GRP_MEM; \
-            else if (CAFPROF_ONESIDED_COMM & grp) \
-                group_name = CAFPROF_GRP_COMM; \
-            else if (CAFPROF_SYNC & grp) \
-                group_name = CAFPROF_GRP_SYNC; \
-            else if (CAFPROF_COLLECTIVES & grp) \
-                group_name = CAFPROF_GRP_COLL; \
-            else \
-                group_name = CAFPROF_GRP; \
-            _prof_func_rid = esd_def_region(__func__ , fid, __LINE__, ELG_NO_LNO, \
-                    group_name , ELG_FUNCTION); \
-            _prof_func_init = 1; \
-        } \
-        esd_enter(_prof_func_rid); \
-    }
-
-#define PROFILE_REGION_EXIT(rname,grp)  \
-    if (epik_enabled && (prof_groups&(grp))) { \
-        esd_exit(_##rname##_rid); \
-    }
-
-#define PROFILE_FUNC_EXIT(grp)  \
-    if (epik_enabled && (prof_groups&(grp))) { \
-        esd_exit(_prof_func_rid); \
-    }
+extern int esd_open();
+extern void esd_enter(INT4);
+extern void esd_exit(INT4);
 
 #define PROFILE_INIT() { profile_init();  }
 
@@ -328,6 +279,104 @@ extern void esd_exit(elg_ui4);
 
 #define PROFILE_GET_CACHE_WRITE_THROUGH \
                                    profile_record_get_cache_write_through
+
+
+#ifdef EPIK
+
+#include <epik_user.h>
+#include <elg_trc.h>
+
+
+#define PROFILE_REGION_ENTRY(rname,grp,rtype)    \
+    static int _##rname##_init = 0; \
+    static elg_ui4 _##rname##_rid; \
+    if (epik_enabled && (prof_groups&(grp))) { \
+        if (!_##rname##_init) { \
+            int fid = esd_def_file(__FILE__); \
+            _##rname##_rid = esd_def_region(#rname , fid, __LINE__, ELG_NO_LNO, \
+                    "CAF" , rtype); \
+            _##rname##_init = 1; \
+        } \
+        esd_enter(_##rname##_rid); \
+    }
+
+#define PROFILE_FUNC_ENTRY(grp) \
+    static int _prof_func_init = 0; \
+    static elg_ui4 _prof_func_rid; \
+    if (epik_enabled && (prof_groups&(grp))) { \
+        if (!_prof_func_init) { \
+            int fid = esd_def_file(__FILE__); \
+            const char *group_name; \
+            if (CAFPROF_MEM_ALLOC & grp) \
+                group_name = CAFPROF_GRP_MEM; \
+            else if (CAFPROF_ONESIDED_COMM & grp) \
+                group_name = CAFPROF_GRP_COMM; \
+            else if (CAFPROF_SYNC & grp) \
+                group_name = CAFPROF_GRP_SYNC; \
+            else if (CAFPROF_COLLECTIVES & grp) \
+                group_name = CAFPROF_GRP_COLL; \
+            else \
+                group_name = CAFPROF_GRP; \
+            _prof_func_rid = esd_def_region(__func__ , fid, __LINE__, ELG_NO_LNO, \
+                    group_name , ELG_FUNCTION); \
+            _prof_func_init = 1; \
+        } \
+        esd_enter(_prof_func_rid); \
+    }
+
+#define PROFILE_REGION_EXIT(rname,grp)  \
+    if (epik_enabled && (prof_groups&(grp))) { \
+        esd_exit(_##rname##_rid); \
+    }
+
+#define PROFILE_FUNC_EXIT(grp)  \
+    if (epik_enabled && (prof_groups&(grp))) { \
+        esd_exit(_prof_func_rid); \
+    }
+
+#define PROFILE_PUT_START(proc, rma_prof_rid, nelem) { \
+    if (epik_enabled) { \
+        elg_put_1ts(proc, rma_prof_rid, nelem); \
+    } \
+}
+
+#define PROFILE_PUT_END_REMOTE(proc, rma_prof_rid) { \
+    if (epik_enabled) { \
+        elg_put_1te_remote(proc, rma_prof_rid); \
+    } \
+}
+
+#define PROFILE_GET_START_REMOTE(proc, rma_prof_rid, nelem) { \
+    if (epik_enabled) { \
+        elg_get_1ts_remote(proc, rma_prof_rid, nelem); \
+    } \
+}
+
+#define PROFILE_GET_END(proc, rma_prof_rid) { \
+    if (epik_enabled) { \
+        elg_get_1te(proc, rma_prof_rid); \
+    } \
+}
+
+#else
+
+#define PROFILE_REGION_ENTRY(rname,grp,rtype)               ((void) 1)
+
+#define PROFILE_FUNC_ENTRY(grp)                             ((void) 1)
+
+#define PROFILE_REGION_EXIT(rname,grp)                      ((void) 1)
+
+#define PROFILE_FUNC_EXIT(grp)                              ((void) 1)
+
+#define PROFILE_PUT_START(proc, rma_prof_rid, nelem)        ((void) 1)
+
+#define PROFILE_PUT_END_REMOTE(proc, rma_prof_rid)          ((void) 1)
+
+#define PROFILE_GET_START_REMOTE(proc, rma_prof_rid, nelem) ((void) 1)
+
+#define PROFILE_GET_END(proc, rma_prof_rid)                 ((void) 1)
+
+#endif /* defined(EPIK) */
 
 void profile_init();
 void profile_stats_init();
