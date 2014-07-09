@@ -59,6 +59,7 @@ void *collectives_buffer;
 size_t collectives_bufsize;
 
 int enable_collectives_1sided;
+int enable_collectives_use_canary = 0;
 
 int mpi_collectives_available = 0;
 
@@ -304,9 +305,6 @@ _CO_REDUCE(PRODUCT, C8,      product, c8)
 
 
 #define MIN(x,y) ( (x<y) ? (x) : (y) )
-
-#define SEND_WITH_CANARY
-#define COMM_POLL
 
 void sum_reduce_int1__(void *, void *, int);
 void sum_reduce_int2__(void *, void *, int);
@@ -840,12 +838,14 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
 
             if (me > partner) {
 
-#ifdef SEND_WITH_CANARY
+                if (enable_collectives_use_canary) {
+
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
                                 sz*elem_size+1 );
-#else
+                } else {
+
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
@@ -855,20 +855,12 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-#endif
+                }
+
             } else {
 
                 /* poll on flag */
-#ifdef COMM_POLL
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-#else
-                val = ((char*)work_buffers)[(k2-1)*elem_size];
-                while (val == 0) {
-                    comm_service();
-                    val = ((char*)work_buffers)[(k2-1)*elem_size];
-                }
-                LOAD_STORE_FENCE();
-#endif
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -888,36 +880,33 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
             _SYNC_IMAGES(&root, 1, NULL, 0, NULL, 0);
 
             /* poll on flag */
-#ifdef COMM_POLL
             comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
-#else
-            val = ((char*)base_buffer)[sz*elem_size];
-            while (val == 0) {
-                comm_service();
-                val = ((char*)base_buffer)[sz*elem_size];
-            }
-            LOAD_STORE_FENCE();
-#endif
         }
         memcpy(source, base_buffer, sz*elem_size);
     } else if (me == 1) {
         _SYNC_IMAGES(result_image, 1, NULL, 0, NULL, 0);
-#ifdef SEND_WITH_CANARY
-        comm_nbi_write( *result_image-1,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-#else
-        comm_nbi_write( *result_image-1,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
 
-        comm_nbi_write( *result_image-1,
-                        &((char*)base_buffer)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-#endif
+        if (enable_collectives_use_canary) {
+
+            comm_nbi_write( *result_image-1,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size+1 );
+
+        } else {
+
+            comm_nbi_write( *result_image-1,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+            comm_nbi_write( *result_image-1,
+                            &((char*)base_buffer)[sz*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+        }
+
 
     }
 
@@ -1085,38 +1074,36 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         partner = me - q;
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
-#ifdef SEND_WITH_CANARY
-        comm_nbi_write( partner-1,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-#else
-        comm_nbi_write( partner-1,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
 
-        comm_nbi_write( partner-1,
-                        &((char*)work_buffers)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-#endif
+        if (enable_collectives_use_canary) {
+
+            comm_nbi_write( partner-1,
+                            &((char*)work_buffers)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size+1 );
+
+        } else {
+
+
+            comm_nbi_write( partner-1,
+                            &((char*)work_buffers)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+            comm_nbi_write( partner-1,
+                            &((char*)work_buffers)[sz*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+        }
+
     } else if (me <= r) {
         partner = me + q;
         ((char*)work_buffers)[sz*elem_size] = 0;
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
         /* poll on flag */
-#ifdef COMM_POLL
         comm_poll_char_while_zero(&((char*)work_buffers)[sz*elem_size]);
-#else
-        val = ((char*)work_buffers)[sz*elem_size];
-        while (val == 0) {
-            comm_service();
-            val = ((char*)work_buffers)[sz*elem_size];
-        }
-        LOAD_STORE_FENCE();
-#endif
 
         /* reduce:
          *   work_buf(1:sz) = work_buf(1:sz) + work_buf(sz+2:2*(sz+1)-1)
@@ -1151,12 +1138,15 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                 k2 = j*(sz+1);
                 partner = partners[j-1];
 
-#ifdef SEND_WITH_CANARY
+                if (enable_collectives_use_canary) {
+
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
                                 sz*elem_size+1 );
-#else
+
+                } else {
+
                 comm_nbi_write( partner-1,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
@@ -1166,19 +1156,12 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-#endif
+
+                }
+
 
                 /* poll on flag */
-#ifdef COMM_POLL
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-#else
-                val = ((char*)work_buffers)[(k2-1)*elem_size];
-                while (val == 0) {
-                    comm_service();
-                    val = ((char*)work_buffers)[(k2-1)*elem_size];
-                }
-                LOAD_STORE_FENCE();
-#endif
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -1197,38 +1180,34 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         partner = me + q;
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
-#ifdef SEND_WITH_CANARY
-        comm_nbi_write( partner-1,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-#else
-        comm_nbi_write( partner-1,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
+        if (enable_collectives_use_canary) {
 
-        comm_nbi_write( partner-1,
-                        &((char*)base_buffer)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-#endif
+            comm_nbi_write( partner-1,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size+1 );
+
+        } else {
+
+            comm_nbi_write( partner-1,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+            comm_nbi_write( partner-1,
+                            &((char*)base_buffer)[sz*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+        }
+
     } else if (me > q) {
         partner = me - q;
         ((char*)base_buffer)[sz*elem_size] = 0;
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
         /* poll on flag */
-#ifdef COMM_POLL
         comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
-#else
-        val = ((char*)base_buffer)[sz*elem_size];
-        while (val == 0) {
-            comm_service();
-            val = ((char*)base_buffer)[sz*elem_size];
-        }
-        LOAD_STORE_FENCE();
-#endif
     }
 
     memcpy(source, base_buffer, sz*elem_size);

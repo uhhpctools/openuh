@@ -64,6 +64,7 @@ extern int rma_prof_rid;
 extern shared_memory_slot_t *common_slot;
 
 extern int enable_collectives_1sided;
+extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
 extern void *collectives_buffer;
 extern size_t collectives_bufsize;
@@ -184,6 +185,7 @@ static inline armci_hdl_t *get_next_armci_handle(access_type_t
 static inline void return_armci_handle(armci_handle_x_t * handle,
                                        access_type_t access_type);
 
+#ifdef SYNC_IMAGES_HASHED
 static void sync_images_counter(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
@@ -193,6 +195,17 @@ static void sync_images_ping_pong(hashed_image_list_t *image_list,
 static void sync_images_sense_rev(hashed_image_list_t *image_list,
                       int image_count, int *status, int stat_len,
                       char *errmsg, int errmsg_len);
+#else
+static void sync_images_counter(int *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
+static void sync_images_ping_pong(int *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
+static void sync_images_sense_rev(int *image_list,
+                      int image_count, int *status, int stat_len,
+                      char *errmsg, int errmsg_len);
+#endif
 
 void set_static_symm_data(void *base_address, size_t alignment);
 unsigned long get_static_symm_size(size_t alignment,
@@ -739,6 +752,10 @@ void comm_init()
     /* check whether to use 1-sided collectives implementation */
     enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
                                     DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+
+    /* check whether to enable use of canary protocol for some collectives */
+    enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
+                                    DEFAULT_ENABLE_COLLECTIVES_USE_CANARY);
 
     mpi_collectives_available = 1;
 
@@ -1975,8 +1992,13 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+#ifdef SYNC_IMAGES_HASHED
 void comm_sync_images(hashed_image_list_t *image_list, int image_count,
                       int *status, int stat_len, char *errmsg, int errmsg_len)
+#else
+void comm_sync_images(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg, int errmsg_len)
+#endif
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
@@ -2016,13 +2038,21 @@ void comm_sync_images(hashed_image_list_t *image_list, int image_count,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+#ifdef SYNC_IMAGES_HASHED
 static void sync_images_counter(hashed_image_list_t *image_list,
                                 int image_count, int *status,
                                 int stat_len, char *errmsg,
                                 int errmsg_len)
+#else
+static void sync_images_counter(int *image_list,
+                                int image_count, int *status,
+                                int stat_len, char *errmsg,
+                                int errmsg_len)
+#endif
 {
-    hashed_image_list_t *list_item;
     int i;
+#ifdef SYNC_IMAGES_HASHED
+    hashed_image_list_t *list_item;
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2032,6 +2062,16 @@ static void sync_images_counter(hashed_image_list_t *image_list,
         } else {
             q = i;
         }
+#else
+    for (i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (image_list != NULL) {
+            q = image_list[i] - 1;
+        } else {
+            q = i;
+        }
+#endif
 
         if (my_proc != q) {
             int inc = 1;
@@ -2040,6 +2080,8 @@ static void sync_images_counter(hashed_image_list_t *image_list,
                              sizeof(inc), q);
         }
     }
+
+#ifdef SYNC_IMAGES_HASHED
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2049,6 +2091,16 @@ static void sync_images_counter(hashed_image_list_t *image_list,
         } else {
             q = i;
         }
+#else
+    for (i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (image_list != NULL) {
+            q = image_list[i] - 1;
+        } else {
+            q = i;
+        }
+#endif
 
         if (q == my_proc)
             continue;
@@ -2082,17 +2134,26 @@ static void sync_images_counter(hashed_image_list_t *image_list,
     }
 }
 
+#ifdef SYNC_IMAGES_HASHED
 static void sync_images_ping_pong(hashed_image_list_t *image_list,
                                   int image_count, int *status,
                                   int stat_len, char *errmsg,
                                   int errmsg_len)
+#else
+static void sync_images_ping_pong(int *image_list,
+                                  int image_count, int *status,
+                                  int stat_len, char *errmsg,
+                                  int errmsg_len)
+#endif
 {
     int i;
     int images_to_check;
-    hashed_image_list_t *list_item;
     char check_images[image_count];
 
     images_to_check = image_count;
+
+#ifdef SYNC_IMAGES_HASHED
+    hashed_image_list_t *list_item;
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2102,6 +2163,16 @@ static void sync_images_ping_pong(hashed_image_list_t *image_list,
         } else {
             q = i;
         }
+#else
+    for (i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (image_list != NULL) {
+            q = image_list[i] - 1;
+        } else {
+            q = i;
+        }
+#endif
 
         check_images[i] = 1;
         if (my_proc == q) {
@@ -2116,6 +2187,7 @@ static void sync_images_ping_pong(hashed_image_list_t *image_list,
     }
 
     while (images_to_check != 0) {
+#ifdef SYNC_IMAGES_HASHED
         for (list_item = image_list, i = 0; i < image_count; i++) {
             int q;
             /* if image_list is NULL, we sync with all images */
@@ -2125,6 +2197,16 @@ static void sync_images_ping_pong(hashed_image_list_t *image_list,
             } else {
                 q = i;
             }
+#else
+        for (i = 0; i < image_count; i++) {
+            int q;
+            /* if image_list is NULL, we sync with all images */
+            if (image_list != NULL) {
+                q = image_list[i] - 1;
+            } else {
+                q = i;
+            }
+#endif
 
             if (check_images[i] == 0) continue;
 
@@ -2162,13 +2244,20 @@ static void sync_images_ping_pong(hashed_image_list_t *image_list,
     }
 }
 
+#ifdef SYNC_IMAGES_HASHED
 static void sync_images_sense_rev(hashed_image_list_t *image_list,
                               int image_count, int *status, int stat_len,
                               char *errmsg, int errmsg_len)
+#else
+static void sync_images_sense_rev(int *image_list,
+                              int image_count, int *status, int stat_len,
+                              char *errmsg, int errmsg_len)
+#endif
 {
     int i;
-    hashed_image_list_t *list_item;
 
+#ifdef SYNC_IMAGES_HASHED
+    hashed_image_list_t *list_item;
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2178,6 +2267,16 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         } else {
             q = i;
         }
+#else
+    for (i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (image_list != NULL) {
+            q = image_list[i] - 1;
+        } else {
+            q = i;
+        }
+#endif
 
         if (my_proc != q) {
             short sense = sync_flags[q].t.sense % 2 + 1;
@@ -2187,6 +2286,7 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         }
     }
 
+#ifdef SYNC_IMAGES_HASHED
     for (list_item = image_list, i = 0; i < image_count; i++) {
         int q;
         /* if image_list is NULL, we sync with all images */
@@ -2196,6 +2296,16 @@ static void sync_images_sense_rev(hashed_image_list_t *image_list,
         } else {
             q = i;
         }
+#else
+    for (i = 0; i < image_count; i++) {
+        int q;
+        /* if image_list is NULL, we sync with all images */
+        if (image_list != NULL) {
+            q = image_list[i] - 1;
+        } else {
+            q = i;
+        }
+#endif
 
         if (my_proc == q)
             continue;

@@ -32,6 +32,10 @@
 
 #include "uthash.h"
 
+/* use this if we want the runtime to skip over duplicate images in the sync
+ * images list, with a small performance penalty */
+// #define SYNC_IMAGES_HASHED
+
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
 
@@ -65,6 +69,7 @@ typedef enum {
   SYNC_COUNTER = 0,
   SYNC_PING_PONG = 1,
   SYNC_SENSE_REV = 2,
+  SYNC_CSR = 3,
   SYNC_IMAGES_DEFAULT = 2
 } sync_images_t;
 
@@ -168,9 +173,18 @@ void comm_lcb_free(void *ptr);
 /* barriers */
 void comm_sync_all(int *status, int stat_len, char *errmsg,
                    int errmsg_len);
+
+
+#ifdef SYNC_IMAGES_HASHED
 void comm_sync_images(hashed_image_list_t *image_list, int image_count,
                       int *status, int stat_len, char *errmsg,
                       int errmsg_len);
+#else
+void comm_sync_images(int *image_list, int image_count,
+                      int *status, int stat_len, char *errmsg,
+                      int errmsg_len);
+#endif
+
 void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len);
 
