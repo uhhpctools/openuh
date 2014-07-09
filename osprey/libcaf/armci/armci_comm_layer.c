@@ -68,6 +68,7 @@ extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
 extern void *collectives_buffer;
 extern size_t collectives_bufsize;
+extern int collectives_max_workbufs;
 
 /*
  * Static Variable declarations
@@ -756,6 +757,11 @@ void comm_init()
     /* check whether to enable use of canary protocol for some collectives */
     enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
                                     DEFAULT_ENABLE_COLLECTIVES_USE_CANARY);
+
+    /* determine if there is a maximum number of work buffers to use for
+     * collectives */
+    collectives_max_workbufs = get_env_flag(ENV_COLLECTIVES_MAX_WORKBUFS,
+                                            DEFAULT_COLLECTIVES_MAX_WORKBUFS);
 
     mpi_collectives_available = 1;
 

@@ -134,6 +134,14 @@ Environment Variables:
                       the CAF runtime when performing collectives using
                       1-sided communication. By default, it is 4M.
 
+   UHCAF_COLLECTIVES_MAX_WORKBUFS
+                      Specifies an upper limit on the number of work buffers
+                      to use out of the collectives buffer for use by the CAF
+                      runtime when performing collectives using 1-sided
+                      communication. Any value less than 1 means as many work
+                      buffers as can be accomodated.  By default, it is set to
+                      0.
+
 
    ---------------------------------------------------------------------------
    Profiling (requires compiler to be configured with profiling enabled)
@@ -319,6 +327,9 @@ add_uhcaf_envs_to_list()
     fi
     if [ -n "$UHCAF_COLLECTIVES_BUFSIZE" ]; then
         add_to_env_list UHCAF_COLLECTIVES_BUFSIZE
+    fi
+    if [ -n "$UHCAF_COLLECTIVES_MAX_WORKBUFS" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_MAX_WORKBUFS
     fi
     if [ -n "$UHCAF_CO_REDUCE_ALGORITHM" ]; then
         add_to_env_list UHCAF_CO_REDUCE_ALGORITHM
@@ -727,7 +738,7 @@ else
           $launcher_name = amudprun -o $launcher_name = gasnetrun_ibv -o \
           $launcher_name = gasnetrun_gemini -o \
           $launcher_name = gasnetrun_mpi \) ]; then
-    if [ - z "$num_images" ]; then
+    if [ -z "$num_images" ]; then
       UHCAF_LAUNCHER_OPTS=" $UHCAF_LAUNCHER_OPTS"
     elif [ -n "$num_images" -a "$num_images" -gt 0  ]; then
       UHCAF_LAUNCHER_OPTS=" -n $num_images $UHCAF_LAUNCHER_OPTS"
