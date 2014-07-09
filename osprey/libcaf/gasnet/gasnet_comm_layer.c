@@ -4333,6 +4333,7 @@ static void sync_images_csr(int *image_list,
 void *comm_lcb_malloc(size_t size)
 {
     void *ptr = NULL;
+    static int lcb_overflow_happend = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
@@ -4340,13 +4341,15 @@ void *comm_lcb_malloc(size_t size)
 
     ptr = coarray_asymmetric_allocate_if_possible_(size);
     if (!ptr) {
-        if (size >= LARGE_COMM_BUF_SIZE) {
+        if (size >= LARGE_COMM_BUF_SIZE && !lcb_overflow_happend) {
             Warning("Could not allocate a large buffer (%.1lfKB) "
                     "from system memory. If used for communication, "
                     "GASNet's memory registration policy may not handle "
                     "large system memory malloc's correctly. Consider "
                     "increasing the image heap size.",
                     ((double) size) / 1024);
+
+            lcb_overflow_happend = 1;
         }
         gasnet_hold_interrupts();
         ptr = malloc(size);
