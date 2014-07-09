@@ -113,6 +113,7 @@ static char *rcs_id = 	opt_alias_mgr_CXX"$Revision: 1.7 $";
 #include "nystrom_alias_analyzer.h"
 
 #ifdef OPENSHMEM_ANALYZER
+#include <stdarg.h>
 #include "wn_tree_util.h"
 #endif
 
@@ -1555,6 +1556,58 @@ ALIAS_MANAGER::Print( const WN *wn, FILE *fp ) const
 }
 
 #ifdef OPENSHMEM_ANALYZER
+
+// Need to keep this consistent with Print_OSA_Msg routines defined in
+// ipa_cg.cxx and ipl_main.cxx.
+// TODO: Move these print routines into one common place.
+typedef enum {
+    OSA_WARNING_MSG = 0,
+    OSA_ERROR_MSG =  1
+} OSA_msg_t;
+
+#define OSA_MSG_BUFSIZE 512
+
+static void Print_OSA_Msg(OSA_msg_t msg_type, const char *filename,
+                   int line, int col, const char *msg, va_list argp)
+{
+    char tmp[OSA_MSG_BUFSIZE];
+    char tmp2[OSA_MSG_BUFSIZE];
+    va_list ap;
+
+    vsnprintf(tmp, OSA_MSG_BUFSIZE, msg, argp);
+
+    if (filename != NULL) {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s:%d: %s: %s\n", filename, line,
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+    } else {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s: %s\n",
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+    }
+}
+
+static void Print_OSA_Warning(const char *filename, int line, int col,
+                              const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_WARNING_MSG, filename, line, col, msg, argp);
+    va_end(argp);
+}
+
+static void Print_OSA_Error(const char *filename, int line, int col,
+                            const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_ERROR_MSG, filename, line, col, msg, argp);
+    va_end(argp);
+}
+
+
 //Verify whether the given WHIRL node is aliased with other locations or not
 INT32
 ALIAS_MANAGER::Verify_Alias_With_Others(WN * wn)
@@ -1566,6 +1619,7 @@ ALIAS_MANAGER::Verify_Alias_With_Others(WN * wn)
                 if (Rule()->Aliased_Memop(Pt(oldid),
                             Pt(i), Pt(oldid)->Ty(), Pt(i)->Ty(), TRUE)) {
                     if(oldid == self) {
+                        /*
                         printf("\n *** OpenSHMEM Warning: Alias detected for "
                                 "memory reference ");
                         printf("%s with a memory reference which is: ",
@@ -1578,6 +1632,18 @@ ALIAS_MANAGER::Verify_Alias_With_Others(WN * wn)
                         if (Pt(i)->Local()) printf(" a local reference; ");
                         if (Pt(i)->Global()) printf(" a global reference. ");
                         printf("***\n");
+                        */
+
+                        Print_OSA_Warning(NULL, 0, 0,
+                                "Alias detected for memory reference %s "
+                                "with a memory reference which is: %s "
+                                "%s",
+                                ST_name(WN_st_idx(wn)),
+                                Pt(i)->Base_kind() == BASE_IS_FIXED ?
+                                "user-defined ptr; " : "a dynamic pointer; ",
+                                Pt(i)->Local() ? " a local reference. " :
+                                Pt(i)->Global() ? " a global reference. " :"");
+
                         return TRUE;
                     }
                 }

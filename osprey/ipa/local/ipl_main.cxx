@@ -200,6 +200,11 @@ DYN_ARRAY<char*>* Ipl_Function_Names = NULL;
 
 #ifdef OPENSHMEM_ANALYZER
 
+typedef enum {
+    OSA_WARNING_MSG = 0,
+    OSA_ERROR_MSG =  1
+} OSA_msg_t;
+
 char ipl_current_source[500];
 
 void IPL_WriteLinkHTML(BOOL link, int line=0, BOOL br=TRUE)
@@ -216,12 +221,63 @@ void IPL_WriteLinkHTML(BOOL link, int line=0, BOOL br=TRUE)
    }
 }
 
-void IPL_WriteHTML (char * format, ...)
+void IPL_WriteHTML (const char * format, ...)
 {
   va_list args;
   va_start (args, format);
   vfprintf (iplmessagesout, format, args);
   va_end (args);
+}
+
+
+// Need to keep this consistent with Print_OSA_Msg routines defined in
+// ipa_cg.cxx and opt_alias_mgr.cxx
+// TODO: Move these print routines into one common place.
+
+#define OSA_MSG_BUFSIZE 512
+
+static void Print_OSA_Msg(OSA_msg_t msg_type, const char *filename,
+                   int line, int col, const char *msg, va_list argp)
+{
+    char tmp[OSA_MSG_BUFSIZE];
+    char tmp2[OSA_MSG_BUFSIZE];
+    va_list ap;
+
+    vsnprintf(tmp, OSA_MSG_BUFSIZE, msg, argp);
+
+    if (filename != NULL) {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s:%d: %s: %s\n", filename, line,
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+        IPL_WriteLinkHTML(TRUE, line);
+        IPL_WriteHTML(tmp2);
+    } else {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s: %s\n",
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+        IPL_WriteLinkHTML(FALSE);
+        IPL_WriteHTML(tmp2);
+    }
+}
+
+static void Print_OSA_Warning(const char *filename, int line, int col,
+                              const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_WARNING_MSG, filename, line, col, msg, argp);
+    va_end(argp);
+}
+
+static void Print_OSA_Error(const char *filename, int line, int col,
+                            const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_ERROR_MSG, filename, line, col, msg, argp);
+    va_end(argp);
 }
 
 int IPL_IsOpenSHMEM(char *input, int begin, int end) {
@@ -621,14 +677,17 @@ void IPL_Nested_Checks(WN *lda, struct DU_MANAGER *du_mgr, int line,
                                           strcmp(name,"pvalloc")==0 ) {
 
                                            if(ST_sym_class(stm) == CLASS_PREG) {
-					     printf("\n*** OpenSHMEM Warning: Local pointer in arg%d of OpenSHMEM call (line=%d, file=%s) initialized with %s ***\n", arg,line,Src_File_Name,name);
-                                             IPL_WriteLinkHTML(TRUE,line);
-                                             IPL_WriteHTML("\n*** OpenSHMEM Warning: Local pointer in arg%d of OpenSHMEM call (line=%d, file=%s) initialized with %s ***\n", arg,line,Src_File_Name,name);
+                                             Print_OSA_Warning(Src_File_Name, line, 0,
+                                                               "Local pointer in arg %d of "
+                                                               "OpenSHMEM call initialized with %s",
+                                                               arg, name);
 	                                       }
                                           else {
-		                             printf("\n*** OpenSHMEM Warning: Local pointer in arg%d: %s of OpenSHMEM call (line=%d, file=%s) initialized with %s ***\n", arg,ST_name(stm),line,Src_File_Name,name);
-                                             IPL_WriteLinkHTML(TRUE,line);
-                                             IPL_WriteHTML("\n*** OpenSHMEM Warning: Local pointer in arg%d: %s of OpenSHMEM call (line=%d, file=%s) initialized with %s ***\n", arg,ST_name(stm),line,Src_File_Name,name);
+
+                                             Print_OSA_Warning(Src_File_Name, line, 0,
+                                                               "Local pointer in arg %d: %s of "
+                                                               "OpenSHMEM call initialized with %s",
+                                                               arg, ST_name(stm), name);
 	                                  }
 
 			               }
@@ -638,17 +697,18 @@ void IPL_Nested_Checks(WN *lda, struct DU_MANAGER *du_mgr, int line,
 		                 } // end of case CALL
 				   break;
 				case OPR_FUNC_ENTRY:
-                                    if(ST_sym_class(stm) == CLASS_PREG) {
-                   printf("\n*** OpenSHMEM Warning: Uninitialized variable affecting arg%d of OpenSHMEM call (line=%d, file=%s) ***\n", arg,line,Src_File_Name);
-                   IPL_WriteLinkHTML(TRUE,line);
-                   IPL_WriteHTML("\n*** OpenSHMEM Warning: Uninitialized variable affecting arg%d of OpenSHMEM call (line=%d, file=%s) ***\n", arg,line,Src_File_Name);
-	      }
-              else {
-		printf("\n*** OpenSHMEM Warning: Uninitialized variable %s affecting arg%d: in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(stm),arg,line,Src_File_Name);
-                IPL_WriteLinkHTML(TRUE,line);
-	        IPL_WriteHTML("\n*** OpenSHMEM Warning: Uninitialized variable %s affecting arg%d: in OpenSHMEM call (line=%d, file=%s) ***\n", ST_name(stm),arg,line,Src_File_Name);
+                   if(ST_sym_class(stm) == CLASS_PREG) {
+                       Print_OSA_Warning(Src_File_Name, line, 0,
+                               "Uninitialized variable affecting arg %d of OpenSHMEM call",
+                               arg);
+                   }
+                   else {
 
-	      }
+                       Print_OSA_Warning(Src_File_Name, line, 0,
+                               "Uninitialized variable %s affecting arg %d of OpenSHMEM call",
+                               ST_name(stm), arg);
+
+                   }
 				break;
 				default:
 				  //  fdump_wn(stdout,wn2);
@@ -702,23 +762,14 @@ void IPL_Check_OpenSHMEM_Initvars(WN *lda, int line, int arg,
                 if( WN_operator(tmp->Wn()) == OPR_FUNC_ENTRY) {
 
                     if(ST_sym_class(st) == CLASS_PREG) {
-                        printf("\n*** OpenSHMEM Warning: Uninitialized variable "
-                               "in arg%d of OpenSHMEM call (line=%d, file=%s) ***\n",
-                               arg,line,Src_File_Name);
-                        IPL_WriteLinkHTML(TRUE,line);
-                        IPL_WriteHTML("\n*** OpenSHMEM Warning: Uninitialized variable "
-                                      "in arg%d of OpenSHMEM call (line=%d, file=%s) ***\n",
-                                       arg,line,Src_File_Name);
+                       Print_OSA_Warning(Src_File_Name, line, 0,
+                               "Uninitialized variable in arg %d of OpenSHMEM call",
+                               arg);
                     }
                     else {
-                        printf("\n*** OpenSHMEM Warning: Uninitialized variable  "
-                               "in arg%d: %s in OpenSHMEM call (line=%d, file=%s) ***\n",
-                               arg,ST_name(st),line,Src_File_Name);
-                        IPL_WriteLinkHTML(TRUE,line);
-                        IPL_WriteHTML("\n*** OpenSHMEM Warning: Uninitialized "
-                                "variable in arg%d: %s in OpenSHMEM call "
-                                "(line=%d, file=%s) ***\n",
-                                arg,ST_name(st),line,Src_File_Name);
+                       Print_OSA_Warning(Src_File_Name, line, 0,
+                               "Uninitialized variable in arg %d: %s in OpenSHMEM call",
+                               arg, ST_name(st));
 
                     }
 
@@ -792,28 +843,13 @@ void IPL_Check_Alias(WN *func_body, ALIAS_MANAGER* alias_mgr, WN* memopr_wn,
                             OPERATOR temp_op = WN_operator(temp_wn);
                           }
 
-                          printf("\n*** OpenSHMEM Warning: Symmetric Variable "
-                                 "named %s in arg%d of OpenSHMEM call "
-                                 "(line=%d, file=%s) may be aliased with the "
-                                 "pointer in line %d*** \n",
-                                ST_name(WN_st_idx(memopr_wn)),
-                                arg_idx,
-                                line,
-                                Src_File_Name,
-                                USRCPOS_linenum(target_linepos)
-                                );
-                          IPL_WriteLinkHTML(TRUE,line);
-                          IPL_WriteHTML("\n*** OpenSHMEM Warning: Symmetric "
-                                 "Variable named %s in arg%d of OpenSHMEM call  "
-                                 "(line=%d, file=%s) may be aliased with the "
-                                 "pointer in line %d*** \n",
-                                ST_name(WN_st_idx(memopr_wn)),
-                                arg_idx,
-                                line,
-                                Src_File_Name,
-                                USRCPOS_linenum(target_linepos)
-                                );
+                          Print_OSA_Warning(Src_File_Name, line, 0,
+                                  "Symmetric Variable named %s in arg %d of OpenSHMEM call "
+                                  "may be aliased with the pointer in line %d",
+                                  ST_name(WN_st_idx(memopr_wn)), arg_idx,
+                                  USRCPOS_linenum(target_linepos));
                           IPL_WriteLinkHTML(TRUE,USRCPOS_linenum(target_linepos),FALSE);
+
                      }
 /*                     printf("\n*** OpenSHMEM Warning: Symmetric Variable named %s in arg%d of OpenSHMEM call (line=%d, file=%s)  may be aliased unsafely with the following: *** \n",
                             ST_name(WN_st_idx(memopr_wn)), arg_idx, line, Src_File_Name

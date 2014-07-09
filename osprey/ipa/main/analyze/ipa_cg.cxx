@@ -255,8 +255,15 @@ extern IPA_NODE* Main_Entry(IPA_NODE* ipan_alt)
 } 
 
 #ifdef OPENSHMEM_ANALYZER
-void WriteLinkHTML(BOOL link, int line=0) {
 
+typedef enum {
+    OSA_WARNING_MSG = 0,
+    OSA_ERROR_MSG =  1
+} OSA_msg_t;
+
+
+void WriteLinkHTML(BOOL link, int line=0)
+{
    vfprintf (messagesout,"<br>\n",NULL);
 
    if(link) {
@@ -268,6 +275,7 @@ void WriteLinkHTML(BOOL link, int line=0) {
    }
 
 }
+
 void WriteHTML (char * format, ...)
 {
 
@@ -278,6 +286,54 @@ void WriteHTML (char * format, ...)
   va_end (args);
 
 }
+
+
+#define OSA_MSG_BUFSIZE 512
+
+static void Print_OSA_Msg(OSA_msg_t msg_type, const char *filename,
+                   int line, int col, const char *msg, va_list argp)
+{
+    char tmp[OSA_MSG_BUFSIZE];
+    char tmp2[OSA_MSG_BUFSIZE];
+    va_list ap;
+
+    vsnprintf(tmp, OSA_MSG_BUFSIZE, msg, argp);
+
+    if (filename != NULL) {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s:%d: %s: %s\n", filename, line,
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+        WriteLinkHTML(TRUE, line);
+        WriteHTML(tmp2);
+    } else {
+        snprintf(tmp2, OSA_MSG_BUFSIZE, "\n%s: %s\n",
+                msg_type == OSA_ERROR_MSG ? "error" : "warning",
+                tmp);
+        fprintf(stderr, "%s", tmp2);
+        WriteLinkHTML(FALSE);
+        WriteHTML(tmp2);
+    }
+}
+
+static void Print_OSA_Warning(const char *filename, int line, int col,
+                              const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_WARNING_MSG, filename, line, col, msg, argp);
+    va_end(argp);
+}
+
+static void Print_OSA_Error(const char *filename, int line, int col,
+                            const char *msg, ...)
+{
+    va_list argp;
+    va_start(argp, msg);
+    Print_OSA_Msg(OSA_ERROR_MSG, filename, line, col, msg, argp);
+    va_end(argp);
+}
+
 #endif /* defined(OPENSHMEM_ANALYZER) */
 
 #ifndef _LIGHTWEIGHT_INLINER
@@ -4665,20 +4721,19 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
         }
     }
 
+    /*
     if(fini==0) {
-        printf("\n*** OpenSHMEM Warning: no call to %s found ***\n", init_names[2]);
-        WriteLinkHTML(FALSE);
-        WriteHTML("\n*** OpenSHMEM Warning: no call to %s found ***\n", init_names[2]);
+        Print_OSA_Warning(NULL, 0, 0, "no call to %s found", init_names[2]);
     }
+    */
     if(init==0)  {
-        printf("\n*** OpenSHMEM Warning: no call to %s or %s found ***\n", init_names[0], init_names[1]);
-        WriteLinkHTML(FALSE);
-        WriteHTML("\n*** OpenSHMEM Warning: no call to %s or %s found ***\n", init_names[0], init_names[1]);
+        Print_OSA_Warning(NULL, 0, 0, "no call to %s or %s found",
+                init_names[0], init_names[1]);
     }
     if(init>=1 && state==0 && fini>=1) {
-        printf("\n*** OpenSHMEM Warning: call %s appears before call %s or %s *** \n", init_names[2], init_names[0], init_names[1]);
-        WriteLinkHTML(FALSE);
-        WriteHTML("\n*** OpenSHMEM Warning: call %s appears before call %s or %s *** \n", init_names[2], init_names[0], init_names[1]);
+
+        Print_OSA_Warning(NULL, 0, 0, "call %s appears before call %s or %s",
+                init_names[2], init_names[0], init_names[1]);
     }
     if(debug)
         printf("\nthe sates are init=%d, fini=%d, state=%d\n",init,fini,state);
@@ -4840,18 +4895,12 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
 
 
     if(init>1) {
-        printf("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
-               "initialization call found ***\n");
-        WriteLinkHTML(FALSE);
-        WriteHTML("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
-                "initialization call found ***\n");
+        Print_OSA_Warning(NULL, 0, 0,
+                "more than one OpenSHMEM initialization call found");
     }
     if(fini>1) {
-        printf("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
-               "finalization call found ***\n");
-        WriteLinkHTML(FALSE);
-        WriteHTML("\n*** OpenSHMEM Warning: more than one OpenSHMEM "
-                "finalization call found ***\n");
+        Print_OSA_Warning(NULL, 0, 0,
+                "more than one OpenSHMEM finalization call found");
 
     }
     if(debug) {
@@ -4870,7 +4919,7 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
         fout << "<TR><TD>Atomics</TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
         fout << "<TR><TD>Memory Mgt</TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
         fout << "<TR><TD>State Queries</TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
-        fout << "<TR><TD>Syncrhonizations</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+        fout << "<TR><TD>Synchronizations</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
         fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
         fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
         fout << "</TABLE> >]; }" << endl;
@@ -5042,13 +5091,9 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_IPUT(WN *wn)
                 break;
 
             default:
-                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
-                       "arg1 of %s (line=%d, file=%s) ***\n",
-                       ST_name( WN_st( wn ) ),line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
-                       "in arg1 of %s (line=%d, file=%s) ***\n",
-                       ST_name( WN_st( wn ) ),line,current_src);
+                Print_OSA_Warning(current_src, line, 0,
+                        "non-symmetric variable in arg1 of %s",
+                        ST_name(WN_st(wn)));
                 break;
 
         }
@@ -5061,36 +5106,26 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_IPUT(WN *wn)
 
 
             if(((WN_const_val(u8const5)*WN_const_val(u8const3)) > target_size) && const_length5 && const_length3) {
-                unsigned long ab =  WN_const_val(u8const5)*WN_const_val(u8const3);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
-                       "arg1 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                printf(" elements with access of %lu elements (line=%d, file=%s) "
-                       " ***\n",ab,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
-                        "of %s arg1 of %ld", ST_name(WN_st(wn)),
-                        (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                WriteHTML(" elements with access of %lu elements "
-                       "(line=%d, file=%s) ***\n",ab,line,current_src);
+                INT64 ab =  WN_const_val(u8const5)*WN_const_val(u8const3);
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg1 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st))/TY_size(TY_etype(ST_type(st))),
+                        ab);
             }
         }
         if (TY_kind(ST_type(st2)) == KIND_ARRAY) {
             long source_size = (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)));
             if ( ( (WN_const_val(u8const5)*WN_const_val(u8const4)) > source_size) &&
                 const_length4 && const_length5) {
-                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const4);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
-                        "arg2 of %llu", ST_name(WN_st(wn)),
-                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                printf(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n", ab,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
-                        "of %s arg2 of %ld", ST_name(WN_st(wn)),
-                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                WriteHTML(" elements with access of %lu elements "
-                       "(line=%d, file=%s) ***\n", ab,line,current_src);
+                INT64 ab = WN_const_val(u8const5)*WN_const_val(u8const4);
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg2 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st2))/TY_size(TY_etype(ST_type(st2))),
+                        ab);
             }
         }
 
@@ -5145,13 +5180,9 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_IGET(WN *wn)
                 break;
 
             default:
-                printf("\n*** OpenSHMEM Warning: non-symmetric variable "
-                       "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                       line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
-                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                        line,current_src);
+                Print_OSA_Warning(current_src, line, 0,
+                        "non-symmetric variable in arg2 of %s",
+                        ST_name(WN_st(wn)));
                 break;
 
         }
@@ -5165,36 +5196,29 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_IGET(WN *wn)
 
             if (((WN_const_val(u8const5)*WN_const_val(u8const3)) > target_size)
                  && const_length5 && const_length3) {
-                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const3);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
-                       "arg1 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                printf(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n", ab,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of "
-                       "%s arg1 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                WriteHTML(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n", ab,line,current_src);
+                INT64 ab = WN_const_val(u8const5)*WN_const_val(u8const3);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg1 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st))/TY_size(TY_etype(ST_type(st))),
+                        ab);
+
             }
         }
         if (TY_kind(ST_type(st2)) == KIND_ARRAY) {
             long source_size = (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)));
             if (((WN_const_val(u8const5)*WN_const_val(u8const4)) > source_size) &&
                  const_length4 && const_length5) {
-                unsigned long ab = WN_const_val(u8const5)*WN_const_val(u8const4);
-                printf("\n*** OpenSHMEM Warning: out of bounds access "
-                       "of %s arg2 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                printf(" elements with access of %lu elements "
-                       "(line=%d, file=%s) ***\n",ab,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
-                       "of %s arg2 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                WriteHTML(" elements with access of %lu elements "
-                       "(line=%d, file=%s) ***\n",ab,line,current_src);
+                INT64 ab = WN_const_val(u8const5)*WN_const_val(u8const4);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg2 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st2))/TY_size(TY_etype(ST_type(st2))),
+                        ab);
 
             }
 
@@ -5239,13 +5263,10 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
                 break;
 
             default:
-                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
-                       "arg1 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                       line, current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
-                       "in arg1 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                       line, current_src);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "non-symmetric variable in arg1 of %s",
+                        ST_name(WN_st(wn)));
                 break;
 
         }
@@ -5256,18 +5277,14 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
             if((WN_const_val(u8const) >
                (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))) &&
                const_length) {
-                unsigned int ab = WN_const_val(u8const);
-                printf("\n*** OpenSHMEM Warning: out of bounds access "
-                       "of %s arg1 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                printf(" elements with access of %u elements (line=%d, "
-                       "file=%s) ***\n",ab,line, current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
-                       "of %s arg1 of %ld", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st))));
-                WriteHTML(" elements with access of %u elements (line=%d, "
-                        "file=%s) ***\n",ab,line, current_src);
+                INT64 ab = WN_const_val(u8const);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg1 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st))/TY_size(TY_etype(ST_type(st))),
+                        ab);
 
             }
 
@@ -5276,15 +5293,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
                strcmp(ST_name(WN_st(wn)),"shmem_put32")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put32_nb")==0) {
                 if (TY_size(TY_etype(ST_type(st))) != 4) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line, current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage "
-                            "class of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
                             TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
 
                 }
             }
@@ -5293,15 +5306,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
                strcmp(ST_name(WN_st(wn)),"shmem_put64")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put64_nb")==0 ) {
                 if (TY_size(TY_etype(ST_type(st))) != 8) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line, current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage "
-                            "class of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
                             TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
 
                 }
             }
@@ -5309,15 +5318,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
             if(strcmp(ST_name(WN_st(wn)),"shmem_put128")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put128_nb")==0) {
                 if (TY_size(TY_etype(ST_type(st))) != 16) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                            "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
                             TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
 
                 }
             }
@@ -5328,18 +5333,13 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
             if((WN_const_val(u8const) >
                 (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)))) &&
                 const_length ) {
-                unsigned long ab = WN_const_val(u8const);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of "
-                       "%s arg2 of %llu", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                printf(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n" , ab,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access "
-                        "of %s arg2 of %llu", ST_name(WN_st(wn)),
-                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                WriteHTML(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n" , ab,line,current_src);
+                INT64 ab = WN_const_val(u8const);
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg2 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st2))/TY_size(TY_etype(ST_type(st2))),
+                        ab);
 
             }
 
@@ -5348,15 +5348,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
                strcmp(ST_name(WN_st(wn)),"shmem_put32")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put32_nb")==0 ) {
                 if (TY_size(TY_etype(ST_type(st2))) != 4) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
                 }
             }
 
@@ -5364,15 +5360,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
                strcmp(ST_name(WN_st(wn)),"shmem_put64")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put64_nb")==0 ) {
                 if (TY_size(TY_etype(ST_type(st2))) != 8) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                            "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
                             TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
 
                 }
             }
@@ -5380,15 +5372,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Put(WN *wn)
             if(strcmp(ST_name(WN_st(wn)),"shmem_put128")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_put128_nb")==0) {
                 if (TY_size(TY_etype(ST_type(st2))) != 16) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
                 }
             }
 
@@ -5480,13 +5468,9 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Initvars(WN *lda, int line, int arg )
             //  Clear_ST_is_global_as_local(st);
             if(AUX_ST_modcount(Aux_St_Table[st_idx])==0) {
 
-                printf("\n*** OpenSHMEM Warning: Uninitialized global "
-                        "pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n",
-                        ST_name(st),line, current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: Uninitialized global "
-                        " pointer: %s in OpenSHMEM call (line=%d, file=%s) ***\n",
-                        ST_name(st),line, current_src);
+                Print_OSA_Warning(current_src, line, 0,
+                        "Uninitialized global pointer: %s in OpenSHMEM call",
+                        ST_name(st));
 
             }
             earlyexit1=1;
@@ -5589,13 +5573,9 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
                 break;
 
             default:
-                printf("\n*** OpenSHMEM Warning: non-symmetric variable in "
-                       "arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                       line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
-                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                        line,current_src);
+                Print_OSA_Warning(current_src, line, 0,
+                        "non-symmetric variable in arg2 of %s",
+                        ST_name(WN_st(wn)));
                 break;
 
 
@@ -5606,17 +5586,14 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
             // printf("array size of mtype %ld",TY_size(TY_etype(ST_type(st))));
 
             if((WN_const_val(u8const) > (TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))) && const_length    ) {
-                unsigned long ba= WN_const_val(u8const);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of %s "
-                       "arg2 of %llu elements with access of",ST_name(WN_st(wn)),
-                       ((TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))));
-                printf(" %lu elements (line=%d, file=%s) ***\n",ba,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of %s "
-                       "arg2 of %llu elements with access of",ST_name(WN_st(wn)),
-                       ((TY_size(ST_type(st)))/TY_size(TY_etype(ST_type(st)))));
-                WriteHTML(" %lu elements (line=%d, file=%s) ***\n",ba,line,
-                        current_src);
+                INT64 ba = WN_const_val(u8const);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg2 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st))/TY_size(TY_etype(ST_type(st))),
+                        ba);
 
             }
 
@@ -5624,44 +5601,32 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
             if (strcmp(ST_name(WN_st(wn)),"shmem_get4")==0 ||
                 strcmp(ST_name(WN_st(wn)),"shmem_get32")==0 ) {
                 if (TY_size(TY_etype(ST_type(st))) != 4) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
                 }
             }
 
             if(strcmp(ST_name(WN_st(wn)),"shmem_get8")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_get64")==0 ) {
                 if (TY_size(TY_etype(ST_type(st))) != 8) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
                 }
             }
 
             if(strcmp(ST_name(WN_st(wn)),"shmem_get128")==0) {
                 if (TY_size(TY_etype(ST_type(st))) != 16) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg2 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg2 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st))));
 
                 }
             }
@@ -5672,18 +5637,14 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
         {
             if((WN_const_val(u8const) > (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2)))) && const_length    ) {
                 // printf("here!!!");
-                unsigned long ab= WN_const_val(u8const);
-                printf("\n*** OpenSHMEM Warning: out of bounds access of "
-                        "%s arg1 of size %llu", ST_name(WN_st(wn)),
-                        (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                printf(" elements with access of %lu elements (line=%d, "
-                       "file=%s) ***\n",ab ,line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: out of bounds access of "
-                       "%s arg1 of size %ld", ST_name(WN_st(wn)),
-                       (TY_size(ST_type(st2)))/TY_size(TY_etype(ST_type(st2))));
-                WriteHTML(" elements with access of %lu elements (line=%d, "
-                        "file=%s) ***\n",ab ,line,current_src);
+                INT64 ab= WN_const_val(u8const);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "out of bounds access of %s arg1 of %llu elements "
+                        "with access of %lu elements",
+                        ST_name(WN_st(wn)),
+                        TY_size(ST_type(st2))/TY_size(TY_etype(ST_type(st2))),
+                        ab);
 
             }
 
@@ -5691,15 +5652,11 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
             if(strcmp(ST_name(WN_st(wn)),"shmem_get4")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_get32")==0 ) {
                 if (TY_size(TY_etype(ST_type(st2))) != 4) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class of "
-                           "%s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
 
                 }
             }
@@ -5707,30 +5664,22 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_Get(WN *wn, WN *root)
             if(strcmp(ST_name(WN_st(wn)),"shmem_get8")==0 ||
                strcmp(ST_name(WN_st(wn)),"shmem_get64")==0 ) {
                 if (TY_size(TY_etype(ST_type(st2))) != 8) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line, current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line, current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
 
                 }
             }
 
             if(strcmp(ST_name(WN_st(wn)),"shmem_get128")==0) {
                 if (TY_size(TY_etype(ST_type(st2))) != 16) {
-                    printf("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    printf(" (line=%d, file=%s) ***\n",line,current_src);
-                    WriteLinkHTML(TRUE,line);
-                    WriteHTML("\n*** OpenSHMEM Warning: wrong storage class "
-                           "of %s arg1 of %llu bytes",ST_name(WN_st(wn)),
-                           TY_size(TY_etype(ST_type(st2))));
-                    WriteHTML(" (line=%d, file=%s) ***\n",line,current_src);
+
+                    Print_OSA_Warning(current_src, line, 0,
+                            "wrong storage class of %s arg1 of %llu bytes",
+                            ST_name(WN_st(wn)),
+                            TY_size(TY_etype(ST_type(st2))));
                 }
             }
 
@@ -5872,13 +5821,10 @@ void IPA_CALL_GRAPH::Check_OpenSHMEM_General(WN *wn)
                 break;
 
             default:
-                printf("\n*** OpenSHMEM Warning: non-symmetric variable "
-                        "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                        line,current_src);
-                WriteLinkHTML(TRUE,line);
-                WriteHTML("\n*** OpenSHMEM Warning: non-symmetric variable "
-                       "in arg2 of %s (line=%d, file=%s) ***\n", ST_name( WN_st( wn ) ),
-                       line,current_src);
+
+                Print_OSA_Warning(current_src, line, 0,
+                        "non-symmetric variable in arg2 of %s",
+                        ST_name(WN_st(wn)));
                 break;
         }
     }
