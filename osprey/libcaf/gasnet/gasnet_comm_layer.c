@@ -3317,8 +3317,11 @@ static inline void wait_on_all_pending_accesses()
 
     gasnet_wait_syncnbi_all();
 
-    for (i = 0; i < num_procs; i++) {
-        wait_on_all_pending_accesses_to_proc(i);
+    for (i = 0; (nb_mgr[PUTS].num_handles != 0 ||
+         nb_mgr[GETS].num_handles != 0) && i < num_procs;
+         i++) {
+        if (nb_mgr[PUTS].handles[i] || nb_mgr[GETS].handles[i])
+            wait_on_all_pending_accesses_to_proc(i);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -3333,8 +3336,10 @@ static inline void wait_on_all_pending_puts()
 
     gasnet_wait_syncnbi_puts();
 
-    for (i = 0; i < num_procs; i++) {
-        wait_on_all_pending_puts_to_proc(i);
+    for (i = 0;
+         nb_mgr[PUTS].num_handles != 0 && i < num_procs;
+         i++) {
+        if (nb_mgr[PUTS].handles[i]) wait_on_all_pending_puts_to_proc(i);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -5185,6 +5190,34 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
     {
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
         gasnet_put_nbi(proc, remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes)
+{
+    void *remote_dest;
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    remote_dest = get_remote_address(dest, proc);
+
+#if GASNET_PSHM
+    if (shared_mem_rma_bypass &&
+        node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        ssize_t ofst = node_info->offset;
+        remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
+        memcpy(remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    } else
+#endif
+    {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        gasnet_put_bulk(proc, remote_dest, src, nbytes);
         PROFILE_RMA_STORE_END(proc);
     }
 

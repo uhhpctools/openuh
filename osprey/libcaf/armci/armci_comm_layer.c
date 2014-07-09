@@ -3109,6 +3109,22 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
+/* same as comm_nbi_write */
+void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes)
+{
+    void *remote_dest;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    remote_dest = get_remote_address(dest, proc);
+
+    PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+    ARMCI_Put(src, remote_dest, nbytes, proc);
+    PROFILE_RMA_STORE_END(proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
 
 void comm_strided_nbread(size_t proc,
                          void *src, const size_t src_strides_[],

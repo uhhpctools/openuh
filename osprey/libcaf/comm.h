@@ -112,6 +112,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 void comm_write(size_t proc, void *dest, void *src,
                 size_t nbytes, int ordered, comm_handle_t * hdl);
 void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes);
+void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
 void comm_strided_nbread(size_t proc,
