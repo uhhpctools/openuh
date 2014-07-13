@@ -43,6 +43,9 @@ extern "C" {
 
 extern WN* Coarray_Lower(PU_Info *current_pu, WN* pu);
 extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
+extern WN* Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu);
+extern void Coarray_Global_Symbols_Remove();
+
 
 #ifdef __cplusplus
 }
