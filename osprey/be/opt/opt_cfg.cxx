@@ -127,6 +127,9 @@ static char *rcs_id = 	opt_cfg_CXX"$Revision: 1.30 $";
 #include <fstream>
 #include <vector>
 #include <string>
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+#endif
 using namespace std;
 #endif
 
@@ -6272,6 +6275,241 @@ void CFG::PrintCDVis(void)
   fprintf(stdout, "}\n");
 }
 
+#ifdef OPENSHMEM_ANALYZER
+
+//SP:To be called IMMEDIATELY after the CFG is built in opt_main.cxx
+void CFG::Print_OSA_GetBBlineno()
+{
+  extern INT64 osa_bb_start[100];
+  extern INT64 osa_bb_end[100];
+
+  CFG_ITER cfg_iter(this);
+  BB_NODE * bb;
+  WN *root, *wn1, *wn2;
+  INT64 line;
+  unsigned long int stmt_off;
+
+  FOR_ALL_NODE(bb, cfg_iter, Init()) {
+    if(bb == Entry_bb())
+      root = bb->Firststmt();
+
+    wn1 = bb->Firststmt();
+    wn2 = bb->Laststmt();
+    if (bb->Id() < 100) {
+      if (wn1 && wn2) {
+        USRCPOS pos;
+        USRCPOS_srcpos(pos) = WN_Get_Linenum(wn1);
+        line =  USRCPOS_linenum(pos);
+        osa_bb_start[bb->Id()] = line;
+
+        USRCPOS_srcpos(pos) = WN_Get_Linenum(wn2);
+        line =  USRCPOS_linenum(pos);
+        osa_bb_end[bb->Id()] = line;
+
+        fprintf(stdout, "BB %d, First: %d, Last: %d,wn opcode:%ld, "
+                "wn mapid:%d \n", bb->Id(),osa_bb_start[bb->Id()],
+                osa_bb_end[bb->Id()],OPCODE_mapcat(WN_opcode(wn1)),
+                WN_map_id(wn1));
+      } else {
+        fprintf(stdout, "BB%d, bb->Firststmt() or bb->Laststmt does "
+                "not exist\n", bb->Id());
+      }
+    } else {
+      printf("\n\n\nIncrease size of the osa_bb arrays!!!!!!\n\n");
+    }
+  }
+
+}
+
+//SP:To be called after the CFG is built in opt_main.cxx
+void CFG::Print_OSA_GetDomInfo(WN *root)
+{
+  extern OSAedge *cfged_ptr;
+  extern OSAnode *cfgentrynode_ptr, *cfgnode_ptr;
+  extern OSAgraph *cfgraph_ptr;
+  extern INT64 *cfgnode_id_ptr;
+  extern INT64 *cfgedge_id_ptr;
+
+//SP: Don't need these for changed logic.
+  extern INT64 osa_bb_start[100];
+  extern INT64 osa_bb_end[100];
+
+  unsigned long int stmt_off;
+  int dumptree = 0; //SP: For debug
+  int have_stmt = 0;
+
+  //Variables for cfgnode
+  INT64 def_id, line, multiV=-1, is_cond=-1;
+  char *opcode, *varnm, *fname, *vid, *line1;
+  INT64 tmp_domid = -1;
+
+  *cfgnode_id_ptr = 0;
+  *cfgedge_id_ptr = 0;
+
+
+  if (!WOPT_Enable_Source_Order && Entry_bb() != NULL) {
+
+    if(dumptree == 1){
+      printf("Tree dump using ROOT\n");
+      fdump_tree_no_st(stdout,root);
+    }
+
+    CFG_ITER cfg_iter(this);
+    BB_NODE * bb;
+
+    WN *w; //for storing WN of last statement of dominator
+
+    FOR_ALL_NODE(bb, cfg_iter, Init()) {
+      if(bb == Entry_bb() && dumptree == 1){
+        printf("\n\nTree dump using Init\n");
+        WN* wtmp =bb->Firststmt();
+        fdump_tree_no_st(stdout,wtmp);
+      }
+
+      BB_NODE * dep_node;
+      BB_NODE_SET_ITER rcfg_iter;
+
+      FOR_ALL_ELEM(dep_node, rcfg_iter, Init(bb->Rcfg_dom_frontier())) {
+
+        if (dumptree == 1) {
+          fprintf(stdout, "BB%d -> BB%d;\n", dep_node->Id(), bb->Id());
+        }
+
+        if (dep_node->Kind() == BB_LOGIF || dep_node->Kind() == BB_WHILEEND ||
+            dep_node->Kind() == BB_ENTRY) {
+          // fprintf(stdout,"Found IF or WHILE and GOTO\n");
+          is_cond = 1;
+          // fdump_tree_no_st(stdout,wtmp);
+        }
+
+        if(dumptree == 1) {
+          fprintf(stdout, "Dominator Frontier: \n");
+          dep_node->Print(stdout);
+        }
+        if (dep_node->Laststmt()) {
+          if(dumptree == 1) {
+            fdump_wn_no_st(stdout,dep_node->Laststmt());
+          }
+
+          //Extract information from Laststmt
+          *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+          //printf("Value of *cfgnode_id_ptr: %d\n", *cfgnode_id_ptr);
+
+          w = dep_node->Laststmt();
+
+          opcode  = OPCODE_name(WN_opcode(w));
+          char opcode_str[20];
+          strcpy(opcode_str, OPCODE_name(WN_opcode(w)));
+
+          if (WN_has_sym(w)) {//this may not work
+            varnm = ST_name(WN_st(w));
+            char *tmp = varnm;
+            if(strstr(tmp,"."))
+              varnm = strstr(varnm,".") + 1;
+          } else {
+            varnm = "DOM";
+          }
+          USRCPOS pos;
+          USRCPOS_srcpos(pos) = WN_Get_Linenum(w);
+          line =  USRCPOS_linenum(pos);
+          fname = Src_File_Name;
+
+          stmt_off = w - root;
+
+          tmp_domid = -1;
+          cfgentrynode_ptr->set_values(*cfgnode_id_ptr,tmp_domid,
+                                       opcode_str,varnm,line,w,NULL,
+                                       fname,multiV,is_cond);
+          //SP: Here def_id refers to the Dominator
+          cfged_ptr->def_id = *cfgnode_id_ptr ;
+          cfged_ptr->wn_def = w;
+          tmp_domid = *cfgnode_id_ptr;
+
+          if (dumptree >= 2) {
+            printf("Dominator: id: %d,opcode: %s, varnm: %s, "
+                   "line: %d, wn_self: %p\n",*cfgnode_id_ptr,
+                   opcode,varnm,line,w);
+            fprintf(stdout, "\n");
+            fprintf(stdout, "Dominates: \n");
+
+          }//end-if dumptree
+        }//end-of dep_node->Laststmt
+        else {
+          printf("dep_node->Laststmt does not exist\n");
+        }
+
+        if(dumptree == 2)
+          bb->Print(stdout);
+
+        //printf("Before statement iterator\n");
+        //Print(stdout,bb->Id());
+        STMT_ITER wn_iter(bb->Firststmt(), bb->Laststmt());
+        for (wn_iter.First(); !wn_iter.Is_Empty(); wn_iter.Next()) {
+          WN* wn=wn_iter.Cur();
+          if (wn) {
+            if(dumptree == 2) {
+              fdump_wn_no_st(stdout,wn);
+            }
+
+            *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+            *cfgedge_id_ptr = *cfgedge_id_ptr + 1;
+            //SP: Here use id referes to the the dominated
+            cfged_ptr->use_id = *cfgnode_id_ptr;
+            cfged_ptr->wn_use = wn;
+            cfged_ptr->wn_parent = NULL;
+            cfged_ptr->id = *cfgedge_id_ptr;
+            cfgentrynode_ptr->edges.push_back(*cfged_ptr);
+            have_stmt = 1;
+
+            opcode  = OPCODE_name(WN_opcode(wn));
+            char opcode_str[20];
+            strcpy(opcode_str, OPCODE_name(WN_opcode(wn)));
+
+            if (WN_has_sym(wn)) { //this may not work
+              varnm = ST_name(WN_st(wn));
+              char *tmp = varnm;
+              if(strstr(tmp,"."))
+                varnm = strstr(varnm,".") + 1;
+            } else {
+              varnm = "NULL";
+            }
+            USRCPOS pos;
+            USRCPOS_srcpos(pos) = WN_Get_Linenum(wn);
+            line =  USRCPOS_linenum(pos);
+            fname = Src_File_Name;
+
+            stmt_off = wn - root;
+
+            tmp_domid = -1;
+            cfgnode_ptr->set_values(*cfgnode_id_ptr,tmp_domid,
+                                    opcode_str,varnm,line,wn,w,
+                                    fname,multiV,is_cond);
+            //cfgnode_ptr->set_values(*cfgnode_id_ptr,NULL,opcode,varnm,
+            //                        line,wn,w);
+            cfgraph_ptr->nodes.push_back(*cfgnode_ptr);
+
+            if(dumptree >= 2){
+              printf("CFnode: id: %d,opcode: %s, line: %d, wn offset: %lu\n",
+                     *cfgnode_id_ptr,opcode,line,stmt_off);
+            }//end-if dumptree
+
+          }//end-if wn
+          else {
+            printf("wn does not exist\n");
+          }
+        }//end-for
+        //if(have_stmt==1)
+        cfgraph_ptr->nodes.push_back(*cfgentrynode_ptr);
+        //have_stmt = 0;
+      }//end-FOR-ALL_ELEMENT
+    }//end-FOR-ALL-NODE
+    //  printf("DONE WITH CFG\n");
+  }
+  else
+   printf("ENTRY BB is NULL\n");
+}
+#endif /* OPENSHMEM_ANALYZER */
+
 void
 CFG::Validate(FILE *fp)
 {
@@ -7700,6 +7938,191 @@ CFG::OpenSHMEM_Dump_CFG(FILE *fp, BOOL rpo, IDTYPE bb_id)
     osacfg.relabel();
     osacfg.print();
 }
+
+//SP: Gather barriers from each BB and save them with 
+//    the last statement of each basic block
+void
+CFG::OpenSHMEM_barrier_tree()
+{
+  int debug =0;
+  if (!WOPT_Enable_Source_Order && Entry_bb() != NULL) {
+    extern OSAedge *bbed_ptr;
+    extern OSAnode  *bbnode_ptr;
+    extern OSAgraph *bbtree_ptr;
+    extern INT64 *bbnode_id_ptr;
+    extern INT64 *bbedge_id_ptr;
+
+    *bbnode_id_ptr = 0;
+    *bbedge_id_ptr = 0;
+
+    char *varnm, *fname;
+    char opcode_str[20];
+    INT64 line, tmp_domid = -1, isCond = -1, isBar=-1;
+    int stmt_is_barrier = 0;
+
+    RPOBB_ITER rpo_iter(this);
+    BB_NODE   *tmp;
+    WN *fstmt, *lstmt, *wn;
+
+    // for every BB
+    FOR_ALL_ELEM(tmp, rpo_iter, Init()) {
+      if(tmp->Firststmt()) {
+        fstmt = tmp->Firststmt();
+
+        if(tmp->Laststmt())
+          lstmt = tmp->Laststmt();
+
+        bbnode_ptr->osabarriers.clear();
+        STMT_ITER wn_iter(tmp->Firststmt(),tmp->Laststmt());
+        for (wn_iter.First(); !wn_iter.Is_Empty(); wn_iter.Next()) {
+          wn=wn_iter.Cur();
+          stmt_is_barrier = 0;
+
+          if(wn) {
+            if(WN_opcode(wn))
+              strcpy(opcode_str, OPCODE_name(WN_opcode(wn)));
+            else strcpy(opcode_str,"NULL");
+
+            if (WN_has_sym(wn)) {
+              if(WN_st(wn)) {
+                varnm = ST_name(WN_st(wn));
+                char *tmp = varnm;
+                if(strstr(tmp,"."))
+                  varnm = strstr(varnm,".") + 1;
+                if(strcmp(varnm,"shmem_barrier") == 0) {
+                  isBar = 12;
+                  bbnode_ptr->osabarriers.push_back(isBar);
+                }
+                if(strcmp(varnm,"shmem_barrier_all") == 0) {
+                  isBar = 34;
+                  bbnode_ptr->osabarriers.push_back(isBar);
+                }
+                //SP: Here we are able to capture the function calls
+                //if(WN_operator(wn) == OPR_CALL)
+                //  printf("This is a function call %s \n",varnm);
+              } else {
+                strcpy(varnm,"NULL_1");//indicates that there is no symbol
+              }
+
+              USRCPOS pos;
+              USRCPOS_srcpos(pos) = WN_Get_Linenum(wn);
+              line =  USRCPOS_linenum(pos);
+
+              fname = Src_File_Name;
+            }
+            if(tmp->Kind() == BB_LOGIF || tmp->Kind() == BB_WHILEEND
+                //TODO:Ask if this valid for single procedure??
+                // || tmp->Kind() == BB_ENTRY
+              ) {
+              isCond = 1;
+            }
+
+
+            //SP: We add the statement to the tree if it is the lstmt
+            //if(wn == fstmt || wn == lstmt || isBar > 0)
+            if (wn == lstmt ) {
+              //if (isBar == 12) printf("Found barrier\n");
+              //if (isBar == 34) printf("Found barrier all\n");
+              *bbnode_id_ptr = *bbnode_id_ptr + 1;
+              bbnode_ptr->set_values(*bbnode_id_ptr, tmp->Id(), opcode_str,
+                  varnm,line,wn,lstmt,fname,
+                  (INT64) -1,isCond);
+              int nxt_count=0;
+              BB_LIST_ITER bb_list_iter(tmp->Succ());
+              BB_NODE *suctmp;
+              FOR_ALL_ELEM(suctmp, bb_list_iter, Init()) {
+                nxt_count++;
+                //printf("BB%d NEXT %d BB%d\n ", tmp->Id(), nxt_count,suctmp->Id());
+                if (suctmp) {
+                  *bbedge_id_ptr++;
+                  //SP: Here def id referes to bb->Id() of current
+                  bbed_ptr->id = *bbedge_id_ptr;
+                  //SP: Here def_id referes to the node_id of Laststmt
+                  bbed_ptr->def_id = *bbnode_id_ptr;
+                  //SP: Here use id referes to BB->id of successor
+                  bbed_ptr->use_id = suctmp->Id();
+                  // WN of first stmt of current BB
+                  bbed_ptr->wn_def = fstmt;
+                  // WN of last stmt of current BB
+                  bbed_ptr->wn_use = lstmt;
+                  bbed_ptr->wn_parent = NULL;
+
+                  bbnode_ptr->edges.push_back(*bbed_ptr);
+
+                }//end-if
+              }//end-for
+              //SP: Push node
+              bbtree_ptr->nodes.push_back(*bbnode_ptr);
+            }//end-if
+          }//end-if wn
+
+        }//end-for
+
+      }//end-if Fireststmt()
+      else printf("BB%d does not have statements\n",tmp->Id());
+
+      isCond = -1;
+
+    } //end-for
+
+    /*
+
+    //SP: Print bbtree
+    for(int i=0; i< bbtree_ptr->nodes.size();i++) {
+        printf("BBnode: id: %d, BB: %d, var_nm: %s, "
+                "opcode: %s, line: %d, fstmt:%p "
+                "#Barriers:%d, isCond: %d\n",
+                bbtree_ptr->nodes[i].id, bbtree_ptr->nodes[i].def_id,
+                bbtree_ptr->nodes[i].var_nm, bbtree_ptr->nodes[i].opcode,
+                bbtree_ptr->nodes[i].line,bbtree_ptr->nodes[i].wn_self,
+                bbtree_ptr->nodes[i].osabarriers.size(),
+                bbtree_ptr->nodes[i].is_conditional);
+    }//end-for
+
+    //SP: Print to .dot file
+    ofstream fout;
+    int op_count = 0;
+    int barrier_count = 0;
+    string tmp_operation;
+    string pu_file_name="bb_tree.dot";
+    fout.open(pu_file_name.c_str(),ios::out);
+    fout <<"strict digraph system{\n";
+    fout << "\t node [color=yellow, style=filled];\n";
+    fout << "\t node [fontname=\"Verdana\", size=\"30,30\"];\n";
+    //traverse all nodes
+    for(int i=0; i< bbtree_ptr->nodes.size(); i++) {
+      //find nodes that have barriers
+      // if(bbtree_ptr->nodes[i].osabarriers.size()!= 0){
+      //traverse all barriers
+      for(int j=0; i< bbtree_ptr->nodes[i].osabarriers.size(); j++) {
+        if(nodes[i].osabarriers[j] == 12){
+          if(j == bbtree_ptr->nodes[i].osabarriers.size()-1)
+            printf("barrier");
+          else
+            printf("barrier.");
+        }//end-if
+        if(nodes[i].osabarriers[j] == 34){
+          if(j == bbtree_ptr->nodes[i].osabarriers.size()-1)
+            printf("barrier_all");
+          else
+            printf("barrier_all.");
+        }//end-if
+      }
+      //printf("BB%d has %d barriers\n", bbtree_ptr->nodes[i].def_id,
+      //bbtree_ptr->nodes[i].osabarriers.size());
+      //}//end-if edges!=0
+    } //end-for all nodes
+
+    // fout << "}\n";
+    // fout.close();
+
+    */
+
+    //SP: Analysis to match barriers
+    //
+
+  }//end-if
+}//end-function
 
 int CFGIsOpenSHMEM(char *input, int begin, int end) {
     int debug=0;

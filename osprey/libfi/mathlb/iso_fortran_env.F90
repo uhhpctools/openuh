@@ -87,4 +87,20 @@ module iso_fortran_env
       integer(kind=int64) :: t = 0
   end type TEAM_TYPE
 
+  interface
+
+  function GET_TEAM(LEVEL)
+      import :: TEAM_TYPE
+      integer, optional :: LEVEL
+      type(TEAM_TYPE) :: GET_TEAM
+  end function GET_TEAM
+
+  function TEAM_ID(TEAM)
+      import :: TEAM_TYPE
+      type(TEAM_TYPE), optional :: TEAM
+      integer :: TEAM_ID
+  end function TEAM_ID
+
+  end interface
+
 end module iso_fortran_env

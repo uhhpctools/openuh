@@ -122,10 +122,18 @@
 #include "ipa_section_main.h" 	    // utilities
 #include "ipl_elfsym.h"		    // for IPL_Write_Elf_Symtab
 #include "../local/init.cxx"        // force include of Ipl_Initializer
+
 #ifdef OPENSHMEM_ANALYZER
 #include "opt_alias_class.h"
 /* General progress trace: */
 #include <stdarg.h>
+#include <fstream>
+#include <queue>
+using namespace std;
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+ofstream fout1;
+#endif
 FILE* iplmessagesout;
 #endif
 
@@ -279,6 +287,1306 @@ static void Print_OSA_Error(const char *filename, int line, int col,
     Print_OSA_Msg(OSA_ERROR_MSG, filename, line, col, msg, argp);
     va_end(argp);
 }
+
+
+//SP: Adding function similar to Parentize to annotate the WN with
+//    attributes required for building a barrier tree and navigating it.
+
+static  WN_MAP OSA_Lineno_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_MultiV_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_PEstart_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Lstride_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Npes_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Parent_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_B_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_BA_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Barrier_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Operator_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Label_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_Discovered_Map = WN_MAP_UNDEFINED;
+
+#define Set_num_B(wn, num_barriers) (WN_MAP_Set(OSA_B_Map, wn, (void*) num_barriers))
+#define Get_num_B(wn) ((unsigned long) WN_MAP_Get(OSA_B_Map,(WN*) wn))
+#define Set_num_BA(wn, num_barriers) (WN_MAP_Set(OSA_BA_Map, wn, (void*) num_barriers))
+#define Get_num_BA(wn) ((unsigned long) WN_MAP_Get(OSA_BA_Map,(WN*) wn))
+#define Set_attributes(wn, num_barriers) (WN_MAP_Set(OSA_Barrier_Map, wn, (void*) num_barriers))
+#define Get_attributes(wn) ((unsigned long) WN_MAP_Get(OSA_Barrier_Map,(WN*) wn))
+#define Set_Parent(wn, p) (WN_MAP_Set(OSA_Parent_Map, wn, (void*)  p))
+#define Get_Parent(wn) ((WN*) WN_MAP_Get(OSA_Parent_Map, (WN*) wn))
+
+// 0=no operator, 1=concatination, 2=alternation, 3=quantification
+#define Set_Operator(wn, p) (WN_MAP_Set(OSA_Operator_Map, wn, (void*)  p))
+#define Get_Operator(wn) ((unsigned long) WN_MAP_Get(OSA_Operator_Map, (WN*) wn))
+
+// Numeric value to indicate sequence of operators and barriers
+#define Set_Label(wn, p) (WN_MAP_Set(OSA_Label_Map, wn, (void*)  p))
+#define Get_Label(wn) ((unsigned long) WN_MAP_Get(OSA_Label_Map, (WN*) wn))
+
+//For recording the parameters of Barrier
+#define Set_PEstart(wn, pestart) (WN_MAP_Set(OSA_PEstart_Map, wn, (void*) pestart))
+#define Get_PEstart(wn) ((long) WN_MAP_Get(OSA_PEstart_Map,(WN*) wn))
+#define Set_Lstride(wn, lstride) (WN_MAP_Set(OSA_Lstride_Map, wn, (void*) lstride))
+#define Get_Lstride(wn) ((long) WN_MAP_Get(OSA_Lstride_Map,(WN*) wn))
+#define Set_Npes(wn, npes) (WN_MAP_Set(OSA_Npes_Map, wn, (void*) npes))
+#define Get_Npes(wn) ((unsigned long) WN_MAP_Get(OSA_Npes_Map,(WN*) wn))
+
+#define Set_MultiV(wn, multiv) (WN_MAP_Set(OSA_MultiV_Map, wn, (void*) multiv))
+#define Get_MultiV(wn) ((unsigned long) WN_MAP_Get(OSA_MultiV_Map,(WN*) wn))
+
+#define Set_Lineno(wn, lineno) (WN_MAP_Set(OSA_Lineno_Map, wn, (void*) lineno))
+#define Get_Lineno(wn) ((unsigned long) WN_MAP_Get(OSA_Lineno_Map,(WN*) wn))
+
+//For matching barriers
+//Initial value is -1, after every branch is discovered we increment
+#define Set_Discovered(wn, edges) (WN_MAP_Set(OSA_Discovered_Map, wn, (void*) edges))
+#define Get_Discovered(wn) ((long) WN_MAP_Get(OSA_Discovered_Map,(WN*) wn))
+
+static void Annotate_btree (WN* wn)
+{
+    int debug = 0;
+    int skip_wn, revisit_wn, visited_wn, multiv_wn;
+    unsigned long init_tonegative = -1;
+    unsigned long init_tozero = 0;
+    static unsigned long lab=1;
+    USRCPOS pos;
+    INT64 line;
+
+    if (!OPCODE_is_leaf(WN_opcode(wn))) {
+        if (WN_opcode(wn) == OPC_BLOCK) {
+            if (debug == 1) {
+                printf("WN_block: ");
+                fdump_wn(stdout, wn);
+            }
+
+            WN *kid = WN_first(wn);
+            while (kid) {
+                if(debug == 1){
+                    printf("WN_first: ");
+                    fdump_wn(stdout, kid);
+                }
+                Set_Parent(kid, wn);
+                Set_num_B(kid, init_tozero);
+                Set_num_BA(kid, init_tozero);
+                Set_attributes(kid, init_tozero);
+                Set_Operator(kid, init_tozero);
+                Set_Label(kid, lab);
+                Set_PEstart(kid,init_tonegative);
+                Set_Lstride(kid,init_tonegative);
+                Set_Npes(kid,init_tozero);
+                Set_MultiV(kid,init_tonegative);
+                Set_Discovered(kid,init_tonegative);
+
+                USRCPOS_srcpos(pos) = WN_Get_Linenum(kid);
+                line =  USRCPOS_linenum(pos);
+                Set_Lineno(kid,(unsigned long)line);
+
+                lab++;
+                Annotate_btree(kid);
+                kid = WN_next(kid);
+            }
+        } else {
+            INT kidno;
+            for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+                WN *kid = WN_kid(wn, kidno);
+                if (kid) {
+                    if(debug == 3) {
+                        printf("\n Kid%d: ", kidno);
+                        fdump_wn(stdout, kid);
+                    }
+                    Set_Parent(kid, wn);
+                    Set_num_B(kid, init_tozero);
+                    Set_num_BA(kid, init_tozero);
+                    Set_attributes(kid, init_tozero);
+                    Set_Operator(kid, init_tozero);
+                    Set_Label(kid, lab);
+                    Set_PEstart(kid,init_tonegative);
+                    Set_Lstride(kid,init_tonegative);
+                    Set_Npes(kid,init_tozero);
+                    Set_MultiV(kid,init_tonegative);
+                    Set_Discovered(kid,init_tonegative);
+
+                    Set_Lineno(kid,init_tozero);
+                    lab++;
+                    Annotate_btree(kid);
+                }
+            }
+        }
+    }//end-if !leaf
+}
+
+
+static void Mark_barriers (WN* wn, struct DU_MANAGER *du_mgr)
+{
+  extern INT64 *cfgnode_id_ptr;
+  extern INT64 *cfgedge_id_ptr;
+  extern OSAedge *cfged_ptr;
+  extern OSAnode *cfgentrynode_ptr, *cfgnode_ptr;
+  extern OSAgraph *cfgraph_ptr;
+
+  int debug = 0, is_barrier=-1;
+  static unsigned long bar_no=1, op_num=1;
+  WN *stmt, *tmp_wn, *parent_wn;
+  char *varnm;
+  unsigned long num_barriers, op, lab, num_B=0, num_BA=0;
+  unsigned long concat = 1, alter =2, quant = 3, alterC=4, quantC=5;
+
+  //SP: For recording barrier parameters
+  unsigned long pestart= -1, lstride= 99, numpes=0;
+  int num_defs=0;
+  const DU_NODE *tmp;
+
+  //SP: Collecting barriers in queues (Logic from Match barriers)
+  std::queue<int> q0, q1, q2, q3, q4;
+  static int noCond = 0;
+
+  if (!OPCODE_is_leaf(WN_opcode(wn))) {
+      if (WN_opcode(wn) == OPC_BLOCK) {
+          unsigned long isMV=-1;
+          stmt = WN_first(wn);
+          while (stmt) {
+              if (WN_has_sym(stmt)){
+                  if(WN_st(stmt)){
+                      varnm = ST_name(WN_st(stmt));
+                      if(strcmp(varnm,"shmem_barrier") == 0){
+                          is_barrier = 1;
+                          //SP: Now to analyze the arguments for start, stride and npes
+                          // case1: Local Constants (values and variables)
+                          if(WN_operator(WN_kid(WN_kid(stmt,0),0))== OPR_INTCONST) {
+                              Set_PEstart(stmt,(long)WN_get_const_val(WN_kid(WN_kid(stmt,0),0)));
+                              pestart = (unsigned long)WN_get_const_val(WN_kid(WN_kid(stmt,0),0));
+                          }
+                          if(debug == 3)
+                              fprintf(stdout,"Value of start PE:%lu\n",pestart);
+                          //case1: Local Constant
+                          if(WN_operator(WN_kid(WN_kid(stmt,1),0))== OPR_INTCONST) {
+                              Set_Lstride(stmt,(long)WN_get_const_val(WN_kid(WN_kid(stmt,1),0)));
+                              lstride = WN_get_const_val(WN_kid(WN_kid(stmt,1),0));
+                          }
+                          if(debug == 3)
+                              fprintf(stdout,"Value of log_stride:%d\n",lstride);
+                          //case1: Local Constant
+                          if(WN_operator(WN_kid(WN_kid(stmt,2),0))== OPR_INTCONST) {
+                              Set_Npes(stmt,(unsigned long)WN_get_const_val(WN_kid(WN_kid(stmt,2),0)));
+                              numpes = WN_get_const_val(WN_kid(WN_kid(stmt,2),0));
+                          }
+                          if(debug == 3)
+                              fprintf(stdout,"Value of npes:%d\n",numpes);
+                      }
+                      if(strcmp(varnm,"shmem_barrier_all") == 0)
+                          is_barrier = 2;
+                      if(is_barrier > 0) {
+                          Set_Label(stmt,bar_no);
+                          bar_no++;
+                          if(debug == 1){
+                              printf("\nBarrier found(1):");
+                              fdump_wn(stdout, stmt);
+                          }
+                          tmp_wn = stmt;
+                          int parent_level = 1;
+                          parent_wn = Get_Parent(tmp_wn);
+                          while (1) {
+                              if (parent_wn == NULL)  //FUN-Entry
+                                  break;
+                              else{
+                                  if (debug == 1) {
+                                      printf("Parent%d: ",parent_level);
+                                      fdump_wn(stdout, parent_wn);
+                                  }
+                                  if (is_barrier == 1) {
+                                      num_B = Get_num_B(parent_wn);
+                                      num_B++;
+                                      Set_num_B(parent_wn,num_B);
+                                  }
+                                  else{
+                                      num_BA = Get_num_BA(parent_wn);
+                                      num_BA++;
+                                      Set_num_BA(parent_wn,num_BA);
+                                  }
+                                  num_barriers = Get_attributes(parent_wn);
+                                  op = Get_Operator(parent_wn);
+                                  if(debug == 1)
+                                      printf("OLD: bars=%d,operator=%d \n",
+                                              num_barriers, op);
+                                  num_barriers++;
+                                  Set_attributes(parent_wn, num_barriers);
+
+                                  if (WN_opcode(parent_wn) == OPC_FUNC_ENTRY) {
+                                      Set_Operator(parent_wn,concat);
+                                  }
+                                  else if(WN_opcode(parent_wn) == OPC_IF){
+                                      //for every node
+                                      for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                                          if (cfgraph_ptr->nodes[i].is_mVal == 1 &&
+                                              strcmp(cfgraph_ptr->nodes[i].opcode,
+                                                     "OPC_IF") == 0) {
+                                              if(cfgraph_ptr->nodes[i].wn_self ==
+                                                 parent_wn) {
+                                                  isMV=1;
+                                                  Set_MultiV(parent_wn,isMV);
+                                                  //Set_Lineno(parent_wn,(unsigned long)cfgraph_ptr->nodes[i].line);
+                                                  break;
+                                              }
+                                          }
+                                      }//end-for
+                                      if (isMV == 1)
+                                          Set_Operator(parent_wn,alterC);
+                                      else
+                                          Set_Operator(parent_wn,alter);
+                                      isMV = -1;
+                                  }//end-if(WN_opcode(parent_wn) == OPC_IF)
+                                  else if (WN_opcode(parent_wn) == OPC_BLOCK){
+                                      if (WN_opcode(Get_Parent(parent_wn)) == OPC_IF ||
+                                          WN_opcode(Get_Parent(parent_wn)) == OPC_WHILE_DO ||
+                                          WN_opcode(Get_Parent(parent_wn)) == OPC_DO_WHILE) {
+                                          if(WN_kid(Get_Parent(parent_wn), 2) != NULL) {
+                                              Set_Operator(parent_wn,concat);
+                                          } else {
+                                              //printf("No else block.\n");
+                                              Set_Parent(WN_kid(wn,1),Get_Parent(parent_wn));
+                                          }
+                                      } else if (WN_opcode(Get_Parent(parent_wn)) == OPC_DO_LOOP) {
+                                          if(WN_kid(Get_Parent(parent_wn), 4) != NULL) {
+                                              Set_Operator(parent_wn,concat);
+                                          } else{
+                                              //printf("No else block.\n");
+                                              Set_Parent(WN_kid(wn,1),Get_Parent(parent_wn));
+                                          }
+                                      } else {
+                                          Set_Operator(parent_wn,concat);
+                                      }
+                                  }
+                                  else if(WN_opcode(parent_wn) == OPC_DO_LOOP ||
+                                          WN_opcode(parent_wn) == OPC_WHILE_DO ||
+                                          WN_opcode(parent_wn) == OPC_DO_WHILE) {
+                                      //for every node
+                                      for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                                          if (cfgraph_ptr->nodes[i].is_mVal == 1 &&
+                                        (strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_DO_LOOP") == 0 ||
+                                        strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_DO_WHILE") == 0 ||
+                                        strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_WHILE_DO") ==0) ) {
+                                              if(cfgraph_ptr->nodes[i].wn_self == parent_wn) {
+                                                  isMV=2;
+                                                  Set_MultiV(parent_wn,isMV);
+                                                  //Set_Lineno(parent_wn,(unsigned long)cfgraph_ptr->nodes[i].line);
+                                                  break;
+                                              }
+                                          }
+                                      }//end-for
+                                      if(isMV == 2)
+                                          Set_Operator(parent_wn,quantC);
+                                      else
+                                          Set_Operator(parent_wn,quant);
+                                      isMV = -1;
+                                  }//end-if(WN_opcode(parent_wn) == OPC_DO*)
+
+                                  num_barriers = Get_attributes(parent_wn);
+                                  op = Get_Operator(parent_wn);
+                                  if(debug == 1) {
+                                      printf("NEW: bars=%d,operator=%d label=%d\n",
+                                              num_barriers, op, lab);
+                                  }
+                              }//end-else
+                              tmp_wn = parent_wn;
+                              parent_wn = Get_Parent(tmp_wn);
+                              parent_level++;
+                          }//end-while(1)
+                      }//end-if barrier is found
+                      is_barrier = -1;
+                  }
+              }
+              Mark_barriers(stmt,du_mgr);
+              stmt = WN_next(stmt);
+          }
+      } else {
+          INT kidno;
+          int isMV=-1;
+          for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+              stmt = WN_kid(wn, kidno);
+              if(stmt){
+                  if (WN_has_sym(stmt)){
+                      if(WN_st(stmt)){
+                          varnm = ST_name(WN_st(stmt));
+                          if(strcmp(varnm,"shmem_barrier") == 0) {
+                              is_barrier = 1;
+                              printf("In else!\n");
+                              if(WN_operator(WN_kid(WN_kid(stmt,0),0))== OPR_CONST) {
+                                  fprintf(stdout,"Value of start PE is a constant\n");
+                              }
+                              if(WN_operator(WN_kid(WN_kid(stmt,1),0))== OPR_CONST) {
+                                  fprintf(stdout,"Value of stride is a constant\n");
+                              }
+                              if(WN_operator(WN_kid(WN_kid(stmt,2),0))== OPR_CONST) {
+                                  fprintf(stdout,"Value of numpes is a constant\n");
+                              }
+                          }
+                          if(strcmp(varnm,"shmem_barrier_all") == 0)
+                              is_barrier = 2;
+                          if(is_barrier > 0){
+                              if(debug == 1){
+                                  printf("\nBarrier found(1):");
+                                  fdump_wn(stdout, stmt);
+                              }
+                              Set_Label(stmt,bar_no);
+                              bar_no++;
+                              tmp_wn = stmt;
+                              int parent_level = 1;
+                              parent_wn = Get_Parent(tmp_wn);
+                              while(1){
+                                  if(parent_wn == NULL){  //FUN-Entry
+                                      break;
+                                  }
+                                  else{
+                                      if(debug == 1){
+                                          printf("Parent%d: ",parent_level);
+                                          fdump_wn(stdout, parent_wn);
+                                      }
+                                      if(is_barrier == 1){
+                                          num_B = Get_num_B(parent_wn);
+                                          num_B++;
+                                          Set_num_B(parent_wn, num_B);
+                                      }
+                                      else{
+                                          num_BA = Get_num_BA(parent_wn);
+                                          num_BA++;
+                                          Set_num_BA(parent_wn,num_BA);
+                                      }
+                                      num_barriers = Get_attributes(parent_wn);
+                                      op = Get_Operator(parent_wn);
+                                      if(debug == 1) {
+                                          printf("OLD: bars=%d,operator=%d label=%d\n",
+                                                  num_barriers, op, lab);
+                                      }
+                                      num_barriers++;
+                                      Set_attributes(parent_wn, num_barriers);
+                                      if(WN_opcode(parent_wn) == OPC_FUNC_ENTRY)
+                                          Set_Operator(parent_wn,concat);
+                                      else if(WN_opcode(parent_wn) == OPC_IF){
+                                          //printf("Number of kids in IF:%d\n",WN_kid_count(tmp_wn));
+                                          for(int i=0; i< cfgraph_ptr->nodes.size();
+                                              i++) {//for every node
+                                              if(cfgraph_ptr->nodes[i].is_mVal == 1 &&
+                                                 strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_IF" == 0)) {
+                                                  if(cfgraph_ptr->nodes[i].wn_self == parent_wn) {
+                                                      isMV=1;
+                                                      Set_MultiV(parent_wn,isMV);
+                                                      //Set_Lineno(parent_wn,(unsigned long)cfgraph_ptr->nodes[i].line);
+                                                      break;
+                                                  }
+                                              }
+                                          }
+                                          if(isMV == 1)
+                                              Set_Operator(parent_wn,alterC);
+                                          else
+                                              Set_Operator(parent_wn,alter);
+                                      }//end-if(WN_opcode(parent_wn) == OPC_IF)
+                                      else if (WN_opcode(parent_wn) == OPC_BLOCK){
+                                          if(WN_opcode(Get_Parent(parent_wn)) == OPC_IF ||
+                                             WN_opcode(Get_Parent(parent_wn)) == OPC_WHILE_DO ||
+                                             WN_opcode(Get_Parent(parent_wn)) == OPC_DO_WHILE) {
+                                              if(WN_kid(Get_Parent(parent_wn), 2) != NULL)
+                                                  Set_Operator(parent_wn,concat);
+                                              else{
+                                                  //printf("No else block.\n");
+                                                  Set_Parent(WN_kid(wn,1),Get_Parent(parent_wn));
+                                              }
+                                          }
+                                          else if (WN_opcode(Get_Parent(parent_wn)) == OPC_DO_LOOP) {
+                                              if (WN_kid(Get_Parent(parent_wn), 4) != NULL)
+                                                  Set_Operator(parent_wn,concat);
+                                              else {
+                                                  //printf("No else block.\n");
+                                                  Set_Parent(WN_kid(wn,1),Get_Parent(parent_wn));
+                                              }
+                                          }
+                                          else
+                                              Set_Operator(parent_wn,concat);
+                                      }
+                                      else if (WN_opcode(parent_wn) == OPC_DO_LOOP ||
+                                               WN_opcode(parent_wn) == OPC_WHILE_DO ||
+                                               WN_opcode(parent_wn) == OPC_DO_WHILE) {
+                                          // for every node
+                                          for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                                              if(cfgraph_ptr->nodes[i].is_mVal == 1 &&
+                                           (strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_DO_LOOP") == 0 ||
+                                            strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_DO_WHILE") == 0 ||
+                                            strcmp(cfgraph_ptr->nodes[i].opcode, "OPC_WHILE_DO") ==0)) {
+                                                  if(cfgraph_ptr->nodes[i].wn_self == parent_wn) {
+                                                      isMV=2;
+                                                      Set_MultiV(parent_wn,isMV);
+                                                      //Set_Lineno(parent_wn,(unsigned long)cfgraph_ptr->nodes[i].line);
+                                                      break;
+                                                  }
+                                              }
+                                          }//end-for
+                                          if(isMV == 2)
+                                              Set_Operator(parent_wn,quantC);
+                                          else
+                                              Set_Operator(parent_wn,quant);
+                                          isMV = -1;
+                                      }//end-if(WN_opcode(parent_wn) == OPC_DO*)
+
+                                      num_barriers = Get_attributes(parent_wn);
+                                      op = Get_Operator(parent_wn);
+                                      if(debug == 1)
+                                          printf("NEW: bars=%d,operator=%d \n", num_barriers,op);
+                                  }//end-else
+                                  tmp_wn = parent_wn;
+                                  parent_wn = Get_Parent(tmp_wn);
+                                  parent_level++;
+                              }//end-while(1)
+                          }
+                          is_barrier = -1;
+                      }//end if(WN_st(stmt))
+                  }
+                  Mark_barriers(stmt,du_mgr);
+              }
+          }//end-for
+      }//end-else
+  }//end-if Opcode != leaf
+
+
+}
+
+//SP: Implementing the soution with arrays for saving all barrier sequences.
+//We assume that all barriers are matched.
+static int Match_barriers (WN* wn, struct DU_MANAGER *du_mgr)
+{
+    int debug = 0;
+    USRCPOS pos;
+    INT64 line;
+
+
+    if (!OPCODE_is_leaf(WN_opcode(wn))) {
+        if (WN_opcode(wn) == OPC_BLOCK) {
+            if(debug == 1){
+                printf("WN_block: ");
+                fdump_wn(stdout, wn);
+            }
+            WN *kid = WN_first(wn);
+            while (kid) {
+                if(debug == 1){
+                    printf("WN_first: ");
+                    fdump_wn(stdout, kid);
+                }
+                //Set_Parent(kid, wn);
+
+                USRCPOS_srcpos(pos) = WN_Get_Linenum(kid);
+                line =  USRCPOS_linenum(pos);
+                //Set_Lineno(kid,(unsigned long)line);
+
+                Match_barriers(kid, du_mgr);
+                kid = WN_next(kid);
+            }
+        } else {
+            INT kidno;
+            for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+                WN *kid = WN_kid(wn, kidno);
+                if (kid) {
+                    if(debug == 1){
+                        printf("\n\t Kid%d: ", kidno);
+                        fdump_wn(stdout, kid);
+                    }
+                    //Set_Parent(kid, wn);
+
+                    //Set_Lineno(kid,init_tozero);
+                    Match_barriers(kid, du_mgr);
+                }
+            }
+        }
+    }//end-if !leaf
+
+    /*
+    {
+        printf("Inside match barriers\n");
+        int debug = 1;
+
+        int all_explored = 1, is_barrier=0;
+        // Array of Arrays,300 barrier sequences of upto 100 barriers in each.
+        int all_barrier_comb[300][100];
+        // Every time I reach the leaf, increment bseq, everytime I add a
+        // barrier increment bno.
+        static int bseq=0, bno=0;
+        char *varnm;
+        WN* w, wn_lastB, wninelse;
+        w = wn;
+        static int chkpt=0;
+        //printf("besq:%d,bno:%d\n",bseq,bno);
+        // while(all_explored = 0){
+        if (!OPCODE_is_leaf(WN_opcode(wn))) {
+            if (WN_opcode(wn) == OPC_BLOCK ) {
+                WN *kid;
+                kid = WN_first(wn);
+                while (kid) {
+                    WN *pwn, *gwn;
+                    printf("Checkpt %d\n",chkpt);
+                    chkpt++;
+                    printf("IF, FIRST KID:\t");
+                    fdump_wn(stdout, kid);
+
+                    //if (WN_has_sym(kid)){
+                    if(WN_st(kid)){
+                        varnm = ST_name(WN_st(kid));
+                        if(strcmp(varnm,"shmem_barrier") == 0){
+                            is_barrier = 1;
+                            printf("IF: Found barrier\n");
+                        }
+                        else{
+                            if(strcmp(varnm,"shmem_barrier_all") == 0){
+                                is_barrier = 2;
+                                printf("IF: Found barrier all\n");
+                            }
+                        }//end-else
+                        //if(is_barrier > 0){
+                        if(Get_Parent(kid)){
+                            pwn = Get_Parent(kid);
+                            if(Get_Parent(pwn)){
+                                gwn = Get_Parent(pwn);
+                                printf("Grandparent:\t");
+                                fdump_wn(stdout, gwn);
+                                if(WN_opcode(gwn) == OPC_FUNC_ENTRY && is_barrier > 0){
+                                    //SP: Eg. 2014 indicates that there it is a shmem_barrier_all
+                                    //(2014/1000=2) with label 14 (2014%1000)
+                                    all_barrier_comb[bseq][bno] = is_barrier * 1000 + Get_Label(wn);
+                                    if(debug == 1)
+                                        printf("all_barrier_comb[%d][%d]=%d\n",bseq,bno,all_barrier_comb[bseq][bno]);
+                                    wn_lastB = wn;
+                                    bno++;
+
+                                }//end-if gwn =ENTRY
+                                else {
+                                    long isDis=-2;
+                                    int kidNo=-1;
+                                    if(WN_opcode(gwn) == OPC_IF){
+                                        int kidno=-1;
+                                        if(pwn == WN_kid1(gwn))
+                                            kidno = 1;
+                                        else if (pwn == WN_kid2(gwn))
+                                            kidno = 2;
+                                        isDis = Get_Discovered(gwn);
+                                        //Both THEN and ELSE are done
+                                        if(isDis == 1 || (isDis == 0 && kidno == 1)){
+                                            //Don't add the barrier
+                                        }
+                                        else{
+                                            //Not explored THEN yet or not explored ELSE
+                                            if((isDis == -1 && kidno == 1) ||
+                                                (isDis == 0 && kidno == 2)){
+                                                //SP: Eg. 2014 indicates that there it is a shmem_barrier_all
+                                                //(2014/1000=2) with label 14 (2014%1000)
+                                                all_barrier_comb[bseq][bno] = is_barrier * 1000 + Get_Label(wn);
+                                                if(debug == 1)
+                                                    printf("all_barrier_comb[%d][%d]=%d\n",bseq,bno,all_barrier_comb[bseq][bno]);
+                                                wn_lastB = wn;
+                                                isDis++;
+                                                Set_Discovered(gwn,isDis);
+                                            }
+                                            else {
+                                                // should never reach here.
+                                                printf("Un-handled combination reached: isDis = %d, "
+                                                       " kidno = %d\n",isDis,kidno);
+                                                //WN *kid = WN_kid(wn, kidno);
+                                                //Match_barriers(kid, du_mgr);
+                                            }
+                                        }//end-else
+                                    }//end-if pcode==IF
+                                }
+                            }
+                            else
+                                printf("No Grandparent\n");
+                        }
+                        //}//end-if(is_barrier >0)
+                    }
+                    //}//end-if has sym
+                    Match_barriers(kid, du_mgr);
+                    kid = WN_next(kid);
+                }
+
+            }
+            else {
+                INT kidno;
+                printf("ELSE, WN:\t");
+                fdump_wn(stdout, wn);
+                for (kidno; kidno < WN_kid_count(wn); kidno++) {
+                    WN *kid = WN_kid(wn, kidno);
+                    if(kid){
+                        WN *pwn, *gwn;
+                        pwn = wn;
+                        printf("ELSE, KID:\t");
+                        fdump_wn(stdout, kid);
+
+                        //if (WN_has_sym(kid)){
+                        if(WN_st(kid)){
+                            varnm = ST_name(WN_st(kid));
+                            if(strcmp(varnm,"shmem_barrier") == 0){
+                                is_barrier = 1;
+                                printf("Found barrier\n");
+                            }
+                            else{
+                                if(strcmp(varnm,"shmem_barrier_all") == 0){
+                                    is_barrier = 2;
+                                    printf("Found barrier all\n");
+                                }
+                            }//end-else
+                            if(is_barrier > 0){
+                                if(Get_Parent(wn)){
+                                    gwn = Get_Parent(wn);
+                                    printf("Grandparent:\t");
+                                    fdump_wn(stdout, gwn);
+                                    if(WN_opcode(gwn) == OPC_FUNC_ENTRY){
+                                        //SP: Eg. 2014 indicates that there it is a shmem_barrier_all
+                                        //(2014/1000=2) with label 14 (2014%1000)
+                                        all_barrier_comb[bseq][bno] =
+                                            is_barrier * 1000 + Get_Label(wn);
+                                        if(debug == 1)
+                                            printf("all_barrier_comb[%d][%d]=%d\n",bseq,bno,
+                                                    all_barrier_comb[bseq][bno]);
+                                        wn_lastB = wn;
+                                        bno++;
+
+                                    }//end-if gwn =ENTRY
+                                    else {
+                                        long isDis=-2;
+                                        int kidNo=-1;
+                                        if(WN_opcode(gwn) == OPC_IF){
+
+                                            isDis = Get_Discovered(gwn);
+                                            //Both THEN and ELSE are done
+                                            if(isDis == 1 || (isDis == 0 && kidno == 1)){
+                                                //Don't add the barrier
+                                            }
+                                            else{
+                                                // Not explored THEN yet or not explored ELSE
+                                                if((isDis == -1 && kidno == 1) ||
+                                                    (isDis == 0 && kidno == 2)) {
+                                                    //SP: Eg. 2014 indicates that there it is a
+                                                    //shmem_barrier_all (2014/1000=2) with label 14 (2014%1000)
+                                                    all_barrier_comb[bseq][bno] = is_barrier * 1000 + Get_Label(wn);
+                                                    if(debug == 1)
+                                                        printf("all_barrier_comb[%d][%d]=%d\n",bseq,bno,
+                                                                all_barrier_comb[bseq][bno]);
+                                                    wn_lastB = wn;
+                                                    isDis++;
+                                                    Set_Discovered(gwn,isDis);
+                                                }
+                                                else{
+                                                    //should never reach here.
+                                                    printf("Un-handled combination reached: isDis = %d, "
+                                                           " kidno = %d\n",isDis,kidno);
+                                                    //WN *kid = WN_kid(wn, kidno);
+                                                    //Match_barriers(kid, du_mgr);
+                                                }
+                                            }//end-else
+                                        }//end-if pcode==IF
+                                    }
+                                }
+                                else
+                                    printf("No Grandparent\n");
+                            }
+                        }
+                        // }
+                        Match_barriers(kid, du_mgr);
+
+                    }//end-if(kid)
+                }
+            }
+        }//end-opcode leaf
+        else{
+            //bseq++;
+            //wn = w;
+            //TODO:Set end condition for while=>iterate through the tree and
+            //check that all Discovered values ==1
+
+        }
+        //  }//end-while
+    }
+    */
+}
+
+//SP: To match the barriers recorded in the barrier tree: Has sound logic but does not account for nested barriers
+static int Check_barriers(WN* wn, struct DU_MANAGER *du_mgr)
+{
+    int debug = 0;
+    WN *kid, *wn_BA[4][10];
+    int bseq[4][10];
+    int i,j;
+    char *varnm;
+    int unmatch=-1;
+
+    if (!OPCODE_is_leaf(WN_opcode(wn))) {
+        if (WN_opcode(wn) == OPC_BLOCK ) {
+            kid = WN_first(wn);
+            while (kid) {
+                if(Get_attributes(kid) > 0 && Get_MultiV(kid) > 0){
+                    i=j=0; //each IF starts with
+
+                    //SP: if number of B+BA associated with IF WN is > 00 barriers.
+                    if(WN_opcode(kid) == OPC_IF){
+                        int nestL=0;
+                        //SP:Find if there are/is nested conditionals
+
+                        if(debug == 1)
+                            printf("Get_attributes(kid):%lu, Get_MultiV(kid):%lu\n",
+                                    Get_attributes(kid), Get_MultiV(kid));
+
+                        if(Get_num_BA(WN_kid(kid,1)) != Get_num_BA(WN_kid(kid,2))){
+			  //DK: If conditional has wrong line number
+			  //printf("IF conditional on line %lu has unmatched "
+			  //	 "barrier_all call.\n" /*Get_Lineno(kid)*/, Get_Lineno(WN_kid(WN_kid(kid,1),0))-1);
+			  Print_OSA_Warning(Src_File_Name,  Get_Lineno(WN_kid(WN_kid(kid,1),0))-1, 0,"IF conditional has unmatched barrier_all call");                               
+			  unmatch = 1;
+                        }
+
+                        //SP: This should be inside nested conditional analysis for better accuracy
+                        if(Get_num_B(WN_kid(kid,1)) != Get_num_B(WN_kid(kid,2))){
+			  //printf("IF conditional on line %lu MAY have unmatched"
+			  //       " barrier call.\n",/*Get_Lineno(kid)*/ Get_Lineno(WN_kid(WN_kid(kid,1),0))-1);
+			    Print_OSA_Warning(Src_File_Name,  Get_Lineno(WN_kid(WN_kid(kid,1),0))-1, 0,"IF conditional MAY have unmatched barrier call");                       
+                            unmatch = 1;
+                        }
+                        //SP: Find if the THEN or ELSE blocks have any nested IFs with barriers
+                        WN *kinthen, *kinelse;
+
+                        //initialized to the first kid statement in the then block
+                        kinthen = WN_kid(WN_kid(kid,1),0);
+
+                        //initialized to the first kid statement in the else block
+                        kinelse = WN_kid(WN_kid(kid,2),0);
+
+                        int numB=0;
+                        //must make sure that Bs exist
+                        if(Get_num_B(WN_kid(kid,1)) == Get_num_B(WN_kid(kid,2))
+                           && Get_num_B(WN_kid(kid,1)) != 0){
+                            if(Get_num_BA(WN_kid(kid,1)) == Get_num_BA(WN_kid(kid,2))) {
+                                // there may exist multiple Barriers(both B & BA) per block,
+                                // ordering matters!
+                                numB = Get_attributes(WN_kid(kid,1));
+                                WN *Binthen, *Binelse;
+                                // initialized to the first kid statement in the then block
+                                Binthen = WN_kid(WN_kid(kid,1),0);
+                                // initialized to the first kid statement in the else block
+                                Binelse = WN_kid(WN_kid(kid,2),0);
+
+                                for(int i=0;i<numB;i++){
+                                    while(Binthen){
+                                        if(strcmp(ST_name(WN_st(Binthen)),"shmem_barrier") == 0 ||
+                                           strcmp(ST_name(WN_st(Binthen)),"shmem_barrier_all") == 0){
+                                            break;
+                                        }
+				    }
+                                    while(Binelse){
+                                        if(strcmp(ST_name(WN_st(Binelse)),"shmem_barrier") == 0 ||
+                                           strcmp(ST_name(WN_st(Binelse)),"shmem_barrier_all") == 0){
+                                            break;
+                                        }
+                                        else{
+                                            Binelse = WN_next(Binelse);
+                                        }
+                                    }
+                                    if(strcmp(ST_name(WN_st(Binthen)),ST_name(WN_st(Binelse))) == 0
+                                       && strcmp(ST_name(WN_st(Binelse)),"shmem_barrier") == 0){
+
+                                        if((Get_PEstart(Binthen) != -1 &&
+                                            Get_Lstride(Binthen) != -1 &&
+                                            Get_Npes(Binthen) != 0) ||
+                                            (Get_PEstart(Binelse) != -1 &&
+                                             Get_Lstride(Binelse) != -1 &&
+                                             Get_Npes(Binelse) != 0)) {
+                                            if(Get_PEstart(Binthen) == Get_PEstart(Binelse) &&
+                                               Get_Lstride(Binthen) == Get_Lstride(Binelse) &&
+                                               Get_Npes(Binthen) == Get_Npes(Binelse)) {
+                                                if(debug == 1) {
+                                                    // barrier parameters are constants and they match
+                                                    printf("Barrier statements in line %lu and "
+                                                           " %lu match!\n",Get_Lineno(Binthen),
+                                                           Get_Lineno(Binelse));
+                                                }
+                                            }
+                                            else {
+                                                // barrier parameters are constants and they match
+                                                printf("Barrier statements in line %lu and %lu "
+                                                       " have different active sets.\n",
+                                                       Get_Lineno(Binthen),
+                                                       Get_Lineno(Binelse));
+                                                unmatch = 1;
+                                            }
+                                        }
+                                        else { //barrier parameteres are not constants
+                                            printf("Barrier statements in line %lu and %lu "
+                                                   "cannot be matched through static analysis.\n",
+                                                   Get_Lineno(Binthen), Get_Lineno(Binelse));
+                                            unmatch = 1;
+                                        }
+
+                                        Binthen = WN_next(Binthen);
+                                        Binelse = WN_next(Binelse);
+                                    }
+                                    else {
+                                        if(strcmp(ST_name(WN_st(Binthen)),
+                                                  ST_name(WN_st(Binelse))) == 0 &&
+                                           strcmp(ST_name(WN_st(Binelse)),
+                                                  "shmem_barrier_all") == 0) {
+                                            if(debug == 1) {
+                                                // barrier parameters are constants and they match
+                                                printf("Barrier all statements in line %lu and "
+                                                       " %lu match!\n",Get_Lineno(Binthen),
+                                                       Get_Lineno(Binelse));
+                                            }
+                                        }
+                                        else {
+                                            // barrier parameters are constants and they match
+                                            printf("The application may have incorrect ordering "
+                                                   " of barrier statements (check lines %lu and %lu).\n",
+                                                   Get_Lineno(Binthen),
+                                                   Get_Lineno(Binelse));
+                                        }
+                                        Binthen = WN_next(Binthen);
+                                        Binelse = WN_next(Binelse);
+                                    }
+
+                                }//end-for
+                            }//end-if BA in then == BA in else
+                        }//end-if B in then == B in else
+                    }//end-if(WN_opcode(parent_wn) == OPC_IF)
+
+                    //SP: if number of B+BA associated with DO WN is > 0
+                    if(WN_opcode(kid) == OPC_DO_LOOP ||
+                       WN_opcode(kid) == OPC_WHILE_DO ||
+                       WN_opcode(kid) == OPC_DO_WHILE){
+		      //printf("There  MAY be unmatched barrier calls due to DO "
+		      //       " loop on line %lu.\n", Get_Lineno(kid));
+			Print_OSA_Warning(Src_File_Name,  Get_Lineno(kid), 0,"There  MAY be unmatched barrier calls due to DO loop");  
+                    }//end-if
+
+                }//end-if barriers exist
+                Check_barriers(kid, du_mgr);
+                kid = WN_next(kid);
+            }
+        } else {
+            INT kidno;
+            for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+                WN *kid = WN_kid(wn, kidno);
+                Check_barriers(kid, du_mgr);
+            }
+        }
+    }//end-if !leaf
+}
+
+//SP: Print barrier tree to dot file
+void Print_IR_maps(WN* w)
+{
+    char *varnm;
+    unsigned long nbar, op, lab;
+    static unsigned long nlab=1;
+    int debug = -1;
+
+    if (!OPCODE_is_leaf(WN_opcode(w))) {
+        if (WN_opcode(w) == OPC_BLOCK) {
+            WN *kid = WN_first(w);
+            while (kid) {
+                nbar = Get_attributes(kid);
+                if(nbar>0){
+                    op = Get_Operator(kid);
+                    Set_Label(kid, nlab);
+                    nlab++;
+                    lab = Get_Label(kid);
+                    if(debug ==0){
+                        if(op == 1) {
+                            printf("Barriers:%lu, op:CONCAT, Label:%lu\n",
+                                    nbar,lab);
+                        } else if(op == 2) {
+                            printf("Barriers:%lu, op:ALT, Label:%lu\n",
+                                    nbar,lab);
+                        } else if (op == 3) {
+                            printf("Barriers:%lu, op:QUANT, Label:%lu\n",
+                                    nbar,lab);
+                        } else if (op == 4) {
+                            printf("Barriers:%lu, op:ALT-CON, Label:%lu\n",
+                                    nbar,lab);
+                        } else if (op == 5) {
+                            printf("Barriers:%lu, op:QUANT-CON, Label:%lu\n",
+                                    nbar,lab);
+                        } else {
+                            printf("Something ain't right!!\n");
+                        }
+                    }
+                } else {
+                    int which_bar=-1;
+                    if (WN_has_sym(kid)) {
+                        if(WN_st(kid)) {
+                            varnm = ST_name(WN_st(kid));
+                            lab = Get_Label(kid);
+                            if(strcmp(varnm,"shmem_barrier") == 0) {
+                                which_bar = 1;
+                                if(debug ==1) fprintf(stdout,"B%d\n",lab);
+                            }
+                            if(strcmp(varnm,"shmem_barrier_all") == 0) {
+                                which_bar = 2;
+                                if(debug ==1) fprintf(stdout,"BA%d\n",lab);
+                            }
+                            if(which_bar > 0) {
+                                static int p_cnt=1;
+                                WN *tmp = kid, *pwn;
+
+                                pwn = Get_Parent(tmp);
+
+                                while(1) {
+                                    unsigned long op = Get_Operator(tmp);
+                                    char opr[20], opr1[20];
+                                    unsigned long op1;
+                                    if(pwn != NULL) {
+                                        if(debug ==1) {
+                                            printf("\nParent: ");
+                                            fdump_wn(stdout, pwn);
+                                        }
+                                        op1 = Get_Operator(pwn);
+                                        if(op1 == 1) {
+                                            strcpy(opr1,"C");
+                                            fout1<<"\tC"<<Get_Label(pwn)<<
+                                                "[shape=circle color=blue "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else if(op1 == 2) {
+                                            strcpy(opr1,"A");
+                                            fout1<<"\tA"<<Get_Label(pwn)<<
+                                                "[shape=circle color=red style=clear"
+                                                " height=.25 width=.25];" <<endl;
+                                        } else if(op1 == 3) {
+                                            strcpy(opr1,"Q");
+                                            fout1<<"\tQ"<<Get_Label(pwn)<<
+                                                "[shape=octagon color=black "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else if(op1 == 4) {
+                                            strcpy(opr1,"AC");
+                                            fout1<<"\tAC"<<Get_Label(pwn)<<
+                                                "[shape=doublecircle color=red "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else if(op1 == 5) {
+                                            strcpy(opr1,"QC");
+                                            fout1<<"\tQC"<<Get_Label(pwn)<<
+                                                "[shape=doubleoctagon color=red "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else {
+                                            strcpy(opr1,"Blah");//Never reached!
+                                        }
+                                    }
+                                    if(op == 1) {
+                                        strcpy(opr,"C");
+                                        fout1<<"\tC"<<Get_Label(tmp)<<
+                                            "[shape=circle color=blue style=clear "
+                                            "height=.25 width=.25];"<<endl;
+                                    } else if(op == 2) {
+                                        strcpy(opr,"A");
+                                        fout1<<"\tA"<<Get_Label(tmp)<<
+                                            "[shape=circle color=red style=clear "
+                                            "height=.25 width=.25];"<<endl;
+                                    } else if(op == 3) {
+                                        strcpy(opr,"Q");
+                                        fout1<<"\tQ"<<Get_Label(tmp)<<
+                                            "[shape=octagon color=black style=clear "
+                                            "height=.25 width=.25];"<<endl;
+                                    } else if(op == 4) {
+                                        strcpy(opr,"AC");
+                                        fout1<<"\tAC"<<Get_Label(tmp)<<
+                                            "[shape=doublecircle color=red "
+                                            "style=clear height=.25 width=.25];"<<endl;
+                                    } else if(op == 5) {
+                                        strcpy(opr,"QC");
+                                        fout1<<"\tQC"<<Get_Label(tmp)<<
+                                            "[shape=doubleoctagon color=red "
+                                            "style=clear height=.25 width=.25];"<<endl;
+                                    } else {
+                                        strcpy(opr,"Blah");
+                                    }
+
+                                    if(pwn == NULL) {  //FUN-Entry
+                                        if(p_cnt == 1) {
+                                            fout1<<"\tC0 [shape=circle color=blue "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                            if(which_bar == 1) {
+                                                fout1<<"\tB"<<lab<<"[shape=triangle "
+                                                   "color=pink style=clear height=.25"
+                                                   " width=.25];"<<endl;
+                                                fout1<<"\tC0"<<" -> "<<"B"
+                                                    <<lab<<";"<<endl;
+                                                if(debug ==2) {
+                                                    fprintf(stdout,"\tC0 -> B%lu",lab);
+                                                    fprintf(stdout,";\n");
+                                                }
+                                            }
+                                            else {
+                                                fout1<<"\tBA"<<lab<<"[shape=triangle "
+                                                   "color=pink style=clear height=.25 "
+                                                   "width=.25];"<<endl;
+                                                fout1<<"\tC0"<<" -> "<<"BA"<<lab<<";"
+                                                    <<endl;
+                                                if(debug ==2) {
+                                                    fprintf(stdout,"\tC0 -> BA%lu",lab);
+                                                    fprintf(stdout,";\n");
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    }//end-if(pwn==NULL)
+                                    else {
+                                        if(p_cnt == 1) {
+                                            if (which_bar == 1) {
+                                                fout1<<"\tB"<<lab<<"[shape=triangle "
+                                                   "color=pink style=clear height=.25 "
+                                                   "width=.25];"<<endl;
+                                                fout1<<"\t"<<opr1<<Get_Label(pwn)<<" -> "
+                                                    <<"B"<<lab<<";"<<endl;
+                                                if(debug ==2) {
+                                                    fprintf(stdout,"\t%s%lu -> B%lu",
+                                                            opr1,Get_Label(pwn),lab);
+                                                    fprintf(stdout,";\n");
+                                                }
+                                            } else {
+                                                fout1<<"\tBA"<<lab<<"[shape=triangle "
+                                                    "color=pink style=clear height=.25 "
+                                                    "width=.25];"<<endl;
+                                                fout1<<"\t"<<opr1<<Get_Label(pwn)<<
+                                                    " -> "<<"BA"<<lab<<";"<<endl;
+                                                if (debug ==2) {
+                                                    fprintf(stdout,"\t%s%lu -> BA%lu",
+                                                            opr1,Get_Label(pwn),lab);
+                                                    fprintf(stdout,";\n");
+                                                }
+                                            }
+                                        } else {
+                                            fout1<<"\t"<<opr1<<Get_Label(pwn)<<
+                                                " -> "<<opr<<Get_Label(tmp)<<";"<< endl;
+                                            if (debug ==2) {
+                                                fprintf(stdout,"\t%s%lu -> %s%lu",
+                                                        opr1,Get_Label(pwn),opr,Get_Label(tmp));
+                                                fprintf(stdout,";\n");
+                                            }
+                                        }
+                                        p_cnt++;
+                                    }//end-else
+                                    tmp = pwn;
+                                    pwn = Get_Parent(tmp);
+                                }//end while(1)
+                                p_cnt=1;
+                            }//end-if(which_bar>0)
+                        }
+                    }
+                }//end else
+                Print_IR_maps(kid);
+                kid = WN_next(kid);
+            }
+        } else {
+            debug = 0;
+            INT kidno;
+            for (kidno = 0; kidno < WN_kid_count(w); kidno++) {
+                WN *kid = WN_kid(w, kidno);
+                if (kid) {
+                    nbar = Get_attributes(kid);
+                    if(nbar>0) {
+                        op = Get_Operator(kid);
+                        Set_Label(kid, nlab);
+                        nlab++;
+                        lab = Get_Label(kid);
+                        if(debug ==1) {
+                            if(op == 1) {
+                                printf("Barriers:%lu, op:CONCAT, Label:%lu\n",nbar,lab);
+                            } else if(op == 2) {
+                                printf("Barriers:%lu, op:ALT, Label:%lu\n",nbar,lab);
+                            } else if (op == 3) {
+                                printf("Barriers:%lu, op:QUANT, Label:%lu\n",nbar,lab);
+                            } else if (op == 4) {
+                                printf("Barriers:%lu, op:ALT-CON, Label:%lu\n",nbar,lab);
+                            } else if (op == 5) {
+                                printf("Barriers:%lu, op:QUANT-CON, Label:%lu\n",nbar,lab);
+                            } else {
+                                printf("Something ain't right!!\n");
+                            }
+                        }
+                    } else {
+                        int which_bar=-1;
+                        if (WN_has_sym(kid)) {
+                            if(WN_st(kid)) {
+                                varnm = ST_name(WN_st(kid));
+                                lab = Get_Label(kid);
+                                if (strcmp(varnm,"shmem_barrier") == 0) {
+                                    which_bar = 1;
+                                    if(debug ==1) fprintf(stdout,"B%d\n",lab);
+                                }
+                                if (strcmp(varnm,"shmem_barrier_all") == 0) {
+                                    which_bar = 2;
+                                    if(debug ==1) fprintf(stdout,"BA%d\n",lab);
+                                }
+                                if (which_bar > 0) {
+                                    static int p_cnt=1;
+                                    WN *tmp = kid, *pwn;
+
+                                    pwn = Get_Parent(tmp);
+
+                                    while(1) {
+                                        unsigned long op = Get_Operator(tmp);
+                                        char opr[20], opr1[20];
+                                        unsigned long op1;
+                                        if (pwn != NULL) {
+
+                                            if (debug ==1) {
+                                                printf("\nParent: ");
+                                                fdump_wn(stdout, pwn);
+                                            }
+                                            op1 = Get_Operator(pwn);
+                                            if(op1 == 1) {
+                                                strcpy(opr1,"C");
+                                                fout1<<"\tC"<<Get_Label(pwn)<<
+                                                    "[shape=circle color=blue "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                            } else if (op1 == 2) {
+                                                strcpy(opr1,"A");
+                                                fout1<<"\tA"<<Get_Label(pwn)<<
+                                                    "[shape=circle color=red "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                            } else if (op1 == 3) {
+                                                strcpy(opr1,"Q");
+                                                fout1<<"\tQ"<<Get_Label(pwn)<<
+                                                    "[shape=octagon color=black "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                            } else if (op1 == 4) {
+                                                strcpy(opr1,"AC");
+                                                fout1<<"\tAC"<<Get_Label(pwn)<<
+                                                    "[shape=doublecircle color=red "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                            } else if (op1 == 5) {
+                                                strcpy(opr1,"QC");
+                                                fout1<<"\tQC"<<Get_Label(pwn)<<
+                                                    "[shape=doubleoctagon color=red "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                            } else {
+                                                strcpy(opr1,"Blah");//Never reached!
+                                            }
+                                        }
+                                        if(op == 1) {
+                                            strcpy(opr,"C");
+                                            fout1<<"\tC"<<Get_Label(tmp)<<
+                                                "[shape=circle color=blue style=clear "
+                                                "height=.25 width=.25];"<<endl;
+                                        } else if(op == 2) {
+                                            strcpy(opr,"A");
+                                            fout1<<"\tA"<<Get_Label(tmp)<<
+                                                "[shape=circle color=red style=clear "
+                                                "height=.25 width=.25];"<<endl;
+                                        } else if(op == 3) {
+                                            strcpy(opr,"Q");
+                                            fout1<<"\tQ"<<Get_Label(tmp)<<"[shape=octagon"
+                                               " color=black style=clear height=.25 "
+                                               "width=.25];"<<endl;
+                                        } else if(op == 4) {
+                                            strcpy(opr,"AC");
+                                            fout1<<"\tAC"<<Get_Label(tmp)<<
+                                                "[shape=doublecircle color=red "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else if(op == 5) {
+                                            strcpy(opr,"QC");
+                                            fout1<<"\tQC"<<Get_Label(tmp)<<
+                                                "[shape=doubleoctagon color=red "
+                                                "style=clear height=.25 width=.25];"
+                                                <<endl;
+                                        } else {
+                                            strcpy(opr,"Blah");
+                                        }
+                                        if(pwn == NULL) {  //FUN-Entry
+                                            if(p_cnt == 1) {
+                                                fout1<<"\tC0 [shape=circle color=blue "
+                                                    "style=clear height=.25 width=.25];"
+                                                    <<endl;
+                                                if(which_bar == 1){
+                                                    fout1<<"\tB"<<lab<<"[shape=triangle "
+                                                        "color=pink style=clear height=.25"
+                                                        " width=.25];"<<endl;
+                                                    fout1<<"\tC0"<<" -> "<<"B"<<lab<<";"<<endl;
+                                                    if(debug ==2){
+                                                        fprintf(stdout,"\tC0 -> B%lu",lab);
+                                                        fprintf(stdout,";\n");
+                                                    }
+                                                } else {
+                                                    fout1<<"\tBA"<<lab<<"[shape=triangle "
+                                                        "color=pink style=clear height=.25 "
+                                                        "width=.25];"<<endl;
+                                                    fout1<<"\tC0"<<" -> "<<"BA"<<lab<<";"<<endl;
+                                                    if(debug ==2) {
+                                                        fprintf(stdout,"\tC0 -> BA%lu",lab);
+                                                        fprintf(stdout,";\n");
+                                                    }
+                                                }
+                                            }
+                                            break;
+                                        }//end-if(pwn==NULL)
+                                        else {
+                                            if(p_cnt == 1) {
+                                                if(which_bar == 1) {
+                                                    fout1<<"\tB"<<lab<<"[shape=triangle "
+                                                        "color=pink style=clear height=.25 "
+                                                        "width=.25];"<<endl;
+                                                    fout1<<"\t"<<opr1<<Get_Label(pwn)
+                                                        <<" -> "<<"B"<<lab<<";"<<endl;
+                                                    if(debug ==2) {
+                                                        fprintf(stdout,"\t%s%lu -> B%lu",
+                                                                opr1,
+                                                                Get_Label(pwn),
+                                                                lab);
+                                                        fprintf(stdout,";\n");
+                                                    }
+                                                } else {
+                                                    fout1<<"\tBA"<<lab<<"[shape=triangle "
+                                                        "color=pink style=clear height=.25 "
+                                                        "width=.25];"<<endl;
+                                                    fout1<<"\t"<<opr1<<Get_Label(pwn)
+                                                        <<" -> "<<"BA"<<lab<<";"<<endl;
+                                                    if(debug ==2) {
+                                                        fprintf(stdout,"\t%s%lu -> BA%lu",
+                                                                opr1,
+                                                                Get_Label(pwn),
+                                                                lab);
+                                                        fprintf(stdout,";\n");
+                                                    }
+                                                }
+                                            } else {
+                                                fout1<<"\t"<<opr1<<Get_Label(pwn)<<" -> "
+                                                    <<opr<<Get_Label(tmp)<<";"<< endl;
+                                                if(debug ==2) {
+                                                    fprintf(stdout,"\t%s%lu -> %s%lu",
+                                                            opr1,
+                                                            Get_Label(pwn),
+                                                            opr,
+                                                            Get_Label(tmp));
+                                                    fprintf(stdout,";\n");
+                                                }
+                                            }
+                                            p_cnt++;
+                                        }//end-else
+                                        tmp = pwn;
+                                        pwn = Get_Parent(tmp);
+                                    }//end while(1)
+                                    p_cnt=1;
+                                }//end-if(which_bar>0)
+                            }
+                        }
+                    }//end else
+                    Print_IR_maps(kid);
+                }
+            }//end-for
+        }//end-else
+    }
+}
+
+//SP-end
+
 
 int IPL_IsOpenSHMEM(char *input, int begin, int end) {
   int debug=0;
@@ -1020,6 +2328,261 @@ Perform_Procedure_Summary_Phase (WN* w, struct DU_MANAGER *du_mgr,
         strcat(ipl_current_source,".html");
 
         iplmessagesout  = fopen (message_filename,"w");
+
+        // barrier matching code here
+        {
+
+            //Moved here from opt_main.cxx
+            extern INT64 *cfgnode_id_ptr;
+            extern INT64 *cfgedge_id_ptr;
+
+            extern OSAedge *cfged_ptr;
+            extern OSAnode *cfgentrynode_ptr, *cfgnode_ptr;
+            extern OSAgraph *cfgraph_ptr;
+
+            //SP: Don't need these for changed logic.
+            extern INT64 osa_bb_start[100];
+            extern INT64 osa_bb_end[100];
+            int i,j;
+
+            //SP: Controls what to print to stdout, for debugging
+            int printtree=0;
+            if (w) {
+                WN* stmt;
+                INT64 tmp_defid = -1;
+                INT64 def_id, line, multiV=-1, is_cond=-1;
+                char *opcode, *varnm, *fname, *vid, *line1;
+                char opcode_str[20];
+
+                if (printtree==1) {
+                    fprintf(stdout, "WN Tree Dump\n");
+                    fdump_tree(stdout, w);
+                }
+
+                WN *body = WN_func_body(w);
+                if (body) {
+                    *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+
+                    if (WN_opcode(w)) {
+                        opcode = OPCODE_name(WN_opcode(w));
+                        strcpy(opcode_str,OPCODE_name(WN_opcode(w)));
+                    }
+
+                    varnm = "ROOT";
+                    USRCPOS pos;
+                    USRCPOS_srcpos(pos) = WN_Get_Linenum(w);
+                    line =  USRCPOS_linenum(pos);
+                    fname = Src_File_Name;
+
+                    cfged_ptr->wn_def = w;
+                    cfgentrynode_ptr->set_values(*cfgnode_id_ptr,
+                                                 tmp_defid,
+                                                 opcode_str,
+                                                 varnm,line,
+                                                 w,
+                                                 NULL,
+                                                 fname,
+                                                 multiV,
+                                                 is_cond);
+
+                    if (printtree == 3) {
+                        printf("Entry: id: %d,opcode: %s, varnm: %s, "
+                               "line: %d, wn: %p \n", *cfgnode_id_ptr,
+                               opcode, varnm, line, w);
+                    }
+
+                    //SP: Here def_id refers to the Dominator
+                    cfged_ptr->def_id = *cfgnode_id_ptr;
+                    //tmp_defid = *cfgnode_id_ptr;
+
+                    if (printtree==1) {
+                        fprintf(stdout, "Body exists \n");
+                        fdump_wn(stdout,body);
+                    }
+                    if (printtree==2) {
+                        printf("Statements depending on ENTRY:\n");
+                    }
+
+                    for (stmt = WN_first(body);  stmt != NULL;
+                         stmt = WN_next(stmt)) {
+                        // fprintf(stdout, "INSIDE if(w) and for()\n\n");
+                        *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+                        *cfgedge_id_ptr = *cfgedge_id_ptr + 1;
+                        //SP: Here use_id refers to the the dominated
+                        cfged_ptr->use_id = *cfgnode_id_ptr;
+                        cfged_ptr->wn_use = stmt;
+                        cfged_ptr->wn_parent = NULL;
+                        cfged_ptr->id = *cfgedge_id_ptr;
+                        cfgentrynode_ptr->edges.push_back(*cfged_ptr);
+                        if (printtree==2) {
+                            fdump_wn(stdout, stmt);
+                        }
+
+                        opcode  = OPCODE_name(WN_opcode(stmt));
+                        char opcode_str[20];
+                        strcpy(opcode_str,OPCODE_name(WN_opcode(stmt)));
+
+                        /*
+                        if (WN_has_sym(stmt)) { //this may not work
+                            if(ST_name(WN_st(stmt))) {
+                                varnm = ST_name(WN_st(stmt));
+                                char *tmp = varnm;
+                                if(strstr(tmp,"."))
+                                    varnm = strstr(varnm,".") + 1;
+                            }
+                        } else */
+                        //SP: Statements don't have symbols?
+                        varnm = "NULL";
+                        USRCPOS pos;
+                        USRCPOS_srcpos(pos) = WN_Get_Linenum(stmt);
+                        line =  USRCPOS_linenum(pos);
+                        fname = Src_File_Name;
+
+                        unsigned long int  stmt_off = stmt - w;
+                        cfgnode_ptr->set_values(*cfgnode_id_ptr,
+                                                tmp_defid,
+                                                opcode_str,
+                                                varnm,
+                                                line,
+                                                stmt,
+                                                w,
+                                                fname,
+                                                multiV,
+                                                is_cond);
+                        cfgraph_ptr->nodes.push_back(*cfgnode_ptr);
+
+                        if (printtree == 2) {
+                            printf("CFnode: id: %d,opcode: %s, line: %d,"
+                                   "wn_self:%p \n",*cfgnode_id_ptr,opcode,
+                                   line,stmt);
+                        }//end-if printcfg
+                    }//end-for
+                    cfgraph_ptr->nodes.push_back(*cfgentrynode_ptr);
+                }//end-if body
+
+                //  printf("Value of *cfgnode_id_ptr = %d\n\n\n", *cfgnode_id_ptr);
+                if (printtree == 3) {
+                    for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                        if(cfgraph_ptr->nodes[i].is_mVal == 1) {
+                            printf("Node: id: %d, def_id: %d, var_nm: %s,"
+                                   "opcode: %s, line: %d, wn_offest:%lu "
+                                   "multivalued:%d, is_conditional: %d\n",
+                                   cfgraph_ptr->nodes[i].id,
+                                   cfgraph_ptr->nodes[i].def_id,
+                                   cfgraph_ptr->nodes[i].var_nm,
+                                   cfgraph_ptr->nodes[i].opcode,
+                                   cfgraph_ptr->nodes[i].line,
+                                   (cfgraph_ptr->nodes[i].wn_parent-
+                                    cfgraph_ptr->nodes[i].wn_self),
+                                   cfgraph_ptr->nodes[i].is_mVal,
+                                   cfgraph_ptr->nodes[i].is_conditional);
+                        }
+                    }//end-for
+                }//end-if
+            }//end-if(w)
+
+            //printf("\n\n");
+
+            // Post-procesing, here we:
+
+            // 1. Propagate multivalued seed ----> Done in opt_du.cxx,
+            //    hence commented out
+
+            /*
+               printf("\n\nAfter propagation\n");
+               for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                   if(cfgraph_ptr->nodes[i].is_mVal == 1) {
+                       printf(" Node: id: %d, def_id: %d, var_nm: %s,"
+                              " opcode: %s, line: %d,mVAL: %d\n",
+                              cfgraph_ptr->nodes[i].id,
+                              cfgraph_ptr->nodes[i].def_id,
+                              cfgraph_ptr->nodes[i].var_nm,
+                              cfgraph_ptr->nodes[i].opcode,
+                              cfgraph_ptr->nodes[i].line,
+                              cfgraph_ptr->nodes[i].is_mVal);
+                   }//end-if
+               }//end-for
+            */
+
+            // 2. Merge the nodes with the same wn_self
+
+            // for every node
+            for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+                // compare with all nodes
+                for(int j=i+1; j< cfgraph_ptr->nodes.size();j++) {
+                    // found repeat
+                    if(cfgraph_ptr->nodes[i].wn_self ==
+                       cfgraph_ptr->nodes[j].wn_self) {
+                        INT64 tmp_repeat = cfgraph_ptr->nodes[j].id;
+                        cfgraph_ptr->nodes[j].id = cfgraph_ptr->nodes[i].id;
+                        // if either of the nodes rep the same WN are marked
+                        // as MV, mark all copies as MV
+                        if(cfgraph_ptr->nodes[i].is_mVal==1 ||
+                           cfgraph_ptr->nodes[j].is_mVal == 0) {
+                            cfgraph_ptr->nodes[i].is_mVal = 1;
+                            cfgraph_ptr->nodes[j].is_mVal = 1;
+                        }
+                    }//end-if
+
+                }//end-for
+            }//end-for
+
+            //SP: Now that all the information is combined we traverse the IR
+            //to get barrier information
+            MEM_POOL local_mempool;
+            MEM_POOL_Initialize( &local_mempool, "WN_OSA_BMatch_Pool", FALSE );
+            MEM_POOL_Push( &local_mempool);
+
+            OSA_Parent_Map = WN_MAP_Create(&local_mempool);
+            OSA_B_Map = WN_MAP_Create(&local_mempool);
+            OSA_BA_Map = WN_MAP_Create(&local_mempool);
+            OSA_Barrier_Map = WN_MAP_Create(&local_mempool);
+            OSA_Operator_Map = WN_MAP_Create(&local_mempool);
+            OSA_Label_Map = WN_MAP_Create(&local_mempool);
+            OSA_PEstart_Map = WN_MAP_Create(&local_mempool);
+            OSA_Lstride_Map = WN_MAP_Create(&local_mempool);
+            OSA_Npes_Map = WN_MAP_Create(&local_mempool);
+            OSA_MultiV_Map = WN_MAP_Create(&local_mempool);
+            OSA_Lineno_Map = WN_MAP_Create(&local_mempool);
+            OSA_Discovered_Map = WN_MAP_Create(&local_mempool);
+
+            Set_Parent(w,NULL);
+            //printf("Before Annotate\n");
+            Annotate_btree(w);
+            //printf("After Annotate, before Mark\n");
+            Mark_barriers(w,du_mgr);
+            if (Check_barriers(w, du_mgr) == 0)
+                Match_barriers(w,du_mgr);
+            //printf("After Match barriers\n");
+            //else
+            //  printf("There IS barrier mismatch, please make corrections.\n");
+
+            unsigned long nBar,nB,nBA;
+            nBar=Get_attributes(w);
+            nB=Get_num_B(w);
+            nBA=Get_num_BA(w);
+
+            //printf("Total barriers:%lu, B:%lu, BA:%lu\n",nBar,nB,nBA);
+
+            //SP:TO:Print only marked IR
+            //printf("After Mark, before IR maps\n");
+            string pu_file_name="BarrierTree.dot";
+            fout1.open(pu_file_name.c_str(),ios::out);
+            fout1 <<"strict digraph system{\n";
+            fout1 <<"size=\"10,8\"\n";
+            fout1 << "\t node [shape = circle, color=blue, "
+                     "style=clear, size=\"30,30\"];\n";
+
+            Print_IR_maps(w);
+
+            fout1 << "}\n";
+            fout1.close();
+
+            MEM_POOL_Pop( &local_mempool);
+            MEM_POOL_Delete( &local_mempool);
+
+            //SP-end
+        }
 
         // Dump_alias_mgr(alias_mgr, w, stdout);
         OpenSHMEM_Local_IO(w,du_mgr, alias_mgr);

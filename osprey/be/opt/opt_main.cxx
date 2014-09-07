@@ -353,6 +353,12 @@
 #include "opt_emit.h"
 #include "opt_du.h"
 
+#ifdef OPENSHMEM_ANALYZER
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+#endif
+#endif
+
 #include "opt_dbg.h"
 #include "opt_goto.h"
 #include "opt_rvi.h"
@@ -407,6 +413,18 @@ extern void (*Perform_Procedure_Summary_Phase_p) (WN*, DU_MANAGER*,
 #else
 #pragma weak Perform_Procedure_Summary_Phase
 #endif // __linux__
+
+//SP:All data structures are global so that it can be accessed in all opt_main
+#ifdef OPENSHMEM_ANALYZER
+OSAedge cfged, dued, bbed;
+OSAnode cfgentrynode, cfgnode, osadefnode, osausenode, bbnode;
+OSAgraph cfgraph, osadu, bbtree;
+INT64 cfgnode_id, dunode_id, bbnode_id;
+INT64 cfgedge_id, duedge_id, bbedge_id;
+
+INT64 osa_bb_start[100];
+INT64 osa_bb_end[100];
+#endif
 
 extern BOOL Enable_WN_Simp;
 extern void Simplify_bool_expr(COMP_UNIT *);
@@ -1607,6 +1625,13 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
       comp_unit->Cfg()->OpenSHMEM_Dump_CFG(stdout);
       //  comp_unit->Cfg()->Print(stdout);
   }
+
+  //SP: Calling CFG
+
+  //does not work here
+  //comp_unit->Cfg()->Print_OSA_GetDomInfo(NULL);
+
+  //comp_unit->Cfg()->Print_OSA_GetBBlineno();
 #endif
 
   SET_OPT_PHASE("Create SSA Representation");
@@ -2154,6 +2179,16 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
         fdump_tree( TFile, opt_wn );
       }
     }
+
+#ifdef OPENSHMEM_ANALYZER
+  //SP: Calling CFG and DU here//THIS LOCATION WORKS!!!
+  if (Control_Flow_Type_Num!=-1) {
+    //comp_unit->Cfg()->PrintCDVis();
+    //comp_unit->Cfg()->OpenSHMEM_Dump_CFG(stdout);
+    comp_unit->Cfg()->Print_OSA_GetDomInfo(opt_wn);
+    du_mgr->Print_Detailed_Du_Info(opt_wn);
+  }
+#endif
 
     // *****************************************************************
     //    Invoke IPA summary phase
