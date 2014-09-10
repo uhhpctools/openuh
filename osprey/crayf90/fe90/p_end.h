@@ -68,6 +68,7 @@ static void end_type_blk (boolean);
 static void end_where_blk (boolean);
 #ifdef _UH_COARRAYS 
 static void end_critical_blk (boolean);
+static void end_team_blk (boolean);
 #endif
 
 /******************************************************************************/
@@ -140,6 +141,7 @@ void		(*end_blocks[]) () = {
 #endif /* KEY Bug 10572 */
 #ifdef _UH_COARRAYS 
           ,
-        /* End_Critical_Blk */  end_critical_blk
+        /* End_Critical_Blk */  end_critical_blk,
+        /* End_Team_Blk */  end_team_blk,
 #endif 
 		};

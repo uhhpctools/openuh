@@ -91,6 +91,8 @@
 #include "util.h"
 #include "collectives.h"
 #include "profile.h"
+#include "utlist.h"
+#include "team.h"
 
 const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
 
@@ -101,16 +103,28 @@ extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern unsigned long _log2_images;
 extern unsigned long _rem_images;
-extern mem_usage_info_t *mem_info;
+extern team_type     initial_team;
+extern mem_usage_info_t * init_mem_info;
+extern mem_usage_info_t * child_mem_info;
 extern co_reduce_t co_reduce_algorithm;
 extern size_t alloc_byte_alignment;
 
 extern int rma_prof_rid;
 
-/* common_slot is a node in the shared memory link-list that keeps track
- * of available memory that can used for both allocatable coarrays and
- * asymmetric data.  */
-extern shared_memory_slot_t *common_slot;
+/* init_common_slot and child_common_slot is a node in the shared memory
+ * link-list that keeps track of available memory that can used for both
+ * allocatable coarrays and asymmetric data.
+ *
+ * TEAM_SUPPORT: separate the common_slot into two.
+ *
+ * One is init_common_slot. Initialized in comm_init(). Keep tracking of
+ * shared memory of initial team.
+ *
+ * Another is child_comm_slot. Keep tracking the
+ * comm_slot of teams other than team_world comm_slot. 
+ */
+extern shared_memory_slot_t *init_common_slot;
+extern shared_memory_slot_t * child_common_slot;
 
 extern int out_of_segment_rma_enabled;
 
@@ -120,6 +134,12 @@ extern int enable_collectives_use_canary;
 extern void *collectives_buffer;
 extern size_t collectives_bufsize;
 extern int collectives_max_workbufs;
+
+/*
+ * team_info_t list, used for exhanging team_info structure within form_team.
+ * Allocated in comm_init.
+ */
+extern team_info_t * exchange_teaminfo_buf;
 
 /*
  * Static variable declarations
@@ -489,10 +509,11 @@ inline void *comm_end_allocatable_heap(size_t proc)
 
 inline void *comm_end_symmetric_mem(size_t proc)
 {
-    /* we can't directly use common_slot->addr as the argument, because the
-     * translation algorithm will treat it as part of the asymmetric memory
-     * space */
-    return get_remote_address(common_slot->addr - 1, proc) + 1;
+    /* we can't directly use child_common_slot->addr as the argument, because
+     * the translation algorithm will treat it as part of the asymmetric
+     * memory space
+     */
+    return get_remote_address(child_common_slot->addr - 1, proc) + 1;
 }
 
 inline void *comm_start_asymmetric_heap(size_t proc)
@@ -500,7 +521,7 @@ inline void *comm_start_asymmetric_heap(size_t proc)
     if (proc != my_proc) {
         return comm_end_symmetric_mem(proc);
     } else {
-        return (char *) common_slot->addr + common_slot->size;
+        return (char *) child_common_slot->addr + child_common_slot->size;
     }
 }
 
@@ -523,7 +544,7 @@ static inline int address_in_symmetric_mem(void *addr)
         return 1;
 
     start_symm_mem = coarray_start_all_images[my_proc].addr;
-    end_symm_mem = common_slot->addr;
+    end_symm_mem = child_common_slot->addr;
 
     return (addr >= start_symm_mem && addr < end_symm_mem);
 }
@@ -2242,8 +2263,9 @@ static void local_strided_copy(void *src, const size_t src_strides[],
  *    non-blocking puts.
  * 3) Create pinned memory and populate coarray_start_all_images(except
  *    for EVERYTHING config.
- * 4) Populates common_slot with the pinned memory data which is used by
- *    alloc.c to allocate/deallocate coarrays.
+ * 4) Populates init_common_slot and child_common_slot with the pinned memory
+ *    data which is used by alloc.c to allocate/deallocate coarrays.
+ *
  */
 
 void comm_init()
@@ -2256,16 +2278,19 @@ void comm_init()
     unsigned long caf_shared_memory_pages;
     unsigned long image_heap_size;
     size_t collectives_offset;
+    unsigned long  init_heap_size;
 
     shared_memory_slot_t *common_shared_memory_slot;
+    mem_usage_info_t * mem_info;
+    mem_info = init_mem_info;
 
-    if (common_slot != NULL) {
+    if (init_common_slot != NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "common_slot has already been initialized");
+                     "init_common_slot has already been initialized");
     }
 
-    common_slot = malloc(sizeof(shared_memory_slot_t));
-    common_shared_memory_slot = common_slot;
+    init_common_slot = malloc(sizeof(shared_memory_slot_t));
+    common_shared_memory_slot = init_common_slot;
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
@@ -2292,6 +2317,8 @@ void comm_init()
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size_with_unit(ENV_IMAGE_HEAP_SIZE,
                                              DEFAULT_IMAGE_HEAP_SIZE);
+    init_heap_size = get_env_size_with_unit(ENV_INIT_TEAM_HEAP_SIZE,
+                                            DEFAULT_INIT_TEAM_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
 
     gasnet_max_segsize = 2 * caf_shared_memory_size;
@@ -2629,6 +2656,8 @@ void comm_init()
     mem_info->reserved_heap_usage =
         caf_shared_memory_size - static_symm_data_total_size;
 
+    init_mem_info = mem_info;
+
     /* create a symmetric lock variable for guarding critical sections.
      * What's really needed is a distinct lock variable created for each
      * critical section in the program, but for now we'll keep this simple.
@@ -2657,14 +2686,64 @@ void comm_init()
     /* enable 1-sided collectives MPI isn't already initialized */
     mpi_collectives_available = mpi_initialized_by_gasnet;
 
+    /*allocate exhange buffer for form_team here*/
+    exchange_teaminfo_buf = (team_info_t *)
+        coarray_allocatable_allocate_(sizeof(team_info_t)* num_procs, NULL);
+
+    /* allocate child_mem_info in shared heap*/
+    child_mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_(sizeof(mem_usage_info_t), NULL);
+    child_mem_info->current_heap_usage = 0;
+    child_mem_info->max_heap_usage = 0;
+    child_mem_info->reserved_heap_usage =
+        init_mem_info->reserved_heap_usage - init_heap_size;
+
     /* start progress thread */
     comm_service_init();
 
+     /*Add team support here*/
+
+    initial_team = (team_type) malloc(sizeof(team_type_t));
+    initial_team->codimension_mapping = (long *)malloc(num_procs*sizeof(long));
+    for (i = 0; i < num_procs; i++) {
+        initial_team->codimension_mapping[i] = i;
+    }
+    initial_team->current_this_image    = my_proc + 1;
+    initial_team->current_num_images    = num_procs;
+    initial_team->current_log2_images   = log2_procs;
+    initial_team->current_rem_images    = rem_procs;
+    initial_team->depth                 = 0;
+    initial_team->parent                = NULL;
+    initial_team->defined               = 1;
+    initial_team->activated             = 1;
+    initial_team->symm_mem_slot.start_addr = common_shared_memory_slot->addr;
+
+    initial_team->symm_mem_slot.end_addr =
+        common_shared_memory_slot->addr + init_heap_size;
+
+    /*Init the child_common_slot*/
+    if (child_common_slot == NULL) {
+        child_common_slot       = (shared_memory_slot_t *)
+                                   malloc(sizeof(shared_memory_slot_t));
+        child_common_slot->addr = common_shared_memory_slot->addr+init_heap_size;
+        child_common_slot->size = common_shared_memory_slot->size - init_heap_size;
+        child_common_slot->feb  = 0;
+        child_common_slot->next = NULL;
+        child_common_slot->prev = NULL;
+    }
+    init_common_slot->size=init_heap_size;
+    /* update the init_mem_info*/
+    init_mem_info->reserved_heap_usage =  init_heap_size;
+
+    current_team = initial_team;
+
     LIBCAF_TRACE(LIBCAF_LOG_INIT,
                  "Finished. Waiting for global barrier. Gasnet_Everything is %d. "
-                 "common_slot->addr=%p, common_slot->size=%lu",
+                 "init_common_slot->addr=%p, init_common_slot->size=%lu,"
+                 "child_common_slot->addr=%p,child_common_slot=%lu",
                  gasnet_everything, common_shared_memory_slot->addr,
-                 common_shared_memory_slot->size);
+                 common_shared_memory_slot->size,
+                 child_common_slot->addr, child_common_slot->size);
 
     comm_barrier_all();
 
@@ -3745,20 +3824,98 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 
     LOAD_STORE_FENCE();
 
-    /* TODO: need to check for stopped image during the execution of the
-     * barrier, instead of just at the beginning */
-    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
-        if (status != NULL) {
-            *((INT2 *) status) = STAT_STOPPED_IMAGE;
+    if (current_team == NULL || current_team == initial_team ||
+        current_team->codimension_mapping == NULL) {
+        if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
+            int i;
+            for (i = 0; i < current_team->current_num_images; i++) {
+                if (stopped_image_exists[current_team->codimension_mapping[i]]) {
+                }
+            }
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
+            if (status != NULL) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+            } else {
+                Error("Image %d attempted to synchronize with stopped image",
+                      _this_image);
+                /* doesn't reach */
+            }
         } else {
-            Error("Image %d attempted to synchronize with stopped image",
-                  _this_image);
-            /* doesn't reach */
+            gasnet_barrier_notify(barcount, barflag);
+            gasnet_barrier_wait(barcount, barflag);
+            barcount += 1;
         }
     } else {
-        gasnet_barrier_notify(barcount, barflag);
-        gasnet_barrier_wait(barcount, barflag);
+        /*Phase 1, init*/
+        long nums = current_team->current_num_images;
+        long rank = current_team->current_this_image - 1;
+        int i;
+
+        /*Phase 2*/
+        long round = 0;
+        int sendpeer_idx, recvpeer_idx;
+        long round_bound = ceil(log2((double)nums));
+
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "round_bound = %ld, nums=%ld", round_bound, nums);
+        for(round = 0;round < round_bound; round++){
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "starting round %d\n", round);
+            int tmp = pow(2, round);
+            char sending_sense, receiving_sense;
+            sendpeer_idx = (rank + tmp) % nums;
+            recvpeer_idx = (rank - tmp + nums) % nums;
+            unsigned long send_dest =
+                (current_team->codimension_mapping)[sendpeer_idx];
+            unsigned long recv_peer =
+                (current_team->codimension_mapping)[recvpeer_idx];
+            sending_sense = sync_senses[send_dest] % 2 + 1;
+            receiving_sense = sync_senses[recv_peer] % 2 + 1;
+            comm_write((send_dest), &sync_flags[my_proc].s.val,&sending_sense,
+                        sizeof(char), 1, NULL);
+
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                         "waiting for value %d from peer %d in round %d\n",
+                         receiving_sense, recv_peer, round);
+
+            GASNET_BLOCKUNTIL(sync_flags[recv_peer].s.val ||
+                              *error_stopped_image_exists ||
+                              stopped_image_exists[recv_peer]);
+
+            check_for_error_stop();
+
+            if (stopped_image_exists[recv_peer] && !sync_flags[recv_peer].s.val) {
+                /* q has stopped */
+                if (status != NULL) {
+                    *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                    LOAD_STORE_FENCE();
+                    return;
+                } else {
+                    /* error termination */
+                    Error("Image %d attempted to synchronize with stopped "
+                          "image %d.", _this_image, recv_peer+1);
+                    /* doesn't reach */
+                }
+            }
+
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                         "value %d from peer %d received in round %d\n",
+                         receiving_sense, recv_peer, round);
+
+            char x;
+            x = (char) SYNC_SWAP((char *)&sync_flags[recv_peer].s.val, 0);
+            if (x != receiving_sense) {
+                /* already received the next notification */
+                sync_flags[recv_peer].s.val = x;
+            }
+
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
+        }
+
+        for (i = 0; i < nums; i++) {
+          long j = (current_team->codimension_mapping)[i];
+          /* toggle sense corresponding to proc j */
+          sync_senses[j] = (sync_senses[j] % 2) + 1;
+        }
+
     }
 
     comm_new_exec_segment();

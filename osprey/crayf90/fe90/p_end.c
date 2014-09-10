@@ -813,6 +813,24 @@ void parse_end_stmt (void)
 
 	    break;
 
+     case Tok_Kwd_Team:
+
+            stmt_type				= End_Team_Stmt;
+            SH_STMT_TYPE(curr_stmt_sh_idx)	= End_Team_Stmt;
+
+            if (!cmd_line_flags.co_array_fortran) {
+                PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+                        "END TEAM");
+                NEXT_LA_CH;
+                goto EXIT;
+            }
+
+            if (STMT_CANT_BE_IN_BLK(End_Team_Stmt, CURR_BLK) || !match_name) {
+               blk_idx = blk_match_err(Team_Blk, found_name, TRUE);
+            }
+
+	    break;
+
 #endif
 
 
@@ -846,6 +864,11 @@ void parse_end_stmt (void)
 
       }  /* switch */
 
+#ifdef _UH_COARRAYS
+      /* END TEAM can be followed by a '(', so don't do the EOS check for it
+       * */
+      if (keyword != Tok_Kwd_Team)
+#endif
       if (LA_CH_VALUE != EOS) {
          parse_err_flush(Find_EOS, EOS_STR);
       }
@@ -4127,6 +4150,16 @@ static char *blk_desc_str(int	 blk_idx)
          blk_stmt_str = "TYPE";
          break;
 
+#ifdef _UH_COARRAYS
+      case Critical_Blk:
+         blk_stmt_str = "CRITICAL";
+         break;
+
+      case Team_Blk:
+         blk_stmt_str = "TEAM";
+         break;
+#endif
+
    }  /* End switch */
 
    TRACE (Func_Exit, "blk_desc_str", NULL);
@@ -6057,12 +6090,242 @@ static void end_critical_blk(boolean	err_call)
       if (SH_PARENT_BLK_IDX(curr_stmt_sh_idx) == NULL_IDX) {
          SH_PARENT_BLK_IDX(curr_stmt_sh_idx) = CURR_BLK_FIRST_SH_IDX;
       }
-     
-      if (! error) { 
-        POP_BLK_STK;
-      }
+
+      POP_BLK_STK;
    }
    TRACE (Func_Exit, "end_critical_blk", NULL);
+
+   return;
+
+}  /* end_critical_blk */
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	Complete the processing of the END TEAM statement for a CRITICAL construct.  *|
+|*									      *|
+|* Input parameters:							      *|
+|*	err_call => Boolean - TRUE if this is called from an error situation. *|
+|*	            This means the compiler is trying to clean up the block   *|
+|*	            stack and do error recovery.                              *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NONE								      *|
+|*									      *|
+\******************************************************************************/
+
+static void end_team_blk(boolean	err_call)
+
+{
+   boolean parsed_ok = TRUE;
+    int		blk_idx;
+    boolean	error;
+    int		name_idx;
+    int			line;
+    opnd_type		opnd;
+
+    int		curr_sh = 0;
+    int		ir_idx, ir_idx2;
+    int			save_curr_stmt_sh_idx;
+    opnd_type	syncstat_opnd;
+    opnd_type	stat_opnd;
+    opnd_type	errmsg_opnd;
+    boolean      has_stat = FALSE;
+    boolean      has_errmsg = FALSE;
+    int  list1_idx, list2_idx;
+
+
+   TRACE (Func_Entry, "end_team_blk", NULL);
+
+   if (err_call) {  /* This is an error situation */
+      gen_sh(Before, End_Team_Stmt, stmt_start_line, stmt_start_col,
+             TRUE, FALSE, FALSE);
+      curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+   } else {
+
+
+      SH_P2_SKIP_ME(curr_stmt_sh_idx) = FALSE;
+      curr_sh = curr_stmt_sh_idx;
+
+      NTR_IR_TBL(ir_idx);
+      //TODO uncomment: IR_OPR(ir_idx)      = Endcritical_Opr;
+      IR_OPR(ir_idx)      = EndTeam_Opr;
+      IR_TYPE_IDX(ir_idx) = TYPELESS_DEFAULT_TYPE;
+      IR_LINE_NUM(ir_idx) = stmt_start_line;
+      IR_COL_NUM(ir_idx)  = stmt_start_col;
+
+      SH_IR_IDX(curr_sh) = ir_idx;
+
+      if (cmd_line_flags.debug_lvl <= Debug_Lvl_1) {  /* -ez -ed -G0 -G1 */
+         gen_debug_lbl_stmt(curr_stmt_sh_idx, Ldbg_Stmt_Lbl, NULL_IDX);
+      }
+   }
+
+
+
+   if (LA_CH_VALUE == LPAREN) {
+	   boolean matched_tok;
+
+       NEXT_LA_CH;
+
+       matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+       while (matched_tok) {
+           if (LA_CH_VALUE == EQUAL) {
+               if (strcmp(TOKEN_STR(token), "STAT") == 0) {
+
+                   if (has_stat) {
+                       PRINTMSG(TOKEN_LINE(token), 1725, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                   } else {
+                       has_stat = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have stat var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(stat_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar integer STAT variable");
+                       goto EXIT;
+                   }
+
+               } else if (strcmp(TOKEN_STR(token), "ERRMSG") == 0) {
+
+                   if (has_errmsg) {
+                       PRINTMSG(TOKEN_LINE(token), 1725, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                       goto EXIT;
+                   } else {
+                       has_errmsg = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have errmsg var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(errmsg_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar character string ERRMSG variable");
+                       goto EXIT;
+                   }
+
+               } else {
+                   parse_err_flush(Find_Expr_End,
+                           "STAT= | ERRMSG=");
+               }
+           } else {
+               parse_err_flush(Find_EOS, "=");
+               goto EXIT;
+           }
+
+           if (LA_CH_VALUE == COMMA) {
+               NEXT_LA_CH;
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               if (!matched_tok) {
+                   /* error */
+                   parse_err_flush(Find_EOS,
+                           "STAT= | ERRMSG=");
+                   goto EXIT;
+               }
+           } else {
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+           }
+       }
+
+       if (LA_CH_VALUE != RPAREN) {
+           /* error */
+           parse_err_flush(Find_EOS, ")");
+           goto EXIT;
+       }
+
+       NEXT_LA_CH;
+   }
+
+
+   /* add stat/errmsg opnd to list */
+   if (has_stat || has_errmsg) {
+       IR_FLD_L(ir_idx) = IL_Tbl_Idx;
+       IR_LIST_CNT_L(ir_idx) = 0;
+
+
+       NTR_IR_TBL(ir_idx2);
+	   OPND_FLD(syncstat_opnd) = IR_Tbl_Idx;
+	   OPND_IDX(syncstat_opnd) = ir_idx2;
+       IR_OPR(ir_idx2) = Stat_Errmsg_Opr;
+       IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+       NTR_IR_LIST_TBL(list1_idx);
+       IR_IDX_L(ir_idx) = list1_idx;
+	   COPY_OPND(IL_OPND(list1_idx), syncstat_opnd);
+
+	   if (has_stat) {
+		   COPY_OPND(IR_OPND_L(ir_idx2), stat_opnd);
+	   }
+
+	   if (has_errmsg) {
+		   COPY_OPND(IR_OPND_R(ir_idx2), errmsg_opnd);
+	   }
+
+	   (IR_LIST_CNT_L(ir_idx))++;
+   }
+
+EXIT:
+
+   error = err_call || CURR_BLK_ERR || SH_ERR_FLG(CURR_BLK_FIRST_SH_IDX);
+
+   if (cif_flags & MISC_RECS) {
+    //TODO  cif_stmt_type_rec(TRUE, CIF_End_Team_Stmt, statement_number);
+   }
+
+   
+   if (CURR_BLK != Team_Blk) {
+
+      /* Error blocks got in the way - try to find the Team_Blk.		      */
+
+      name_idx = BLK_NAME(blk_stk_idx + 1);
+
+      for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
+
+         if (BLK_TYPE(blk_idx) == Team_Blk  &&  BLK_NAME(blk_idx) == name_idx) {
+            blk_idx = move_blk_to_end(blk_idx);
+            break;
+         }
+      }
+   }
+
+
+   /* Before popping the Team_Blk, make sure that if the TEAM stmt is        */
+   /* marked in error, the END TEAM is too. 				      */
+
+   SH_ERR_FLG(curr_stmt_sh_idx) = error;
+
+
+
+   /* Check before popping it because the program could be really messed up   */
+   /* which would cause the Block Stack to be equally messed up.	      */
+
+   if (CURR_BLK == Team_Blk) {
+
+      if (SH_PARENT_BLK_IDX(curr_stmt_sh_idx) == NULL_IDX) {
+         SH_PARENT_BLK_IDX(curr_stmt_sh_idx) = CURR_BLK_FIRST_SH_IDX;
+      }
+
+      POP_BLK_STK;
+   }
+   TRACE (Func_Exit, "end_team_blk", NULL);
 
    return;
 

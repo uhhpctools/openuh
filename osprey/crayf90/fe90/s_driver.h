@@ -252,7 +252,10 @@
                           lock_stmt_semantics,			  /* Lock_Stmt */
                           lock_stmt_semantics,			  /* Unlock_Stmt */ 
                           stop_pause_stmt_semantics,	  /* Error_Stop_Stmt   */
-                          event_stmt_semantics 			  /* Event_Stmt        */
+                          event_stmt_semantics, 		/* Event_Stmt        */
+                          form_team_stmt_semantics, 	/* Form_Team_Stmt    */
+                          change_team_stmt_semantics, 	/* Change_Team_Stmt    */
+                          end_team_stmt_semantics, 	    /* End_Team_Stmt    */
 #endif
 
            };

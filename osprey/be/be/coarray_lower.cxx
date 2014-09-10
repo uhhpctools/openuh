@@ -828,6 +828,40 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                         WN_PARM_BY_VALUE);
                     WN_INSERT_BlockBefore(blk_node, wn, insert_wnx);
                 }
+
+                /* all library calls with implicit sync memory semantics
+                 * should include an optimization  barrier to prevent unsafe
+                 * optimization.:
+                 *      SYNC ALL: forward and backward barrier
+                 *      SYNC IMAGES: forward and backward barrier
+                 *      SYNC MEMORY: forward and backward barrier
+                 *      LOCK: backward barrier
+                 *      UNLOCK: forward barrier
+                 *      CRITICAL: backward barrier
+                 *      END CRITICAL: forward barrier
+                 */
+
+                if ( NAME_IS(WN_st(wn), "_SYNC_ALL") ||
+                     NAME_IS(WN_st(wn), "_SYNC_IMAGES") ||
+                     NAME_IS(WN_st(wn), "_SYNC_MEMORY") ) {
+                    WN_INSERT_BlockBefore(blk_node, wn,
+                                          WN_CreateBarrier(TRUE,0));
+                    WN_INSERT_BlockAfter(blk_node, wn,
+                                          WN_CreateBarrier(FALSE,0));
+                }
+
+                if ( NAME_IS(WN_st(wn), "_COARRAY_LOCK") ||
+                     NAME_IS(WN_st(wn), "_CRITICAL") ) {
+                    WN_INSERT_BlockAfter(blk_node, wn,
+                                          WN_CreateBarrier(FALSE,0));
+                }
+
+                if ( NAME_IS(WN_st(wn), "_COARRAY_UNLOCK") ||
+                     NAME_IS(WN_st(wn), "_END_CRITICAL") ) {
+                    WN_INSERT_BlockBefore(blk_node, wn,
+                                          WN_CreateBarrier(TRUE,0));
+                }
+
                 break;
             case OPR_INTRINSIC_CALL:
                 if (WN_opcode(wn) == OPC_VINTRINSIC_CALL) {

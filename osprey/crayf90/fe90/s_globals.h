@@ -106,6 +106,9 @@ extern  void subroutine_stmt_semantics (void);
 extern  void sync_stmt_semantics (void);
 extern  void lock_stmt_semantics (void);
 extern  void event_stmt_semantics (void);
+extern  void form_team_stmt_semantics (void);
+extern  void change_team_stmt_semantics (void);
+extern  void end_team_stmt_semantics (void);
 #endif
 extern  void then_stmt_semantics (void);
 extern  void where_stmt_semantics (void);

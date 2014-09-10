@@ -41,6 +41,23 @@
 #include "trace.h"
 #include "profile.h"
 #include "util.h"
+#include "team.h"
+
+#define MEMORY_SLOT_SELECT(common_slot, mem_info) \
+    if (current_team == NULL || current_team->depth == 0) {  \
+        common_slot = init_common_slot; \
+        mem_info = init_mem_info; \
+    } else { \
+        common_slot = child_common_slot; \
+        mem_info = child_mem_info; \
+    }
+
+#define MEMORY_SLOT_SAVE(common_slot) \
+    if (current_team == NULL || current_team->depth == 0) { \
+        init_common_slot = common_slot; \
+    } else { \
+        child_common_slot = common_slot; \
+    }
 
 /* byte alignment for allocations */
 size_t alloc_byte_alignment = DEFAULT_ALLOC_BYTE_ALIGNMENT;
@@ -49,12 +66,24 @@ size_t alloc_byte_alignment = DEFAULT_ALLOC_BYTE_ALIGNMENT;
 int out_of_segment_rma_enabled = 0;
 
 /* describes memory usage status */
-mem_usage_info_t *mem_info;
+// mem_usage_info_t *mem_info;
+mem_usage_info_t * init_mem_info;
+mem_usage_info_t * child_mem_info;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
- * asymmetric data. It is the only handle to access the link-list.*/
-shared_memory_slot_t *common_slot;
+ * asymmetric data. It is the only handle to access the link-list.
+ *
+ * TEAM_SUPPORT: seperate the node into two. 
+ * One is init_common_slot, which is tracking the initial comm_slot. Initlized
+ * in comm_init().
+ * Another is child_common_slot, stays null until team other than team_world
+ * is formed
+ */
+
+// shared_memory_slot_t *common_slot;
+shared_memory_slot_t * init_common_slot;
+shared_memory_slot_t * child_common_slot;
 
 /* LOCAL FUNCTION DECLARATIONIS */
 static struct shared_memory_slot *find_empty_shared_memory_slot_above
@@ -62,7 +91,8 @@ static struct shared_memory_slot *find_empty_shared_memory_slot_above
 static struct shared_memory_slot *find_empty_shared_memory_slot_below
     (struct shared_memory_slot *slot, unsigned long var_size);
 static void *split_empty_shared_memory_slot_from_top
-    (struct shared_memory_slot *slot, unsigned long var_size);
+    (struct shared_memory_slot *slot, unsigned long var_size,
+     struct shared_memory_slot **orig_slot);
 static void *split_empty_shared_memory_slot_from_bottom
     (struct shared_memory_slot *slot, unsigned long var_size);
 
@@ -117,12 +147,18 @@ static void free_next_slots_recursively(struct shared_memory_slot *slot);
  *                          | Alloc |
  *                          | heap  |
  *                          =========
+ *                          | Init  |
  *                          | Common|
  *                          |  slot |
  *                          =========
+ *                          | Child |
+ *                          | Common|
+ *                          |  slot |
+ *                          ---------   => may change while runtime
  *                          | asymm |
  *                          | heap  |
  *                          |_______|
+ *
  * Allocatable heap comsumes common_slot from top, while assymetric heap
  * consumes from bottom. Each allocation address and size is stored in
  * a sperate slot (node in the list). Each slot has a full-empty bit(feb).
@@ -175,7 +211,8 @@ static struct shared_memory_slot *find_empty_shared_memory_slot_below
 /* Static function used to reserve top part of an empty memory slot
  * for allocatable coarrays. Returns the memory address allocated */
 static void *split_empty_shared_memory_slot_from_top
-    (struct shared_memory_slot *slot, unsigned long var_size) {
+    (struct shared_memory_slot *slot, unsigned long var_size,
+     struct shared_memory_slot **orig_slot) {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     struct shared_memory_slot *new_empty_slot;
     new_empty_slot = (struct shared_memory_slot *) malloc
@@ -188,8 +225,8 @@ static void *split_empty_shared_memory_slot_from_top
     slot->size = var_size;
     slot->feb = 1;
     slot->next = new_empty_slot;
-    if (common_slot == slot)
-        common_slot = new_empty_slot;
+    if (*orig_slot == slot)
+        *orig_slot = new_empty_slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return slot->addr;
@@ -227,6 +264,8 @@ static void *split_empty_shared_memory_slot_from_bottom
  * Note: there is barrier as it is a collective operation*/
 void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
 {
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
     struct shared_memory_slot *empty_slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
@@ -234,6 +273,8 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
     if (var_size % alloc_byte_alignment != 0) {
         var_size = ((var_size-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
+
+    MEMORY_SLOT_SELECT(common_slot, mem_info);
 
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
                                                      var_size);
@@ -264,8 +305,10 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
     }
 
     void *retval =
-        split_empty_shared_memory_slot_from_top(empty_slot, var_size);
+        split_empty_shared_memory_slot_from_top(empty_slot, var_size,
+                                                &common_slot);
 
+    MEMORY_SLOT_SAVE(common_slot);
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -280,11 +323,16 @@ void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar)
  * and then splits the slot from bottom */
 void *coarray_asymmetric_allocate_(unsigned long var_size)
 {
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
     struct shared_memory_slot *empty_slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
+
+    common_slot = child_common_slot;
+    mem_info = child_mem_info;
     if (var_size % alloc_byte_alignment != 0) {
         var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
     }
@@ -351,10 +399,15 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
  * and then splits the slot from bottom */
 void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
 {
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
     struct shared_memory_slot *empty_slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
+
+    common_slot= child_common_slot;;
+    mem_info = child_mem_info;
 
     if (var_size % alloc_byte_alignment != 0) {
         var_size = (var_size/alloc_byte_alignment+1)*alloc_byte_alignment;
@@ -389,6 +442,7 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 
+    child_common_slot = common_slot;
     return retval;
 }
 
@@ -401,6 +455,10 @@ static struct shared_memory_slot *find_shared_memory_slot_above
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
     while (slot) {
+        if(slot->addr < current_team->symm_mem_slot.start_addr){
+            Warning("beyond team heap scope");
+            return NULL;
+        }
         if (slot->feb == 1 && slot->addr == address)
             return slot;
         slot = slot->prev;
@@ -419,6 +477,10 @@ static struct shared_memory_slot *find_shared_memory_slot_below
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
     while (slot) {
+        if(slot->addr >= current_team->symm_mem_slot.end_addr){
+            Warning("Address exceeds team heap scope");
+            return NULL;
+        }
         if (slot->feb == 1 && slot->addr == address)
             return slot;
         slot = slot->next;
@@ -439,8 +501,13 @@ static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
     slot->prev->next = slot->next->next;
     if (slot->next->next)
         slot->next->next->prev = slot->prev;
-    if (common_slot == slot || common_slot == slot->next)
-        common_slot = slot->prev;
+    if (current_team == NULL || current_team->depth == 0) {
+        if (init_common_slot == slot || init_common_slot == slot->next)
+            init_common_slot = slot->prev;
+    } else {
+        if (child_common_slot == slot || child_common_slot == slot->next)
+            child_common_slot = slot->prev;
+    }
     comm_free(slot->next);
     comm_free(slot);
 
@@ -459,8 +526,13 @@ static void join_with_prev_shared_memory_slot(struct shared_memory_slot
     slot->prev->next = slot->next;
     if (slot->next)
         slot->next->prev = slot->prev;
-    if (common_slot == slot)
-        common_slot = slot->prev;
+    if (current_team == NULL || current_team->depth == 0) {
+        if (init_common_slot == slot)
+            init_common_slot = slot->prev;
+    } else {
+        if (child_common_slot == slot)
+            child_common_slot = slot->prev;
+    }
     comm_free(slot);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -480,8 +552,13 @@ static void join_with_next_shared_memory_slot(struct shared_memory_slot
     if (slot->next->next)
         slot->next->next->prev = slot;
     slot->next = slot->next->next;
-    if (common_slot == tmp)
-        common_slot = slot;
+    if (current_team == NULL || current_team->depth == 0) {
+        if (init_common_slot == tmp)
+            init_common_slot = slot->prev;
+    } else {
+        if (child_common_slot == tmp)
+            child_common_slot = slot->prev;
+    }
     comm_free(tmp);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -515,11 +592,14 @@ static void empty_shared_memory_slot(struct shared_memory_slot *slot)
  * Note: there is implicit barrier for allocatable coarrays*/
 void coarray_deallocate_(void *var_address, int* statvar)
 {
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
     struct shared_memory_slot *slot;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
+    MEMORY_SLOT_SELECT(common_slot, mem_info);
     slot = find_shared_memory_slot_above(common_slot, var_address);
     if (slot) {
         // implicit barrier for allocatable
@@ -542,15 +622,53 @@ void coarray_deallocate_(void *var_address, int* statvar)
 
     empty_shared_memory_slot(slot);
 
+    MEMORY_SLOT_SAVE(common_slot);
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+}
+
+/* function called when the end_change_team is called.
+ * join the slots within [start_addr, end_addr) (for team_world)
+ * or until meet child_comm_addr (for other teams)
+ * */
+void deallocate_within(void * start_addr, void * end_addr)
+{
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
+    struct shared_memory_slot *slot;
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
+
+    if(start_addr == end_addr) return;
+
+    MEMORY_SLOT_SELECT(common_slot, mem_info);
+
+    slot = common_slot;
+    while(slot->addr > start_addr){
+        slot = slot->prev;
+    }
+
+    while(slot->addr < end_addr && slot != common_slot){
+        mem_info->current_heap_usage -=slot->size;
+        empty_shared_memory_slot(slot);
+        slot = slot->next;
+    }
+
+    MEMORY_SLOT_SAVE(common_slot);
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void coarray_asymmetric_deallocate_(void *var_address)
 {
+    mem_usage_info_t *mem_info;
+    struct shared_memory_slot *common_slot;
     struct shared_memory_slot *slot;
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
+
+    common_slot = child_common_slot;
+    mem_info = child_mem_info;
 
     slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
@@ -578,6 +696,8 @@ void coarray_asymmetric_deallocate_(void *var_address)
     mem_info->current_heap_usage -= slot->size;
 
     empty_shared_memory_slot(slot);
+
+    child_common_slot = common_slot;
 
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -615,11 +735,17 @@ void coarray_free_all_shared_memory_slots()
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
-    free_prev_slots_recursively(common_slot->prev);
-    free_next_slots_recursively(common_slot);
+    free_prev_slots_recursively(init_common_slot->prev);
+    free_next_slots_recursively(init_common_slot);
 
     /* update heap usage info */
-    mem_info->current_heap_usage = 0;
+    init_mem_info->current_heap_usage = 0;
+
+    free_prev_slots_recursively(child_common_slot->prev);
+    free_next_slots_recursively(child_common_slot);
+
+    /* update heap usage info */
+    child_mem_info->current_heap_usage = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }

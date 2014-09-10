@@ -32,7 +32,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
-
+#include <ctype.h>
 #include "dopevec.h"
 #include "caf_rtl.h"
 #include "util.h"
@@ -44,9 +44,11 @@
 #include "profile.h"
 #include "alloc.h"
 #include "collectives.h"
-
+#include "team.h"
 
 extern int __ompc_init_rtl(int num_threads);
+
+extern team_type initial_team;
 
 #pragma weak __ompc_init_rtl
 
@@ -55,6 +57,10 @@ unsigned long _this_image;
 unsigned long _num_images;
 unsigned long _log2_images;
 unsigned long _rem_images;
+
+
+/* add global variable pointing to current team */
+team_type current_team = NULL;
 
 static int is_contiguous_access(const size_t strides[],
                                 const size_t count[],
@@ -68,6 +74,8 @@ static void local_dest_strided_copy(void *src, void *dest,
                                     const size_t count[],
                                     size_t stride_levels);
 
+
+static int get_proc_id(team_type team, int image_id);
 
 /* COMPILER BACK-END INTERFACE */
 
@@ -220,14 +228,19 @@ void __coarray_nbread(size_t image, void *src, void *dest, size_t nbytes,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl)
         *hdl = NULL;
 
-    /* reads nbytes from src on proc 'image-1' into local dest */
-    CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src, dest,
+    /* reads nbytes from src on proc 'proc_id' into local dest */
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, proc_id, src, dest,
                          nbytes, hdl);
 
 
@@ -241,10 +254,15 @@ void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
 
-    /* reads nbytes from src on proc 'image-1' into local dest */
-    CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src, dest,
+    check_remote_image(proc_id+1);
+
+    /* reads nbytes from src on proc 'proc_id' into local dest */
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_read, proc_id, src, dest,
                          nbytes);
 
 
@@ -259,13 +277,18 @@ void __coarray_write_from_lcb(size_t image, void *dest, void *src,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
         *hdl = NULL;
 
-    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb, image - 1, dest,
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb, proc_id, dest,
                          src, nbytes, ordered, hdl);
 
     PROFILE_FUNC_EXIT(CAFPROF_PUT);
@@ -278,13 +301,18 @@ void __coarray_write(size_t image, void *dest, void *src,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
         *hdl = NULL;
 
-    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest, src,
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, proc_id, dest, src,
                          nbytes, ordered, hdl);
 
     PROFILE_FUNC_EXIT(CAFPROF_PUT);
@@ -304,7 +332,12 @@ void __coarray_strided_nbread(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl)
@@ -321,7 +354,7 @@ void __coarray_strided_nbread(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src,
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, proc_id, src,
                                  dest, nbytes, hdl);
             PROFILE_FUNC_EXIT(CAFPROF_GET);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -339,7 +372,7 @@ void __coarray_strided_nbread(size_t image,
              * block. */
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, proc_id, src,
                                  buf, nbytes);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
@@ -351,7 +384,7 @@ void __coarray_strided_nbread(size_t image,
         }
     }
 
-    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_nbread, image - 1, src,
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_nbread, proc_id, src,
                          src_strides, dest, dest_strides, count,
                          stride_levels, hdl);
 
@@ -371,7 +404,12 @@ void __coarray_strided_read(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig =
@@ -384,12 +422,12 @@ void __coarray_strided_read(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, proc_id, src,
                                  dest, nbytes);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, proc_id, src,
                                  buf, nbytes);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
@@ -401,7 +439,7 @@ void __coarray_strided_read(size_t image,
         /* not reached */
     }
 
-    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_read, image - 1, src,
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_read, proc_id, src,
                          src_strides, dest, dest_strides, count,
                          stride_levels);
 
@@ -425,7 +463,12 @@ void __coarray_strided_write_from_lcb(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -443,7 +486,7 @@ void __coarray_strided_write_from_lcb(size_t image,
 
         if (local_is_contig) {
             CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb,
-                                 image - 1, dest, src, nbytes, ordered,
+                                 proc_id, dest, src, nbytes, ordered,
                                  hdl);
         } else {
             Error
@@ -458,13 +501,13 @@ void __coarray_strided_write_from_lcb(size_t image,
     }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_strided_write_from_lcb,
-                         image - 1, dest, dest_strides, src, src_strides,
+                         proc_id, dest, dest_strides, src, src_strides,
                          count, stride_levels, ordered, hdl);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "Finished write(strided) to %p"
                  " on Img %lu from %p using stride_levels %d, ordered=%d",
-                 dest, image, src, stride_levels, ordered);
+                 dest, proc_id+1, src, stride_levels, ordered);
 
     PROFILE_FUNC_EXIT(CAFPROF_PUT);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -486,7 +529,12 @@ void __coarray_strided_write(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
-    check_remote_image(image);
+    size_t proc_id = image-1;
+    if(current_team != NULL || current_team->codimension_mapping != NULL){
+        proc_id = get_proc_id(current_team, image);
+    }
+
+    check_remote_image(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -503,14 +551,14 @@ void __coarray_strided_write(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest,
+            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, proc_id, dest,
                                  src, nbytes, ordered, hdl);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
             local_src_strided_copy(src, src_strides, buf, count, stride_levels);
             CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb,
-                                 image - 1, dest, buf, nbytes, ordered, hdl);
+                                 proc_id, dest, buf, nbytes, ordered, hdl);
         }
 
         PROFILE_FUNC_EXIT(CAFPROF_PUT);
@@ -519,14 +567,14 @@ void __coarray_strided_write(size_t image,
         /* not reached */
     }
 
-    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_strided_write, image - 1, dest,
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_strided_write, proc_id, dest,
                          dest_strides, src, src_strides, count,
                          stride_levels, ordered, hdl);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "Finished write(strided) to %p"
                  " on Img %lu from %p using stride_levels %d, ordered=%d ",
-                 dest, image, src, stride_levels, ordered);
+                 dest, proc_id+1, src, stride_levels, ordered);
 
     PROFILE_FUNC_EXIT(CAFPROF_PUT);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -610,10 +658,17 @@ void _COARRAY_LOCK(lock_t * lock, const int *image, char *success,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_MUTEX);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     if (success == NULL && status == NULL) {
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_lock, lock, img, errmsg,
@@ -637,10 +692,17 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_MUTEX);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
 
@@ -673,10 +735,17 @@ void _ATOMIC_DEFINE_4_1(atomic4_t * atom, INT1 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
                          atom, *value);
@@ -691,10 +760,17 @@ void _ATOMIC_DEFINE_4_2(atomic4_t * atom, INT2 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
                          atom, *value);
@@ -709,10 +785,17 @@ void _ATOMIC_DEFINE_4_4(atomic4_t * atom, INT4 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
                          atom, *value);
@@ -727,10 +810,17 @@ void _ATOMIC_DEFINE_4_8(atomic4_t * atom, INT8 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic_define, img-1,
                          atom, *value);
@@ -745,10 +835,17 @@ void _ATOMIC_DEFINE_8_1(atomic8_t * atom, INT1 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic8_define, img-1,
                          atom, *value);
@@ -763,10 +860,17 @@ void _ATOMIC_DEFINE_8_2(atomic8_t * atom, INT2 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic8_define, img-1,
                          atom, *value);
@@ -781,10 +885,17 @@ void _ATOMIC_DEFINE_8_4(atomic8_t * atom, INT4 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic8_define, img-1,
                          atom, *value);
@@ -799,10 +910,17 @@ void _ATOMIC_DEFINE_8_8(atomic8_t * atom, INT8 * value, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, WRITE, comm_atomic8_define, img-1,
                          atom, *value);
@@ -818,10 +936,17 @@ void _ATOMIC_REF_4_1(INT1 * value, atomic4_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
                          atom);
@@ -839,10 +964,17 @@ void _ATOMIC_REF_4_2(INT2 * value, atomic4_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
                          atom);
@@ -860,10 +992,17 @@ void _ATOMIC_REF_4_4(INT4 * value, atomic4_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
                          atom);
@@ -881,10 +1020,17 @@ void _ATOMIC_REF_4_8(INT8 * value, atomic4_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic_ref, &val, img-1,
                          atom);
@@ -902,10 +1048,17 @@ void _ATOMIC_REF_8_1(INT1 * value, atomic8_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic8_ref, &val, img-1,
                          atom);
@@ -923,10 +1076,17 @@ void _ATOMIC_REF_8_2(INT2 * value, atomic8_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic8_ref, &val, img-1,
                          atom);
@@ -944,10 +1104,17 @@ void _ATOMIC_REF_8_4(INT4 * value, atomic8_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic8_ref, &val, img-1,
                          atom);
@@ -965,10 +1132,17 @@ void _ATOMIC_REF_8_8(INT8 * value, atomic8_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_atomic8_ref, &val, img-1,
                          atom);
@@ -986,10 +1160,17 @@ void _ATOMIC_ADD_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
     if (old == NULL) {
@@ -1011,10 +1192,17 @@ void _ATOMIC_ADD_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
     if (old == NULL) {
@@ -1036,10 +1224,17 @@ void _ATOMIC_ADD_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1062,10 +1257,17 @@ void _ATOMIC_ADD_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1088,10 +1290,17 @@ void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
     if (old == NULL) {
@@ -1113,10 +1322,17 @@ void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
     if (old == NULL) {
@@ -1138,10 +1354,17 @@ void _ATOMIC_ADD_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1164,10 +1387,17 @@ void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1190,10 +1420,17 @@ void _ATOMIC_AND_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1216,10 +1453,17 @@ void _ATOMIC_AND_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1242,10 +1486,17 @@ void _ATOMIC_AND_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1268,10 +1519,17 @@ void _ATOMIC_AND_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1294,10 +1552,17 @@ void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1320,10 +1585,17 @@ void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1346,10 +1618,17 @@ void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1372,10 +1651,17 @@ void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1398,10 +1684,17 @@ void _ATOMIC_OR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1424,10 +1717,17 @@ void _ATOMIC_OR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1450,10 +1750,17 @@ void _ATOMIC_OR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1476,10 +1783,17 @@ void _ATOMIC_OR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1502,10 +1816,17 @@ void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1528,10 +1849,17 @@ void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1554,10 +1882,17 @@ void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1580,10 +1915,17 @@ void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1606,10 +1948,17 @@ void _ATOMIC_XOR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1632,10 +1981,17 @@ void _ATOMIC_XOR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1658,10 +2014,17 @@ void _ATOMIC_XOR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1684,10 +2047,17 @@ void _ATOMIC_XOR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT4) *value;
 
@@ -1710,10 +2080,17 @@ void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1736,10 +2113,17 @@ void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1762,10 +2146,17 @@ void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1788,10 +2179,17 @@ void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     val = (INT8) *value;
 
@@ -1814,10 +2212,17 @@ void _ATOMIC_CAS_4(atomic_t * atom, atomic_t * oldval, atomic_t *compare,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, SYNC, comm_cswap_request, atom,
                          compare, newval, sizeof *newval, img-1, oldval);
@@ -1833,10 +2238,17 @@ void _ATOMIC_CAS_8(atomic8_t * atom, atomic8_t * oldval, atomic8_t *compare,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
 
-    if (*image == 0)
+    if (*image == 0) {
         img = _this_image;
-    else
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
         img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     CALLSITE_TIMED_TRACE(COMM, SYNC, comm_cswap_request, atom,
                          compare, newval, sizeof *newval, img-1, oldval);
@@ -1847,23 +2259,36 @@ void _ATOMIC_CAS_8(atomic8_t * atom, atomic8_t * oldval, atomic8_t *compare,
 
 void _EVENT_POST(event_t * event, int *image)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_EVENTS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     if (*image == 0) {
         /* local reference */
         event_t result, inc = 1;
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_add_request, event, &inc,
-                             sizeof(event_t), _this_image - 1);
+                             sizeof(event_t), img - 1);
     } else {
         event_t result, inc = 1;
-        check_remote_image(*image);
-        check_remote_address(*image, event);
+        check_remote_image(img);
+        check_remote_address(img, event);
 
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
 
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_add_request, event, &inc,
-                             sizeof(event_t), *image - 1);
+                             sizeof(event_t), img - 1);
 
     }
 
@@ -1873,15 +2298,28 @@ void _EVENT_POST(event_t * event, int *image)
 
 void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
 {
+    int img;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_EVENTS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     memset(state, 0, state_len);
     if (*image == 0) {
         *state = (int) (*event) != 0;
     } else {
-        check_remote_image(*image);
-        check_remote_address(*image, event);
+        check_remote_image(img);
+        check_remote_address(img, event);
         switch (state_len) {
         case 1:
             CALLSITE_TIMED_TRACE(SYNC, SYNC, _ATOMIC_REF_4_1,
@@ -1912,11 +2350,24 @@ void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
 
 void _EVENT_WAIT(event_t * event, int *image)
 {
+    int img;
     event_t state;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_EVENTS);
 
     START_TIMER();
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
 
     if (*image == 0) {
         int done = 0;
@@ -1935,18 +2386,18 @@ void _EVENT_WAIT(event_t * event, int *image)
             comm_service();
         } while (1);
     } else {
-        check_remote_image(*image);
-        check_remote_address(*image, event);
+        check_remote_image(img);
+        check_remote_address(img, event);
 
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
                      "suspending tracing while polling remote event");
         LIBCAF_TRACE_SUSPEND();
         do {
-            comm_read(*image - 1, event, &state, sizeof(event_t));
+            comm_read(img - 1, event, &state, sizeof(event_t));
             if (state > 0) {
                 INT4 dec = -1;
                 INT4 inc = 1;
-                comm_fadd_request(event, &dec, sizeof(event_t), *image - 1,
+                comm_fadd_request(event, &dec, sizeof(event_t), img - 1,
                                   &state);
                 if (state > 0) {
                     /* event variable successfully modified */
@@ -1954,7 +2405,7 @@ void _EVENT_WAIT(event_t * event, int *image)
                 } else {
                     /* shouldn't have decremented, so add 1 back */
                     comm_fadd_request(event, &inc, sizeof(event_t),
-                                      *image - 1, &state);
+                                      img - 1, &state);
                 }
             }
             comm_service();
@@ -1999,24 +2450,41 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
     PROFILE_FUNC_ENTRY(CAFPROF_SYNC_STATEMENTS);
 #ifdef SYNC_IMAGES_HASHED
     for (i = 0; i < image_count; i++) {
+        int img;
         hashed_image_list_t *check_duplicate;
-        check_remote_image(images[i]);
-        HASH_FIND_INT(image_list, &images[i], check_duplicate);
+
+        /* get image id with respect to initial team */
+        img = images[i];
+        if(current_team != NULL ||
+           current_team->codimension_mapping != NULL) {
+            img = get_proc_id(current_team, images[i])+1;
+        }
+
+        check_remote_image(img);
+        HASH_FIND_INT(image_list, &img, check_duplicate);
         if (check_duplicate != NULL) {
             new_image_count--;
             continue;
         }
-        hashed_images[i].image_id = images[i];
+        hashed_images[i].image_id = img;
         HASH_ADD_INT(image_list, image_id, (&hashed_images[i]));
     }
 
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, image_list,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
 #else
+    int *new_image_list = malloc(image_count * sizeof *new_image_list);
     for (i = 0; i < image_count; i++) {
-        check_remote_image(images[i]);
+        int img = images[i];
+        /* get image id with respect to initial team */
+        if(current_team != NULL ||
+           current_team->codimension_mapping != NULL) {
+            img = get_proc_id(current_team, images[i])+1;
+        }
+        new_image_list[i] = img;
+        check_remote_image(new_image_list[i]);
     }
-    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, images,
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, new_image_list,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
 #endif
 
@@ -2257,16 +2725,23 @@ void coarray_translate_remote_addr(void **remote_addr, int image)
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    int proc_id = image - 1;
+
+    if (current_team != NULL || current_team->codimension_mapping != NULL) {
+        proc_id =  get_proc_id(current_team, image);
+    }
+
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "(start) - "
-                 "remote_addr: %p, image: %d ", *remote_addr, image);
+                 "remote_addr: %p, image: %d ", *remote_addr, proc_id+1);
+
 
     CALLSITE_TRACE(COMM, comm_translate_remote_addr, remote_addr,
-                   image - 1);
+                   proc_id);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "(end) - "
-                 "remote_addr: %p, image: %d ", *remote_addr, image);
+                 "remote_addr: %p, image: %d ", *remote_addr, proc_id+1);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2347,17 +2822,20 @@ static void local_dest_strided_copy(void *src, void *dest,
 }
 
 /*
- * image should be between 1 .. NUM_IMAGES
+ * image, assumed to be with respect to initial team, should be between 1 ..
+ * NUM_IMAGES
+ *
  */
 int check_remote_image(size_t image)
 {
     const int error_len = 255;
     char error_msg[error_len];
-    if (image < 1 || image > _num_images) {
+    if (image < 1 || image > initial_team->current_num_images) {
         memset(error_msg, 0, error_len);
         sprintf(error_msg,
                 "Image %lu is out of range. Should be in [ %u ... %lu ].",
-                (unsigned long) image, 1, (unsigned long) _num_images);
+                (unsigned long) image, 1,
+                (unsigned long) initial_team->current_num_images);
         Error(error_msg);
         /* should not reach */
     }
@@ -2390,4 +2868,17 @@ int check_remote_address(size_t image, void *address)
         Error(error_msg);
         /* should not reach */
     }
+
+}
+
+/* translating from image id in 'team' to proc ID */
+static int get_proc_id(team_type team, int image_id)
+{
+    int proc_id = image_id-1;
+
+    if (team!= NULL || team->codimension_mapping != NULL) {
+            proc_id = team->codimension_mapping[image_id-1];
+    }
+
+    return proc_id;
 }

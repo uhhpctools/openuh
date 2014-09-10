@@ -125,6 +125,9 @@ enum	token_values {
 		Tok_Kwd_Call,		/* CALL				      */
 		Tok_Kwd_Case,		/* CASE	     SELECTCASE		      */
 		Tok_Kwd_Character,	/* CHARACTER			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Change,	    /* CHANGE			      */
+#endif
 		Tok_Kwd_Close,		/* CLOSE			      */
 #ifdef _UH_COARRAYS
 		Tok_Kwd_Codimension,	/* CODIMENSION			      */
@@ -172,6 +175,9 @@ enum	token_values {
 		Tok_Kwd_File,		/* FILE	     ENDFILE		      */
 		Tok_Kwd_Forall,		/* FORALL			      */
 		Tok_Kwd_Format,		/* FORMAT			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Form,		/* FORM  			      */
+#endif
 		Tok_Kwd_Function,	/* FUNCTION  ENDFUNCTION	      */
 		Tok_Kwd_Go,		/* GO	     GOTO		      */
 		Tok_Kwd_If,		/* IF	     ELSEIF, ENDIF	      */
@@ -248,6 +254,9 @@ enum	token_values {
 #endif
 		Tok_Kwd_Target,		/* TARGET			      */
 		Tok_Kwd_Task,		/* TASK				      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Team,		/* TEAM  			      */
+#endif
 		Tok_Kwd_Then,		/* THEN				      */
 		Tok_Kwd_To,		/* TO	     GOTO		      */
 		Tok_Kwd_Type,		/* TYPE	     ENDTYPE		      */

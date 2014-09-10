@@ -104,7 +104,8 @@ static	int			 blk_err_msgs[]		= {
 #endif /* KEY Bug 10572 */
 #ifdef _UH_COARRAYS
                      ,
-                     1704 /* Critical_Blk */
+                     1704, /* Critical_Blk */
+                     1729 /* Team_Blk */
 #endif
  				};
 
@@ -237,6 +238,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Call_Stmt,	      /* Tok_Kwd_Call	      */
 				Case_Stmt,	      /* Tok_Kwd_Case	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Character    */
+#ifdef _UH_COARRAYS
+                Change_Team_Stmt,     /* Tok_Kwd_Change */
+#endif
 				Close_Stmt,	      /* Tok_Kwd_Close	      */
 #ifdef _UH_COARRAYS
 				Dimension_Stmt,	      /* Tok_Kwd_Codimension  */
@@ -276,6 +280,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Assignment_Stmt,      /* Tok_Kwd_File	      */
 				Forall_Cstrct_Stmt,   /* Tok_Kwd_Forall	      */
 				Format_Stmt,	      /* Tok_Kwd_Format	      */
+#ifdef _UH_COARRAYS
+				Form_Team_Stmt,	      /* Tok_Kwd_Form	      */
+#endif
 				Function_Stmt,	      /* Tok_Kwd_Function     */
 				Goto_Stmt,	      /* Tok_Kwd_Go	      */
 				If_Cstrct_Stmt,	      /* Tok_Kwd_If	      */
@@ -350,7 +357,10 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Sync_Stmt,            /* Tok_Kwd_Sync         */
 #endif
 				Target_Stmt,	      /* Tok_Kwd_Target	      */
-                                Task_Common_Stmt,     /* Tok_Kwd_Task         */
+                Task_Common_Stmt,     /* Tok_Kwd_Task         */
+#ifdef _UH_COARRAYS
+				Assignment_Stmt,      /* Tok_Kwd_Team         */
+#endif
 				Assignment_Stmt,      /* Tok_Kwd_Then	      */
 				Assignment_Stmt,      /* Tok_Kwd_To	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Type	      */
@@ -554,11 +564,14 @@ void		(*stmt_parsers[]) () = {
 #ifdef _UH_COARRAYS
                 ,
                 parse_critical_stmt,        /* Critical_Stmt */
-                parse_end_critical_stmt, /* End_Critical_Stmt */
+                parse_end_stmt,             /* End_Critical_Stmt */
                 parse_lock_stmt,           /* Lock_Stmt */
                 parse_lock_stmt,            /* Unlock_Stmt */
 				parse_stop_pause_stmt,	/* Error_Stop_Stmt	      */
-				parse_event_stmt 	/* Event_Stmt	      */
+				parse_event_stmt, 	/* Event_Stmt	      */
+				parse_form_team_stmt, 	/* Form_Team_Stmt      */
+                parse_change_team_stmt,     /* Change_Team_Stmt */
+                parse_end_stmt              /* End_Team_Stmt */
 #endif
 
 };
@@ -629,6 +642,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -676,6 +693,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -723,6 +744,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -769,6 +794,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -818,6 +847,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -872,6 +905,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
 				(ONE << Enum_Blk)),
@@ -933,6 +970,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -979,6 +1020,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1031,6 +1076,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1078,6 +1127,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1142,6 +1195,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1188,6 +1245,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1237,6 +1298,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1285,6 +1350,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1331,6 +1400,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1385,6 +1458,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk) | 
 				(ONE << Enum_Blk)),
@@ -1449,6 +1526,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1495,6 +1576,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1541,6 +1626,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1593,6 +1682,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
 				(ONE << Enum_Blk)),
@@ -1644,6 +1737,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1690,6 +1787,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1744,6 +1845,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
 				(ONE << Enum_Blk)),
@@ -1792,6 +1897,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1838,6 +1947,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1888,6 +2001,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) | 
@@ -1934,6 +2051,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
 				(ONE << Enum_Blk)),
@@ -1979,6 +2100,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2033,6 +2158,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2163,6 +2292,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2216,6 +2349,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2384,6 +2521,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2438,6 +2579,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2489,6 +2634,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2541,6 +2690,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2596,6 +2749,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk) | 
 				(ONE << Enum_Blk)),
@@ -2649,6 +2806,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2703,6 +2864,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2756,6 +2921,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2805,6 +2974,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2856,6 +3029,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -2911,6 +3088,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |   
 				(ONE << Enum_Blk)),
@@ -2962,6 +3143,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3137,6 +3322,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3339,6 +3528,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3392,6 +3585,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3445,6 +3642,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3532,6 +3733,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3948,6 +4153,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) |
@@ -4002,6 +4211,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4056,6 +4269,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) | 
@@ -4110,6 +4327,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4164,6 +4385,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4221,6 +4446,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4274,6 +4503,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4328,6 +4561,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4377,6 +4614,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4431,6 +4672,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4485,6 +4730,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4539,6 +4788,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4644,6 +4897,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4698,6 +4955,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4752,6 +5013,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4806,6 +5071,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4913,6 +5182,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -4967,6 +5240,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5021,6 +5298,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5075,6 +5356,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5212,6 +5497,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -5265,6 +5554,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5311,6 +5604,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) |
@@ -5418,6 +5715,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Ordered_Blk) |
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5500,6 +5801,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) |
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) |
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk) |
 				(ONE << Enum_Blk)),
@@ -5546,6 +5851,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -5602,6 +5911,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) |
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) |
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk)),
 
@@ -5656,6 +5969,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) |
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) |
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk)),
 #endif /* KEY Bug 10572 */
@@ -5703,6 +6020,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
 				(ONE << Enum_Blk)),
@@ -5750,6 +6071,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Task_Blk) |
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -5805,6 +6130,10 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Mp_Ordered_Blk) |
                                 (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
                                 (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+#ifdef _UH_COARRAYS
+				(ONE << Critical_Blk) |
+				(ONE << Team_Blk) |
+#endif
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
                                 (ONE << Derived_Type_Blk) |
@@ -5828,26 +6157,67 @@ long long     stmt_in_blk [] = {
                 (ONE << Contains_Blk) |
                 (ONE << Interface_Blk) |
                 (ONE << Derived_Type_Blk) |
+#ifdef _UH_COARRAYSxxx
+				(ONE << Critical_Blk) |
+#endif
                 (ONE << Enum_Blk)),
 
 
             /*****  End_Critical_Stmt  *****/
 
-                   ((ONE << Unknown_Blk) |
-                (ONE << Blockdata_Blk) |
-                (ONE << Module_Blk) |
-                (ONE << Interface_Body_Blk) |
-                (ONE << Forall_Blk) |
-                (ONE << If_Blk) |
-                (ONE << Where_Then_Blk) |
-                (ONE << Where_Else_Blk) |
-                (ONE << Where_Else_Mask_Blk) |
-                (ONE << SGI_Psection_Blk) |
-                (ONE << Select_Blk) |
-                (ONE << Contains_Blk) |
-                (ONE << Interface_Blk) |
-                (ONE << Derived_Type_Blk) |
-                (ONE << Enum_Blk)),
+                               ((ONE << Unknown_Blk) |
+                                (ONE << Blockdata_Blk) |
+                                (ONE << Module_Blk) |
+                                (ONE << Program_Blk) |
+                                (ONE << Function_Blk) |
+                                (ONE << Subroutine_Blk) |
+                                (ONE << Internal_Blk) |
+                                (ONE << Module_Proc_Blk) |
+                                (ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+                                (ONE << If_Blk) |
+                                (ONE << If_Then_Blk) |
+                                (ONE << If_Else_If_Blk) |
+                                (ONE << If_Else_Blk) |
+                                (ONE << Do_Blk) |
+                                (ONE << Select_Blk) |
+                                (ONE << Case_Blk) |
+                                (ONE << Where_Then_Blk) |
+                                (ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+                                (ONE << Parallel_Blk) |
+                                (ONE << SGI_Parallel_Blk) |
+                                (ONE << Doall_Blk) |
+				(ONE << Wait_Blk) |
+                                (ONE << SGI_Doacross_Blk) |
+                                (ONE << SGI_Parallel_Do_Blk) |
+                                (ONE << Do_Parallel_Blk) |
+                                (ONE << SGI_Pdo_Blk) |
+                                (ONE << Guard_Blk) |
+                                (ONE << SGI_Critical_Section_Blk) |
+                                (ONE << Parallel_Case_Blk) |
+                                (ONE << SGI_Psection_Blk) |
+                                (ONE << SGI_Section_Blk) |
+                                (ONE << SGI_Single_Process_Blk) |
+                                (ONE << SGI_Region_Blk) |
+                                (ONE << Open_Mp_Parallel_Blk) |
+                                (ONE << Open_Mp_Do_Blk) |
+                                (ONE << Open_Mp_Parallel_Sections_Blk) |
+                                (ONE << Open_Mp_Sections_Blk) |
+                                (ONE << Open_Mp_Section_Blk) |
+                                (ONE << Open_Mp_Parallel_Do_Blk) |
+                                (ONE << Open_Mp_Master_Blk) |
+                                (ONE << Open_Mp_Critical_Blk) |
+                                (ONE << Open_Mp_Ordered_Blk) |
+                                (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
+                                (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+#ifdef _UH_COARRAYS
+                                (ONE << Team_Blk) |
+#endif
+                                (ONE << Contains_Blk) |
+                                (ONE << Interface_Blk) |
+                                (ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk)),
 
             /*****  Lock_Stmt  *****/
 
@@ -5920,6 +6290,98 @@ long long     stmt_in_blk [] = {
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk)),
+
+			/*****  Form_Team_Stmt  *****/
+
+			       ((ONE << Unknown_Blk) |
+				(ONE << Blockdata_Blk) |
+				(ONE << Module_Blk) |
+				(ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+				(ONE << If_Blk) |
+				(ONE << Where_Then_Blk) |
+				(ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+				(ONE << SGI_Psection_Blk) |
+				(ONE << Select_Blk) |
+				(ONE << Contains_Blk) |
+				(ONE << Interface_Blk) |
+				(ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk)),
+
+			/*****  Change_Team_Stmt  *****/
+
+			       ((ONE << Unknown_Blk) |
+				(ONE << Blockdata_Blk) |
+				(ONE << Module_Blk) |
+				(ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+				(ONE << If_Blk) |
+				(ONE << Where_Then_Blk) |
+				(ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+				(ONE << SGI_Psection_Blk) |
+				(ONE << Select_Blk) |
+				(ONE << Contains_Blk) |
+				(ONE << Interface_Blk) |
+				(ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk)),
+
+			/*****  End_Team_Stmt  *****/
+
+                               ((ONE << Unknown_Blk) |
+                                (ONE << Blockdata_Blk) |
+                                (ONE << Module_Blk) |
+                                (ONE << Program_Blk) |
+                                (ONE << Function_Blk) |
+                                (ONE << Subroutine_Blk) |
+                                (ONE << Internal_Blk) |
+                                (ONE << Module_Proc_Blk) |
+                                (ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+                                (ONE << If_Blk) |
+                                (ONE << If_Then_Blk) |
+                                (ONE << If_Else_If_Blk) |
+                                (ONE << If_Else_Blk) |
+                                (ONE << Do_Blk) |
+                                (ONE << Select_Blk) |
+                                (ONE << Case_Blk) |
+                                (ONE << Where_Then_Blk) |
+                                (ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+                                (ONE << Parallel_Blk) |
+                                (ONE << SGI_Parallel_Blk) |
+                                (ONE << Doall_Blk) |
+				(ONE << Wait_Blk) |
+                                (ONE << SGI_Doacross_Blk) |
+                                (ONE << SGI_Parallel_Do_Blk) |
+                                (ONE << Do_Parallel_Blk) |
+                                (ONE << SGI_Pdo_Blk) |
+                                (ONE << Guard_Blk) |
+                                (ONE << SGI_Critical_Section_Blk) |
+                                (ONE << Parallel_Case_Blk) |
+                                (ONE << SGI_Psection_Blk) |
+                                (ONE << SGI_Section_Blk) |
+                                (ONE << SGI_Single_Process_Blk) |
+                                (ONE << SGI_Region_Blk) |
+                                (ONE << Open_Mp_Parallel_Blk) |
+                                (ONE << Open_Mp_Do_Blk) |
+                                (ONE << Open_Mp_Parallel_Sections_Blk) |
+                                (ONE << Open_Mp_Sections_Blk) |
+                                (ONE << Open_Mp_Section_Blk) |
+                                (ONE << Open_Mp_Parallel_Do_Blk) |
+                                (ONE << Open_Mp_Master_Blk) |
+                                (ONE << Open_Mp_Critical_Blk) |
+                                (ONE << Open_Mp_Ordered_Blk) |
+                                (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
+                                (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+#ifdef _UH_COARRAYS
+                                (ONE << Critical_Blk) |
+#endif
+                                (ONE << Contains_Blk) |
+                                (ONE << Interface_Blk) |
+                                (ONE << Derived_Type_Blk) |
 				(ONE << Enum_Blk))
 #endif
 
@@ -6108,11 +6570,14 @@ stmt_category_type	stmt_top_cat [] = {
 #ifdef _UH_COARRAYS
                 ,
                 Executable_Stmt_Cat,    /* Critical_Stmt    */
-                Executable_Stmt_Cat,    /* End_Critical_Stmt    */  
+                Executable_Stmt_Cat,    /* End_Critical_Stmt    */
                 Executable_Stmt_Cat,    /* Lock_Stmt    */
                 Executable_Stmt_Cat,    /* Unlock_Stmt   */
                 Executable_Stmt_Cat,    /* Error_Stop_Stmt   */
-                Executable_Stmt_Cat     /* Event_Stmt   */
+                Executable_Stmt_Cat,    /* Event_Stmt   */
+                Executable_Stmt_Cat,    /* Form_Team_Stmt   */
+                Executable_Stmt_Cat,    /* Change_Team_Stmt   */
+                Executable_Stmt_Cat     /* End_Team_Stmt   */
 #endif
 
 				};
