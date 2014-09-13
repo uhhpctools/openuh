@@ -2277,6 +2277,7 @@ void comm_init()
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
     unsigned long image_heap_size;
+
     size_t collectives_offset;
     unsigned long  init_heap_size;
 
@@ -2300,8 +2301,8 @@ void comm_init()
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
 
     /* get size for collectives buffer */
-    collectives_bufsize = get_env_size(ENV_COLLECTIVES_BUFSIZE,
-                                       DEFAULT_COLLECTIVES_BUFSIZE);
+    collectives_bufsize = get_env_size_with_unit(ENV_COLLECTIVES_BUFSIZE,
+                                                 DEFAULT_COLLECTIVES_BUFSIZE);
 
     static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
                                                        collectives_bufsize);
@@ -2322,6 +2323,7 @@ void comm_init()
     caf_shared_memory_size += image_heap_size;
 
     gasnet_max_segsize = 2 * caf_shared_memory_size;
+
     /* at minimum, make this  1 GB */
     if (gasnet_max_segsize < (1 << 30))
         gasnet_max_segsize = 1 << 30;
@@ -2375,7 +2377,7 @@ void comm_init()
                  static_symm_data_total_size);
 
     if (_num_images >= MAX_NUM_IMAGES) {
-        if (my_proc == 0) {
+        if (my_proc == 0) { 
             Error("Number of images must not exceed %lu", MAX_NUM_IMAGES);
         }
     }
@@ -2489,7 +2491,7 @@ void comm_init()
     }
 
     if (enable_get_cache) {
-        cache_all_images =
+        cache_all_images = 
             (struct cache **) malloc(num_procs * sizeof(struct cache *));
     }
 
@@ -2513,7 +2515,7 @@ void comm_init()
             cache_all_images[i]->handle = 0;
             cache_all_images[i]->cache_line_address =
                 malloc(getcache_block_size);
-        }
+        } 
     }
 
     /* create pinned-down/registered memory  and populate
@@ -2537,8 +2539,9 @@ void comm_init()
     if (my_proc == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_INIT,
                      "gasnet max local segment size: %lu, "
-                     "requested caf_shared_memory_size: %lu",
-                     max_local, caf_shared_memory_size);
+                     "requested caf_shared_memory_size: %lu,"
+                     "requested caf_init_heap_size: %lu",
+                     max_local, caf_shared_memory_size, init_heap_size);
     }
 
     /* We observed that when using ibv conduit with FAST segment
@@ -2556,10 +2559,13 @@ void comm_init()
         if (my_proc == 0) {
             Warning("Requested shared memory size (%lu bytes) "
                     "exceeds system's resources by %lu bytes. Setting to %lu "
-                    "bytes instead.",
+                    "bytes instead."
+                    "setting the initial team heap size to %.2lf%%"
+                    "of shared memory",
                     (unsigned long) caf_shared_memory_size,
                     (unsigned long) caf_shared_memory_size - max_local,
-                    (unsigned long) max_local);
+                     (unsigned long) max_local,
+                     0.75);
         }
         caf_shared_memory_size = max_local;
     }
@@ -2570,10 +2576,16 @@ void comm_init()
         caf_shared_memory_pages++;
     caf_shared_memory_size = caf_shared_memory_pages * GASNET_PAGESIZE;
 
+    if(init_heap_size >= caf_shared_memory_size){
+        init_heap_size = 0.75 * caf_shared_memory_size;
+    }
+
+
     /* gasnet everything ignores the last 2 params
      * note that attach is a collective operation */
     ret = gasnet_attach(handlers, nhandlers, caf_shared_memory_size, 0);
     if (ret != GASNET_OK) {
+
         Error("GASNET attach failed");
     }
 
@@ -2696,7 +2708,12 @@ void comm_init()
     child_mem_info->current_heap_usage = 0;
     child_mem_info->max_heap_usage = 0;
     child_mem_info->reserved_heap_usage =
-        init_mem_info->reserved_heap_usage - init_heap_size;
+       common_shared_memory_slot->size - init_heap_size;
+
+
+    /* since we've just allocated a bunch of memory, need to point
+     * common_shared_memory_slot to the updated common slot */
+    common_shared_memory_slot = init_common_slot;
 
     /* start progress thread */
     comm_service_init();
@@ -2716,7 +2733,12 @@ void comm_init()
     initial_team->parent                = NULL;
     initial_team->defined               = 1;
     initial_team->activated             = 1;
-    initial_team->symm_mem_slot.start_addr = common_shared_memory_slot->addr;
+    
+    shared_memory_slot_t * tmp_slot;
+    tmp_slot = common_shared_memory_slot;
+    while(tmp_slot->prev != NULL)
+        tmp_slot = tmp_slot->prev;
+    initial_team->symm_mem_slot.start_addr = tmp_slot->addr;
 
     initial_team->symm_mem_slot.end_addr =
         common_shared_memory_slot->addr + init_heap_size;
@@ -2733,7 +2755,8 @@ void comm_init()
     }
     init_common_slot->size=init_heap_size;
     /* update the init_mem_info*/
-    init_mem_info->reserved_heap_usage =  init_heap_size;
+    init_mem_info->reserved_heap_usage =  init_heap_size + 
+                                        init_mem_info-> current_heap_usage;
 
     current_team = initial_team;
 
@@ -2741,8 +2764,8 @@ void comm_init()
                  "Finished. Waiting for global barrier. Gasnet_Everything is %d. "
                  "init_common_slot->addr=%p, init_common_slot->size=%lu,"
                  "child_common_slot->addr=%p,child_common_slot=%lu",
-                 gasnet_everything, common_shared_memory_slot->addr,
-                 common_shared_memory_slot->size,
+                 gasnet_everything, init_common_slot->addr,
+                 init_common_slot->size,
                  child_common_slot->addr, child_common_slot->size);
 
     comm_barrier_all();
@@ -3822,14 +3845,17 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 
     wait_on_all_pending_accesses();
 
+
     LOAD_STORE_FENCE();
 
     if (current_team == NULL || current_team == initial_team ||
-        current_team->codimension_mapping == NULL) {
+        current_team->codimension_mapping == NULL) 
+    {
         if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
             int i;
             for (i = 0; i < current_team->current_num_images; i++) {
                 if (stopped_image_exists[current_team->codimension_mapping[i]]) {
+                    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,"image %d stopped", i+1);
                 }
             }
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
@@ -3841,11 +3867,14 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
                 /* doesn't reach */
             }
         } else {
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using gasnet_barrier in comm_sync_all");
             gasnet_barrier_notify(barcount, barflag);
             gasnet_barrier_wait(barcount, barflag);
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Gasnet_barrier success");
             barcount += 1;
         }
     } else {
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
         /*Phase 1, init*/
         long nums = current_team->current_num_images;
         long rank = current_team->current_this_image - 1;
@@ -3856,7 +3885,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         int sendpeer_idx, recvpeer_idx;
         long round_bound = ceil(log2((double)nums));
 
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "round_bound = %ld, nums=%ld", round_bound, nums);
+       // LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "round_bound = %ld, nums=%ld", round_bound, nums);
         for(round = 0;round < round_bound; round++){
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "starting round %d\n", round);
             int tmp = pow(2, round);
@@ -3872,9 +3901,9 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
             comm_write((send_dest), &sync_flags[my_proc].s.val,&sending_sense,
                         sizeof(char), 1, NULL);
 
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "waiting for value %d from peer %d in round %d\n",
-                         receiving_sense, recv_peer, round);
+            //LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            //             "waiting for value %d from peer %d in round %d\n",
+            //             receiving_sense, recv_peer, round);
 
             GASNET_BLOCKUNTIL(sync_flags[recv_peer].s.val ||
                               *error_stopped_image_exists ||
@@ -4528,6 +4557,7 @@ void comm_lcb_free(void *ptr)
         return;
     }
 
+     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "the ptr %lu is to be deallocated",ptr);
     if (ptr < coarray_start_all_images[my_proc].addr ||
         ptr >=
         (coarray_start_all_images[my_proc].addr + shared_memory_size)) {
@@ -4537,6 +4567,7 @@ void comm_lcb_free(void *ptr)
     } else {
         /* in shared memory segment, which means it was allocated using
            coarray_asymmetric_allocate_ */
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "the ptr %lu is in shared_memory_segment",ptr);
         coarray_asymmetric_deallocate_(ptr);
     }
 

@@ -46,7 +46,9 @@
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern shared_memory_slot_t *init_common_slot;
+extern shared_memory_slot_t * child_common_slot;
 extern mem_usage_info_t *init_mem_info;
+extern mem_usage_info_t * child_mem_info;
 
 typedef enum {
     OFF = 0,
@@ -216,11 +218,11 @@ void __libcaf_tracers_init(void)
     show_trace_levels();
 }
 
-static void __print_memory_summary(char *mem_usg_str)
+static void __print_memory_summary(char *mem_usg_str, int flag)
 {
-    if (init_mem_info) {
+    if (init_mem_info && flag == 0) {
         snprintf(mem_usg_str, BUF_SIZE,
-                 " current usage: %lu bytes (%.2lf%%), "
+                 "\n current usage: %lu bytes (%.2lf%%), "
                  " max usage: %lu bytes (%.2lf%%)\n",
                  (unsigned long) init_mem_info->current_heap_usage,
                  100 * init_mem_info->current_heap_usage /
@@ -228,6 +230,17 @@ static void __print_memory_summary(char *mem_usg_str)
                  (unsigned long) init_mem_info->max_heap_usage,
                  100 * init_mem_info->max_heap_usage /
                  ((double) init_mem_info->reserved_heap_usage));
+    }
+    if(child_mem_info && flag == 1) {
+        snprintf(mem_usg_str, BUF_SIZE,
+                "\n subteam usage: %lu bytes(%.2lf%%), "
+                " max usage: %lu bytes (%.2lf%%)\n",
+                (unsigned long) child_mem_info->current_heap_usage,
+                100 * child_mem_info->current_heap_usage/
+                ((double) child_mem_info->reserved_heap_usage),
+                (unsigned long) child_mem_info->max_heap_usage,
+                100 * child_mem_info->max_heap_usage /
+                ((double) child_mem_info->reserved_heap_usage));
     }
 }
 
@@ -304,12 +317,12 @@ void __start_timer()
 }
 
 /*This is a function which prints the entire shared memory table*/
-static void __print_shared_memory_slots()
+void __print_shared_memory_slots()
 {
     struct shared_memory_slot *temp_slot;
     fprintf(trace_log_stream,
             "Printing the shared memory slot info of image%lu:\n"
-            "Above common-slot: ", _this_image);
+            "Above init-common-slot: ", _this_image);
     fflush(trace_log_stream);
 
     temp_slot = init_common_slot->prev;
@@ -321,7 +334,7 @@ static void __print_shared_memory_slots()
     fprintf(trace_log_stream, "\n");
     fflush(trace_log_stream);
 
-    fprintf(trace_log_stream, "Common-slot & below: ");
+    fprintf(trace_log_stream, "Initial Common-slot & below: ");
     temp_slot = init_common_slot;
     while (temp_slot) {
         fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
@@ -330,6 +343,36 @@ static void __print_shared_memory_slots()
     }
     fprintf(trace_log_stream, "\n");
     fflush(trace_log_stream);
+
+    /*Print subteam(child-common-slot) memory slots*/
+
+
+    if (child_common_slot) {
+        fprintf(trace_log_stream,
+                "Printing the shared memory subteam slots info of image%lu:\n"
+                "Above the common-slot: ", _this_image);
+        fflush(trace_log_stream);
+
+        temp_slot = child_common_slot->prev;
+
+        while(temp_slot){
+            fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
+                    temp_slot->addr, temp_slot->size, temp_slot->feb);
+            temp_slot = temp_slot->prev;
+        }
+        fprintf(trace_log_stream, "\n");
+        fflush(trace_log_stream);
+
+        fprintf(trace_log_stream, "Subteam Common-slot & below: ");
+        temp_slot = child_common_slot;
+        while (temp_slot) {
+            fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
+                    temp_slot->addr, temp_slot->size, temp_slot->feb);
+            temp_slot = temp_slot->next;
+        }
+        fprintf(trace_log_stream, "\n");
+        fflush(trace_log_stream);
+    }
 }
 
 
@@ -372,13 +415,16 @@ void __libcaf_trace(const char *file, const char *func, int line,
         if (msg_type == LIBCAF_LOG_TIME_SUMMARY) {
             char time_str[BUF_SIZE];
             __trace_time(PRINT_ROLLUP, DUMMY, time_str);
-            strncat(tmp1, time_str, BUF_SIZE - strlen(tmp1) - 1);
+             strncat(tmp1, time_str, BUF_SIZE - strlen(tmp1) - 1);
         }
 
         if (msg_type == LIBCAF_LOG_MEMORY_SUMMARY) {
             char mem_usg_str[BUF_SIZE];
-            __print_memory_summary(mem_usg_str);
+            char mem_usg_str2[BUF_SIZE];
+            __print_memory_summary(mem_usg_str, 0);
+            __print_memory_summary(mem_usg_str2, 1);
             strncat(tmp1, mem_usg_str, BUF_SIZE - strlen(tmp1) - 1);
+            strncat(tmp1, mem_usg_str2, BUF_SIZE - strlen(tmp1) - 1);
         }
 
         strncat(tmp1, "\n", BUF_SIZE - strlen(tmp1) - 1);

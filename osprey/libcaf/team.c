@@ -36,7 +36,7 @@ int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
         team_info_t * team_info_list,
         const team_type current_team);
 
-int __alltoall_exchange_log2(team_info_t * my_tinfo, ssize_t len_t_info,
+int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
         team_info_t * team_info_list,
         const team_type current_team);
 
@@ -102,6 +102,9 @@ team_type *form_team_(int *team_id, team_type * new_team_p, int *new_index)
     if (*new_team_p == NULL) {
         *new_team_p = (team_type) malloc(sizeof(team_type_t));
     }
+
+    memset(*new_team_p, 0, sizeof(team_type_t));
+
     new_team = *new_team_p;
 
     my_tinfo.team_id = *team_id;
@@ -236,14 +239,14 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
                         exchange_teaminfo_buf,
                         current_team);
             break;
-        case ALLTOALL_LOG2:
+        case ALLTOALL_BRUCK:
             retval =
-                __alltoall_exchange_log2(my_tinfo, len_t_info,
+                __alltoall_exchange_bruck(my_tinfo, len_t_info,
                         exchange_teaminfo_buf, current_team);
             break;
         default:
             retval =
-                __alltoall_exchange_primi(my_tinfo, len_t_info,
+                __alltoall_exchange_bruck(my_tinfo, len_t_info,
                         exchange_teaminfo_buf, current_team);
     }
     /*error handling */
@@ -251,7 +254,7 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
 
 int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
         team_info_t * team_info_list,
-        const team_type current_team)
+         const team_type current_team)
 {
     long this_rank, numimages;
     int i, errstatus;
@@ -259,27 +262,82 @@ int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
 
     this_rank = current_team->current_this_image - 1;
     numimages = current_team->current_num_images;
-    // team_info_list = (team_info_t *)coarray_allocatable_allocate_(sizeof(team_info_t)*numimages,NULL);
 
     for (i = 1; i <= numimages; i++) {
         __coarray_write(i, &(team_info_list[this_rank]), my_tinfo,
                 sizeof(team_info_t), 1, NULL);
     }
     comm_sync_all(&(errstatus), sizeof(int), errmsg, 128);
-
-    // *team_info_list_p = team_info_list;
 }
 
-int __alltoall_exchange_log2(team_info_t * my_tinfo, ssize_t len_t_info,
+int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
         team_info_t * team_info_list,
         const team_type current_team)
 {
     long this_rank, numimages;
-    int i, errstatus;
+    long send_peer, recv_peer; //send_peer refer to the image "I" am going to send
+    int round, max_round;
+    int offset, rem_slots, num_data;
+    int reorder_srtidx,cpysize;
+    int *flag_coarray;
+    team_info_t* reorder_buffer;
+    int errstatus;
     char errmsg[128];
 
-    this_rank = current_team->current_this_image - 1;
+
+    this_rank= current_team->current_this_image - 1;
     numimages = current_team->current_num_images;
+
+    reorder_buffer = (team_info_t *)malloc(sizeof(team_info_t)*numimages);
+    memset(reorder_buffer, 0, sizeof(team_info_t)*numimages);
+
+    max_round = ceil(log2((double)numimages));
+
+    /*Flag_coarray indicate if recv_peer have sent data to me */
+    flag_coarray=(int*)coarray_allocatable_allocate_(sizeof(int)*max_round,NULL);
+    memset(flag_coarray, 0, sizeof(int)*max_round);
+    /*step 1, initial data */
+    team_info_list[0].team_id = my_tinfo->team_id;
+    team_info_list[0].index = my_tinfo->index;
+
+    rem_slots = numimages - 1;
+
+    /*step 2, exchange*/
+    for(round=0,offset=0;round < max_round;round++){
+        //in each round, image i send team_info of number min{rem_slots, offset}
+        // to (i-offset) and waiting for the (i+offset)
+        offset = pow(2, round);
+        num_data = offset<=rem_slots?offset:rem_slots;
+        send_peer = (this_rank - offset + numimages)%numimages;
+        recv_peer = (this_rank + offset)%numimages;
+        /*Send to my send_peer*/
+        //need tracing here?
+        comm_write(current_team->codimension_mapping[send_peer],
+                &(team_info_list[numimages-rem_slots]),
+                team_info_list, sizeof(team_info_t)*num_data,
+                1,NULL);
+        comm_write((current_team->codimension_mapping[send_peer]),
+                &(flag_coarray[round]), &num_data,
+                sizeof(int), 1, NULL);
+        /*Wait on my recv_peer*/
+        rem_slots -= num_data;
+        while(flag_coarray[round] != num_data);
+    }
+
+    /*step 3, local reorder*/
+    if(this_rank != 0){
+        reorder_srtidx = numimages - this_rank;
+        cpysize = this_rank;
+        memcpy(reorder_buffer, &(team_info_list[reorder_srtidx]),
+               cpysize*sizeof(team_info_t));
+        memcpy(&(reorder_buffer[cpysize]), team_info_list,
+                reorder_srtidx*sizeof(team_info_t));
+        memcpy(team_info_list, reorder_buffer, numimages*sizeof(team_info_t));
+    }
+
+    /*Clean flag_coarray*/
+    coarray_deallocate_(flag_coarray, NULL);
+    free(reorder_buffer);
 }
 
 int __alltoall_exchange_log2polling(team_info_t * my_tinfo,
@@ -321,6 +379,9 @@ void __setup_subteams(team_type new_team, team_info_t * team_info_t,
             HASH_ADD_INT(hashed_md_list, id, new_node);
         }
     }
+
+    new_team->sibling_list = NULL;
+
     hashed_metadata_node *current_node;
     for (current_node = hashed_md_list; current_node != NULL;
             current_node = current_node->hh.next) {
@@ -457,4 +518,28 @@ void __place_codimension_mapping(team_info_t * team_info_list,
 int team_id_()
 {
     return current_team->team_id;
+}
+
+team_type get_team_(int * distance_p){
+    int distance, i;
+    team_type target_team;
+
+    if(distance_p == NULL){
+        distance = 0;
+    }else{
+        distance = * distance_p;
+    }
+
+    target_team = current_team;
+    i = 0;
+    while(i != distance && target_team->parent != NULL)
+    {
+        target_team = target_team->parent;
+    }
+
+    return target_team;
+}
+
+long image_to_procid(long image, team_type team){
+    return team->codimension_mapping[image-1];
 }

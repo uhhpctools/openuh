@@ -103,13 +103,20 @@ static struct shared_memory_slot *find_shared_memory_slot_above
 static struct shared_memory_slot *find_shared_memory_slot_below
     (struct shared_memory_slot *slot, void *address);
 
-static void join_3_shared_memory_slots(struct shared_memory_slot *slot);
-static void join_with_prev_shared_memory_slot
-    (struct shared_memory_slot *slot);
-static void join_with_next_shared_memory_slot
-    (struct shared_memory_slot *slot);
+static void join_3_shared_memory_slots(
+                            struct shared_memory_slot *slot,
+                            struct shared_memory_slot **common_slot_p);
+static void join_with_prev_shared_memory_slot(
+                            struct shared_memory_slot *slot,
+                            struct shared_memory_slot **common_slot_p);
+static void join_with_next_shared_memory_slot(
+                            struct shared_memory_slot *slot,
+                            struct shared_memory_slot **common_slot_p);
 
-static void empty_shared_memory_slot(struct shared_memory_slot *slot);
+static void empty_shared_memory_slot(
+                            struct shared_memory_slot *slot,
+                            struct shared_memory_slot **common_slot_p);
+
 static void free_prev_slots_recursively(struct shared_memory_slot *slot);
 static void free_next_slots_recursively(struct shared_memory_slot *slot);
 
@@ -477,10 +484,11 @@ static struct shared_memory_slot *find_shared_memory_slot_below
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
     while (slot) {
-        if(slot->addr >= current_team->symm_mem_slot.end_addr){
-            Warning("Address exceeds team heap scope");
+ /*       if(slot->addr >= current_team->symm_mem_slot.end_addr){
+	  Warning("Address exceeds team heap scope %p, %p \n", slot->addr, current_team->symm_mem_slot.end_addr);
             return NULL;
         }
+        */
         if (slot->feb == 1 && slot->addr == address)
             return slot;
         slot = slot->next;
@@ -493,7 +501,8 @@ static struct shared_memory_slot *find_shared_memory_slot_below
 /* Static function called from empty_shared_memory_slot (used in dealloc).
  * Merge slot with the slot above & below it. If any of these slots is the
  * common-slot, the common-slot points to the merged slot */
-static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
+static void join_3_shared_memory_slots(struct shared_memory_slot *slot,
+                                       struct shared_memory_slot **common_slot_p)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
@@ -501,13 +510,8 @@ static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
     slot->prev->next = slot->next->next;
     if (slot->next->next)
         slot->next->next->prev = slot->prev;
-    if (current_team == NULL || current_team->depth == 0) {
-        if (init_common_slot == slot || init_common_slot == slot->next)
-            init_common_slot = slot->prev;
-    } else {
-        if (child_common_slot == slot || child_common_slot == slot->next)
-            child_common_slot = slot->prev;
-    }
+    if (*common_slot_p == slot || *common_slot_p == slot->next)
+        *common_slot_p = slot->prev;
     comm_free(slot->next);
     comm_free(slot);
 
@@ -517,8 +521,9 @@ static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
 /* Static function called from empty_shared_memory_slot (used in dealloc).
  * Merge slot with the slot above it. If any of these slots is the
  * common-slot, the common-slot points to the merged slot */
-static void join_with_prev_shared_memory_slot(struct shared_memory_slot
-                                              *slot)
+static void join_with_prev_shared_memory_slot(
+                                    struct shared_memory_slot *slot,
+                                    struct shared_memory_slot **common_slot_p)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
@@ -526,13 +531,8 @@ static void join_with_prev_shared_memory_slot(struct shared_memory_slot
     slot->prev->next = slot->next;
     if (slot->next)
         slot->next->prev = slot->prev;
-    if (current_team == NULL || current_team->depth == 0) {
-        if (init_common_slot == slot)
-            init_common_slot = slot->prev;
-    } else {
-        if (child_common_slot == slot)
-            child_common_slot = slot->prev;
-    }
+    if (*common_slot_p == slot)
+        *common_slot_p = slot->prev;
     comm_free(slot);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -541,8 +541,9 @@ static void join_with_prev_shared_memory_slot(struct shared_memory_slot
 /* Static function called from empty_shared_memory_slot (used in dealloc).
  * Merge slot with the slot below it. If any of these slots is the
  * common-slot, the common-slot points to the merged slot */
-static void join_with_next_shared_memory_slot(struct shared_memory_slot
-                                              *slot)
+static void join_with_next_shared_memory_slot(
+                                    struct shared_memory_slot *slot,
+                                    struct shared_memory_slot **common_slot_p)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
@@ -552,13 +553,8 @@ static void join_with_next_shared_memory_slot(struct shared_memory_slot
     if (slot->next->next)
         slot->next->next->prev = slot;
     slot->next = slot->next->next;
-    if (current_team == NULL || current_team->depth == 0) {
-        if (init_common_slot == tmp)
-            init_common_slot = slot->prev;
-    } else {
-        if (child_common_slot == tmp)
-            child_common_slot = slot->prev;
-    }
+    if (*common_slot_p == tmp)
+        *common_slot_p = slot;
     comm_free(tmp);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -568,18 +564,19 @@ static void join_with_next_shared_memory_slot(struct shared_memory_slot
  * Empties the slot passed in parameter:
  * 1) set full-empty-bit to 0
  * 2) merge the slot with neighboring empty slots (if found) */
-static void empty_shared_memory_slot(struct shared_memory_slot *slot)
+static void empty_shared_memory_slot(struct shared_memory_slot *slot,
+                                     struct shared_memory_slot **common_slot_p)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
     slot->feb = 0;
     if (slot->prev && (slot->prev->feb == 0) && slot->next
         && (slot->next->feb == 0))
-        join_3_shared_memory_slots(slot);
+        join_3_shared_memory_slots(slot, common_slot_p);
     else if (slot->prev && (slot->prev->feb == 0))
-        join_with_prev_shared_memory_slot(slot);
+        join_with_prev_shared_memory_slot(slot, common_slot_p);
     else if (slot->next && (slot->next->feb == 0))
-        join_with_next_shared_memory_slot(slot);
+        join_with_next_shared_memory_slot(slot, common_slot_p);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
@@ -620,7 +617,7 @@ void coarray_deallocate_(void *var_address, int* statvar)
     /* update heap usage info if MEMORY_SUMMARY trace is enabled */
     mem_info->current_heap_usage -= slot->size;
 
-    empty_shared_memory_slot(slot);
+    empty_shared_memory_slot(slot, &common_slot);
 
     MEMORY_SLOT_SAVE(common_slot);
     PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
@@ -650,7 +647,7 @@ void deallocate_within(void * start_addr, void * end_addr)
 
     while(slot->addr < end_addr && slot != common_slot){
         mem_info->current_heap_usage -=slot->size;
-        empty_shared_memory_slot(slot);
+        empty_shared_memory_slot(slot, &common_slot);
         slot = slot->next;
     }
 
@@ -695,7 +692,7 @@ void coarray_asymmetric_deallocate_(void *var_address)
     /* update heap usage info if MEMORY_SUMMARY trace is enabled */
     mem_info->current_heap_usage -= slot->size;
 
-    empty_shared_memory_slot(slot);
+    empty_shared_memory_slot(slot, &common_slot);
 
     child_common_slot = common_slot;
 
@@ -748,6 +745,31 @@ void coarray_free_all_shared_memory_slots()
     child_mem_info->current_heap_usage = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+}
+
+/* returns size of largest allocatable slot available that is no larger than size, if
+ * size is greater than 0, and the largest available overall if size equals 0
+ * */
+unsigned long largest_allocatable_slot_avail(unsigned long size)
+{
+    unsigned long retval = 0;
+    struct shared_memory_slot *slot;
+
+    if (current_team == NULL || current_team->depth == 0) {
+        slot = init_common_slot;
+    } else {
+        slot = child_common_slot;
+    }
+
+    while (slot && retval < size) {
+        if (slot->feb == 0 && slot->size > retval)
+            retval = slot->size;
+        slot = slot->prev;
+    }
+
+    if (retval > size) retval = size;
+
+    return retval;
 }
 
 /* used for debugging to print memory slots below the specified slot */

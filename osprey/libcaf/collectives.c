@@ -43,6 +43,7 @@
 #include "util.h"
 #include "trace.h"
 #include "profile.h"
+#include "team.h"
 
 #ifdef MPI_AVAIL
 #include "mpi.h"
@@ -64,6 +65,11 @@ int enable_collectives_1sided;
 int enable_collectives_use_canary = 0;
 
 int mpi_collectives_available = 0;
+
+extern team_type current_team;
+
+static int get_proc_id(team_type team, int image_id);
+
 
 #define WORD_SIZE 4
 
@@ -694,7 +700,8 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         }
     }
 
-    if (mpi_collectives_available && !enable_collectives_1sided) {
+    if (mpi_collectives_available && !enable_collectives_1sided &&
+        (current_team == NULL || current_team->depth == 0)) {
         switch (*elem_type) {
             case CAF_LOGICAL1:
             case CAF_INT1:
@@ -756,7 +763,8 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
 
         /* adding barrier here to ensure communication progress before
          * entering MPI reduce routine */
-        comm_barrier_all();
+//        comm_barrier_all();
+        comm_sync_all(NULL, 0, NULL, 0);
         if (dtype != MPI_CHARACTER)
             do_mpi_reduce(source, *size, dtype, mpi_op, *result_image-1);
         else {
@@ -788,28 +796,52 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
 
     k = (sz+1)*elem_size;
     if (collectives_bufsize < k) {
-        if (collectives_max_workbufs < 1) {
-          base_buffer = coarray_allocatable_allocate_((log2_p+1)*(sz+1)*elem_size, NULL);
-          num_bufs = log2_p;
-        } else {
-          base_buffer = coarray_allocatable_allocate_(
-                (MIN(log2_p,collectives_max_workbufs)+1)*(sz+1)*elem_size, NULL);
-          num_bufs = MIN(log2_p, collectives_max_workbufs);
+        /* not enough room in collectives buffer for the base or work
+         * buffer(s) */
+
+        /* find largest number of work buffers that can be accomodated */
+
+        const unsigned long largest_slot =
+            largest_allocatable_slot_avail((log2_p+1)*(sz+1)*elem_size);
+
+        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        base_buffer = coarray_allocatable_allocate_(
+                (num_bufs+1)*(sz+1)*elem_size, NULL);
+
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
     } else if (collectives_bufsize < 2*k) {
-        base_buffer = collectives_buffer;
-        if (collectives_max_workbufs < 1) {
-          work_buffers = coarray_allocatable_allocate_(log2_p*(sz+1)*elem_size, NULL);
-          num_bufs = log2_p;
-        } else {
-          work_buffers = coarray_allocatable_allocate_(
-              (MIN(log2_p,collectives_max_workbufs))*(sz+1)*elem_size, NULL);
-          num_bufs = MIN(log2_p, collectives_max_workbufs);
+        /* not enough room in collectives buffer for the work buffer(s) */
+
+        /* find largest number of work buffers that can be accomodated */
+
+        const unsigned long largest_slot =
+            largest_allocatable_slot_avail(log2_p*(sz+1)*elem_size);
+
+        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        base_buffer = collectives_buffer;
+
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        work_buffers = coarray_allocatable_allocate_(
+                num_bufs*(sz+1)*elem_size, NULL);
+
         work_buffers_alloc = 1;
     } else {
+        /* collectives buffer is large enough to accomodate at least one work
+         * buffer, so use that */
         base_buffer = collectives_buffer;
         work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
         num_bufs = ((int)collectives_bufsize-k)/k;
@@ -949,7 +981,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                                caf_reduction_op_t *op)
 {
     int k;
-    int p, q, r, me, partner;
+    int p, q, r, me, partner, proc_id;
     int i, j, step, log2_q, val;
     int k1, k2;
     int num_bufs;
@@ -981,7 +1013,8 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         }
     }
 
-    if (mpi_collectives_available && !enable_collectives_1sided) {
+    if (mpi_collectives_available && !enable_collectives_1sided &&
+        (current_team == NULL || current_team->depth == 0)) {
         switch (*elem_type) {
             case CAF_LOGICAL1:
             case CAF_INT1:
@@ -1043,7 +1076,8 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
         /* adding barrier here to ensure communication progress before
          * entering MPI reduce routine */
-        comm_barrier_all();
+//        comm_barrier_all();
+        comm_sync_all(NULL, 0, NULL, 0);
         if (dtype != MPI_CHARACTER) {
             MPI_Allreduce(MPI_IN_PLACE, source, *size, dtype, mpi_op,
                           MPI_COMM_WORLD);
@@ -1070,30 +1104,52 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
     k = (sz+1)*elem_size;
     if (collectives_bufsize < k) {
-        if (collectives_max_workbufs < 1) {
-          base_buffer = coarray_allocatable_allocate_((log2_q+1)*(sz+1)*elem_size, NULL);
-          num_bufs = log2_q;
-        } else {
-          base_buffer = coarray_allocatable_allocate_(
-                (MIN(log2_q,collectives_max_workbufs)+1)*(sz+1)*elem_size, NULL);
-          num_bufs = MIN(log2_q, collectives_max_workbufs);
+        /* not enough room in collectives buffer for the base or work
+         * buffer(s) */
+
+        /* find largest number of work buffers that can be accomodated */
+
+        const unsigned long largest_slot =
+            largest_allocatable_slot_avail((log2_q+1)*(sz+1)*elem_size);
+
+        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        base_buffer = coarray_allocatable_allocate_(
+                (num_bufs+1)*(sz+1)*elem_size, NULL);
+
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
     } else if (collectives_bufsize < 2*k) {
+        /* not enough room in collectives buffer for the work buffer(s) */
+
+        /* find largest number of work buffers that can be accomodated */
+
+        const unsigned long largest_slot =
+            largest_allocatable_slot_avail(log2_q*(sz+1)*elem_size);
+
+        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
         base_buffer = collectives_buffer;
 
-        if (collectives_max_workbufs < 1) {
-          work_buffers = coarray_allocatable_allocate_(log2_q*(sz+1)*elem_size, NULL);
-          num_bufs = log2_q;
-        } else {
-          work_buffers = coarray_allocatable_allocate_(
-              (MIN(log2_q,collectives_max_workbufs))*(sz+1)*elem_size, NULL);
-          num_bufs = MIN(log2_q, collectives_max_workbufs);
+        if (collectives_max_workbufs >= 1) {
+          num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        work_buffers = coarray_allocatable_allocate_(
+                num_bufs*(sz+1)*elem_size, NULL);
 
         work_buffers_alloc = 1;
     } else {
+        /* collectives buffer is large enough to accomodate at least one work
+         * buffer, so use that */
         base_buffer = collectives_buffer;
         work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
         num_bufs = ((int)collectives_bufsize-k)/k;
@@ -1112,13 +1168,15 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
     /* last r processes put values to first r processes */
     if (me > q) {
-        partner = me - q;
+      partner = me - q;
+      proc_id = get_proc_id(current_team, partner);
+
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
 
         if (enable_collectives_use_canary) {
 
-            comm_nbi_write( partner-1,
+            comm_nbi_write( proc_id,
                             &((char*)work_buffers)[0],
                             &((char*)base_buffer)[0],
                             sz*elem_size+1 );
@@ -1126,12 +1184,12 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         } else {
 
 
-            comm_write_x( partner-1,
+            comm_write_x( proc_id,
                           &((char*)work_buffers)[0],
                           &((char*)base_buffer)[0],
                           sz*elem_size );
 
-            comm_nbi_write( partner-1,
+            comm_nbi_write( proc_id,
                             &((char*)work_buffers)[sz*elem_size],
                             &((char*)base_buffer)[sz*elem_size],
                             1 );
@@ -1171,6 +1229,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                 step = step*2;
             }
             for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+
                 if (j == 1) {
                     _SYNC_IMAGES(partners, MIN(num_bufs, log2_q), NULL, 0,
                                  NULL, 0);
@@ -1178,22 +1237,23 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                 k1 = (j-1)*(sz+1)+1;
                 k2 = j*(sz+1);
                 partner = partners[j-1];
+		proc_id = get_proc_id(current_team, partner);
 
                 if (enable_collectives_use_canary) {
 
-                comm_nbi_write( partner-1,
+                comm_nbi_write( proc_id,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
                                 sz*elem_size+1 );
 
                 } else {
 
-                comm_write_x( partner-1,
+                comm_write_x( proc_id,
                               &((char*)work_buffers)[(k1-1)*elem_size],
                               &((char*)base_buffer)[0],
                               sz*elem_size );
 
-                comm_nbi_write( partner-1,
+                comm_nbi_write( proc_id,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
@@ -1219,23 +1279,25 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     /* first r processes put values to last r processes */
     if (me <= r) {
         partner = me + q;
+	proc_id = get_proc_id(current_team, partner);
+
         _SYNC_IMAGES (&partner, 1, NULL, 0, NULL, 0);
 
         if (enable_collectives_use_canary) {
 
-            comm_nbi_write( partner-1,
+            comm_nbi_write( proc_id,
                             &((char*)base_buffer)[0],
                             &((char*)base_buffer)[0],
                             sz*elem_size+1 );
 
         } else {
 
-            comm_write_x( partner-1,
+            comm_write_x( proc_id,
                           &((char*)base_buffer)[0],
                           &((char*)base_buffer)[0],
                           sz*elem_size );
 
-            comm_nbi_write( partner-1,
+            comm_nbi_write( proc_id,
                             &((char*)base_buffer)[sz*elem_size],
                             &((char*)base_buffer)[sz*elem_size],
                             1 );
@@ -1273,7 +1335,7 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
 {
     int k;
     int i,j, step, val, log2_p;
-    int p, q, r, me, partner;
+    int p, q, r, me, partner, proc_id;
     int k1, k2;
     int num_bufs;
     int *pot_partners, *partners;
@@ -1304,15 +1366,17 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
 
     if (me == source_image) {
         memcpy(base_buffer, source, sz);
+
         if (me != 1) {
             /* copy from source image to image 1 */
             int root = 1;
+            proc_id = get_proc_id(current_team, root);
 
-                comm_nbi_write( root-1,
-                                &((char*)base_buffer)[0],
-                                &((char*)base_buffer)[0],
-                                sz );
-                _SYNC_IMAGES(&root, 1, NULL, 0, NULL, 0);
+            comm_nbi_write( proc_id,
+                    &((char*)base_buffer)[0],
+                    &((char*)base_buffer)[0],
+                    sz );
+            _SYNC_IMAGES(&root, 1, NULL, 0, NULL, 0);
         }
 
     } else {
@@ -1329,7 +1393,8 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
             if (((me-1)%(2*step)) == 0) {
                 if ((me+step) <= p) {
                     int p = me+step;
-                    comm_nbi_write( me+step-1,
+                    proc_id = get_proc_id(current_team, p);
+                    comm_nbi_write( proc_id,
                                     &((char*)base_buffer)[0],
                                     &((char*)base_buffer)[0],
                                     sz );
@@ -1381,7 +1446,8 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
     source_size = _SIZEOF_8(source_dv);
 
 #ifdef MPI_AVAIL
-    if (mpi_collectives_available && !enable_collectives_1sided) {
+    if (mpi_collectives_available && !enable_collectives_1sided &&
+        (current_team == NULL || current_team->depth == 0)) {
         /* adding barrier here to ensure communication progress before
          * entering MPI Bcast routine */
         comm_barrier_all();
@@ -1397,3 +1463,16 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
 
+
+
+/* translating from image id in 'team' to proc ID */
+static int get_proc_id(team_type team, int image_id)
+{
+    int proc_id = image_id-1;
+
+    if (team!= NULL || team->codimension_mapping != NULL) {
+            proc_id = team->codimension_mapping[image_id-1];
+    }
+
+    return proc_id;
+}

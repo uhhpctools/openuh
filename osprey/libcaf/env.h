@@ -74,7 +74,7 @@
 
 /* these should be overridden by the defaults in cafrun script */
 #define DEFAULT_IMAGE_HEAP_SIZE                 31457280L
-#define DEFAULT_INIT_TEAM_HEAP_SIZE             10485760L
+#define DEFAULT_INIT_TEAM_HEAP_SIZE             20971520L 
 
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);
