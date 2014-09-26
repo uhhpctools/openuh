@@ -73,6 +73,18 @@ typedef enum {
   SYNC_IMAGES_DEFAULT = 2
 } sync_images_t;
 
+typedef enum {
+  SYNC_ALL_DIS_NAIVE_SWAP = 0,
+  SYNC_ALL_2LEVEL_COUNTER_DIS = 1,
+  SYNC_ALL_2LEVEL_SENSEREV_DIS = 2,
+  SYNC_ALL_2LEVEL_MULTIFLAG = 3,
+  SYNC_ALL_2LEVEL_SHAREDCOUNTER = 4,
+  SYNC_ALL_DIS_NAIVE = 5,
+  SYNC_ALL_DIS_MCS_SWAP = 6,
+  SYNC_ALL_DIS_MCS = 7,
+  SYNC_ALL_DEFAULT = 0
+} sync_all_t;
+
 /* different types of rma ordering strategies */
 typedef enum {
   RMA_BLOCKING = 0,
@@ -102,6 +114,8 @@ size_t comm_get_proc_id();
 size_t comm_get_num_procs();
 
 size_t comm_get_node_id(size_t proc);
+
+void *comm_get_sharedptr(void *addr, size_t proc);
 
 /* non-strided (contiguous) read and write operations */
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
