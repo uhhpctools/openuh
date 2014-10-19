@@ -4771,9 +4771,11 @@ static	void	print_expanded_ir(int	ir_idx)
       case Wait_Cmic_Opr:
       case Send_Cmic_Opr:
 #ifdef _UH_COARRAYS
-      case Images_Opr:
-      case Imagestar_Opr:
-      case Memory_Opr:
+      case SyncAll_Opr:
+      case SyncImages_Opr:
+      case SyncImagestar_Opr:
+      case SyncMemory_Opr:
+      case SyncTeam_Opr:
 #endif
       case The_Last_Opr:
          fprintf(debug_file, "%s ", opr_str[IR_OPR(ir_idx)]);

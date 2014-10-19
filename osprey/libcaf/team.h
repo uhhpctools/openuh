@@ -4,6 +4,14 @@
 #include "alloc.h"
 #include "uthash.h"
 
+#define MAX_NUM_TEAM 256
+
+enum PREDEF_TEAM_LEVELS {
+    INITIAL_TEAM = 201,
+    PARENT_TEAM = 202,
+    CURRENT_TEAM = 203
+};
+
 typedef struct team_info {
     int team_id;
     int index;
@@ -34,12 +42,12 @@ typedef struct barrier_data {
 typedef struct team {
     long current_this_image;
     long current_num_images;
-    long * codimension_mapping;
+    long *codimension_mapping;
     barrier_flags_t **intranode_barflags;
     barrier_data_t barrier;
     struct team *parent;
-    long * intranode_set;
-    long * leader_set;
+    long *intranode_set;
+    long *leader_set;
     /* end of first cache line */
     int team_id;
     int leaders_count;
@@ -51,13 +59,17 @@ typedef struct team {
     hashed_cdmapping_t *sibling_list;
     /*heap address for this team */
     mem_block_t symm_mem_slot;
-} team_type_t;
+    alloc_dp_slot *allocated_list;
+} team_type_t, *team_type;
 
-
-typedef team_type_t *team_type;
+typedef struct team_stack_t {
+    team_type stack[MAX_NUM_TEAM];
+    int count;
+} team_stack_t;
 
 enum exchange_algorithm { ALLTOALL_PRIMI, ALLTOALL_LOG2POLLING,
-    ALLTOALL_BRUCK};
+    ALLTOALL_BRUCK
+};
 
 //global pointer to current team
 extern team_type_t *current_team;
@@ -67,15 +79,18 @@ extern team_type initial_team;
 //resist in shared memory, allocated in comm_init
 extern team_info_t *exchange_teaminfo_buf;
 
-void sync_team_(team_type * team_p);
-
 /* new_index == -1 specify no particular new index */
-team_type *form_team_(int *team_id, team_type * new_team_pp, int *new_index);
 
-void change_team_(team_type * new_team_pp);
-void end_change_team_(void);
+void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
+                int *status, int stat_len, char *errmsg, int errmsg_len);
+
+void _CHANGE_TEAM(team_type * new_team_p,
+                  int *status, int stat_len, char *errmsg, int errmsg_len);
+
+void _END_TEAM(int *status, int stat_len, char *errmsg, int errmsg_len);
 
 int team_id_();
-team_type get_team_(int* distance_p);
 
-#endif              //TEAM_H
+team_type get_team_(enum PREDEF_TEAM_LEVELS *team_level);
+
+#endif                          //TEAM_H

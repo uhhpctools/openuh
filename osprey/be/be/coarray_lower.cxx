@@ -400,6 +400,8 @@ static WN * Generate_Call_coarray_strided_write(WN *image,
                                     WN *ordered,
                                     WN *hdl);
 
+static BOOL ST_is_module_initialized(ST *sym);
+
 
 // ====================================================================
 //
@@ -779,6 +781,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                  *      SYNC ALL: forward and backward barrier
                  *      SYNC IMAGES: forward and backward barrier
                  *      SYNC MEMORY: forward and backward barrier
+                 *      SYNC TEAM: forward and backward barrier
+                 *      FORM TEAM: forward and backward barrier
+                 *      CHANGE TEAM: forward and backward barrier
+                 *      END TEAM: forward and backward barrier
                  *      LOCK: backward barrier
                  *      UNLOCK: forward barrier
                  *      CRITICAL: backward barrier
@@ -787,7 +793,11 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 if ( NAME_IS(WN_st(wn), "_SYNC_ALL") ||
                      NAME_IS(WN_st(wn), "_SYNC_IMAGES") ||
-                     NAME_IS(WN_st(wn), "_SYNC_MEMORY") ) {
+                     NAME_IS(WN_st(wn), "_SYNC_MEMORY") ||
+                     NAME_IS(WN_st(wn), "_SYNC_TEAM") ||
+                     NAME_IS(WN_st(wn), "_FORM_TEAM") ||
+                     NAME_IS(WN_st(wn), "_CHANGE_TEAM") ||
+                     NAME_IS(WN_st(wn), "_END_TEAM") ) {
                     WN_INSERT_BlockBefore(blk_node, wn,
                                           WN_CreateBarrier(TRUE,0));
                     WN_INSERT_BlockAfter(blk_node, wn,
@@ -2317,7 +2327,8 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
                     Set_ST_is_not_used(sym);
                 }
             }
-        } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
+        } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym) &&
+                !is_dope(ST_type(sym))) {
             if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
                 gen_save_target_symbol(sym);
                 /* don't allot space for this symbol in global memory, if
@@ -2415,7 +2426,7 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
                                  WN_Intconst(MTYPE_U8, offset))
                               );
                       WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
+                  } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
                       ST *targptr_replace;
                       if (ST_sclass(st1) == SCLASS_COMMON ||
                           ST_sclass(st1) == SCLASS_DGLOBAL) {
@@ -2467,7 +2478,7 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
                                   save_coarray_replace, 0)
                               );
                       WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
+                  } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
                       ST *targptr_replace;
                       if (ST_sclass(st1) == SCLASS_COMMON ||
                           ST_sclass(st1) == SCLASS_DGLOBAL) {
@@ -2521,7 +2532,7 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
                                   WN_COPY_Tree(WN_kid0(wn)), 0)
                               );
                       WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
+                  } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
                       ST *targptr_replace;
                       if (ST_sclass(st1) == SCLASS_COMMON ||
                           ST_sclass(st1) == SCLASS_DGLOBAL) {
@@ -2567,7 +2578,7 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
                       }
                       Fail_FmtAssertion
                         ("Encountered unexpected save coarray symbol in whirl tree.");
-                  } else if (st1 && ST_is_f90_target(st1)) {
+                  } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
                       ST *targptr_replace;
                       if (ST_sclass(st1) == SCLASS_COMMON ||
                           ST_sclass(st1) == SCLASS_DGLOBAL) {
@@ -4635,6 +4646,12 @@ static void handle_caf_call_stmts(
     func_st = WN_st(wn);
 
     if ( NAME_IS(func_st, "_THIS_IMAGE0") ) {
+        if (WN_kid0(wn) && WN_kid0(WN_kid0(wn)) &&
+            (WN_operator(WN_kid0(WN_kid0(wn))) != OPR_INTCONST ||
+            WN_const_val(WN_kid0(WN_kid0(wn))) != 0)) {
+            return;
+            /* doesn't reach */
+        }
         /* IR looks like:
          *   wn:          CALL _THIS_IMAGE0
          *   WN_next(wn): STID t$n
@@ -5842,22 +5859,37 @@ static ST* gen_save_symm_symbol(ST *sym)
 {
     char *new_sym_str;
 
-    if (ST_is_initialized(sym)) {
-        new_sym_str = (char *) alloca(strlen("__SAVE_INIT_SYMM") +
-                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
-                + 20);
+    if (ST_is_initialized(sym) || ST_is_module_initialized(sym)) {
+        if (ST_sclass(sym) == SCLASS_PSTATIC) {
+            new_sym_str = (char *) alloca(strlen("__SAVE_INIT_SYMM") +
+                    strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
+                    + 20);
+            sprintf( new_sym_str, "__%s_2_SAVE_INIT_SYMM_%s_%lu",
+                    ST_name(sym), ST_name(Get_Current_PU_ST()),
+                    (unsigned long) TY_size(ST_type(sym)));
+        } else {
+            new_sym_str = (char *) alloca(strlen("__SAVE_INIT_SYMM") +
+                    strlen(ST_name(sym)) + 20);
+            sprintf( new_sym_str, "__%s_2_SAVE_INIT_SYMM_%lu",
+                    ST_name(sym), (unsigned long) TY_size(ST_type(sym)));
+        }
 
-        sprintf( new_sym_str, "__SAVE_INIT_SYMM_%s_%s_%lu",
-                ST_name(Get_Current_PU_ST()), ST_name(sym),
-                (unsigned long) TY_size(ST_type(sym)));
     } else {
-        new_sym_str = (char *) alloca(strlen("__SAVE_SYMM_") +
-                strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
-                + 20);
+        if (ST_sclass(sym) == SCLASS_PSTATIC) {
+            new_sym_str = (char *) alloca(strlen("__SAVE_SYMM_") +
+                    strlen(ST_name(sym)) + strlen(ST_name(Get_Current_PU_ST()))
+                    + 20);
 
-        sprintf( new_sym_str, "__SAVE_SYMM_%s_%s_%lu",
-                ST_name(Get_Current_PU_ST()), ST_name(sym),
-                (unsigned long) TY_size(ST_type(sym)));
+            sprintf( new_sym_str, "__%s_1_SAVE_SYMM_%s_%lu",
+                    ST_name(sym), ST_name(Get_Current_PU_ST()),
+                    (unsigned long) TY_size(ST_type(sym)));
+        } else {
+            new_sym_str = (char *) alloca(strlen("__SAVE_SYMM_") +
+                    strlen(ST_name(sym)) + 20);
+
+            sprintf( new_sym_str, "__%s_1_SAVE_SYMM_%lu",
+                    ST_name(sym), (unsigned long) TY_size(ST_type(sym)));
+        }
     }
 
     /* make symbol name a legal variable identifier */
@@ -5878,12 +5910,24 @@ static ST* gen_save_symm_symbol(ST *sym)
 
     /* if symbol is initialized, then we also generate a global pointer symbol
      * to it */
-    if (ST_is_initialized(sym)) {
-        char *str = (char *) alloca(8 + strlen(ST_name(sym)) +
-                     strlen(ST_name(Get_Current_PU_ST())));
+    if (ST_is_initialized(sym) || ST_is_module_initialized(sym)) {
+        char *str;
+        if (1 /*ST_sclass(sym) == SCLASS_PSTATIC*/) {
+            str = (char *) alloca(20 + strlen("__SAVE_DATA_PTR") +
+                         strlen(ST_name(sym)) +
+                         strlen(ST_name(Get_Current_PU_ST())));
 
-        sprintf( str, "__%s_%s_ptr", ST_name(Get_Current_PU_ST()),
-                 ST_name(sym));
+            sprintf( str, "__%s_3_SAVE_DATA_PTR_%s_%lu",
+                    ST_name(sym), ST_name(Get_Current_PU_ST()),
+                    (unsigned long) TY_size(ST_type(sym)));
+        } else {
+            str = (char *) alloca(20 + strlen("__SAVE_DATA_PTR") +
+                         strlen(ST_name(sym)));
+
+            sprintf( str, "__%s_3_SAVE_DATA_PTR_%s_%lu",
+                    ST_name(sym), ST_name(Get_Current_PU_ST()),
+                    (unsigned long) TY_size(ST_type(sym)));
+        }
 
         /* make symbol name a legal variable identifier */
         char *s = str;
@@ -6212,3 +6256,31 @@ recurse:
     }
 }
 
+static BOOL ST_is_module_initialized(ST *sym)
+{
+    BOOL retval = FALSE;
+    ST *st_base = ST_base(sym);
+
+    if (st_base != NULL &&
+        strncmp(ST_name(st_base), ".data_init.in.", 14 ) == 0) {
+        retval = TRUE;
+    } else if (st_base != NULL &&
+        strncmp(ST_name(st_base), ".data.in.", 9) == 0) {
+        /* try to identify variables containing a dope vector which should be
+         * treated as initialized */
+        if (TY_kind(ST_type(sym)) == KIND_STRUCT) {
+            retval = TRUE;
+        } else if (TY_kind(ST_type(sym)) == KIND_ARRAY) {
+            INT elem_type = ST_type(sym);
+            while ( TY_kind(elem_type) == KIND_ARRAY ) {
+                elem_type = TY_etype(elem_type);
+            }
+            /* this is conservative */
+            if (TY_kind(elem_type) == KIND_STRUCT)
+                retval = TRUE;
+        }
+    }
+
+
+    return retval;
+}

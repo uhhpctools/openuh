@@ -64,6 +64,7 @@ int collectives_max_workbufs = 0;
 int enable_collectives_1sided;
 int enable_collectives_use_canary = 0;
 
+int reduction_2level = 0;
 int mpi_collectives_available = 0;
 
 extern team_type current_team;
@@ -668,7 +669,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
                                  caf_reduction_op_t *op)
 {
     int k;
-    int p, q, r, me, partner;
+    int p, q, r, me, partner, proc_id;
     int i, j, step, log2_p, val;
     int k1, k2;
     int num_bufs;
@@ -810,8 +811,8 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size, NULL);
+        base_buffer = coarray_allocatable_allocate_new_(
+                (num_bufs+1)*(sz+1)*elem_size,NULL, NULL);
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
@@ -835,8 +836,8 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        work_buffers = coarray_allocatable_allocate_(
-                num_bufs*(sz+1)*elem_size, NULL);
+        work_buffers = coarray_allocatable_allocate_new_(
+                num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
     } else {
@@ -890,21 +891,22 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
             k2 = j*(sz+1);
 
             if (me > partner) {
+	        proc_id = get_proc_id(current_team, partner);
 
-                if (enable_collectives_use_canary) {
+	        if (enable_collectives_use_canary) {
 
-                comm_nbi_write( partner-1,
+                comm_nbi_write( proc_id,
                                 &((char*)work_buffers)[(k1-1)*elem_size],
                                 &((char*)base_buffer)[0],
                                 sz*elem_size+1 );
                 } else {
 
-                comm_write_x( partner-1,
+                comm_write_x( proc_id,
                               &((char*)work_buffers)[(k1-1)*elem_size],
                               &((char*)base_buffer)[0],
                               sz*elem_size );
 
-                comm_nbi_write( partner-1,
+                comm_nbi_write( proc_id,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
@@ -938,22 +940,22 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         memcpy(source, base_buffer, sz*elem_size);
     } else if (me == 1) {
         _SYNC_IMAGES(result_image, 1, NULL, 0, NULL, 0);
-
+        proc_id = get_proc_id(current_team, *result_image);
         if (enable_collectives_use_canary) {
 
-            comm_nbi_write( *result_image-1,
+            comm_nbi_write( proc_id,
                             &((char*)base_buffer)[0],
                             &((char*)base_buffer)[0],
                             sz*elem_size+1 );
 
         } else {
 
-            comm_write_x( *result_image-1,
+            comm_write_x( proc_id,
                           &((char*)base_buffer)[0],
                           &((char*)base_buffer)[0],
                           sz*elem_size );
 
-            comm_nbi_write( *result_image-1,
+            comm_nbi_write( proc_id,
                             &((char*)base_buffer)[sz*elem_size],
                             &((char*)base_buffer)[sz*elem_size],
                             1 );
@@ -1093,8 +1095,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     }
 #endif
 
-#if 1
-    if (current_team && (current_team->leaders_count > 1  ||
+    if (reduction_2level && current_team && (current_team->leaders_count > 1  ||
           current_team->leaders_count < _num_images) ) {
         co_reduce_predef_to_all_2level__(source, size, charlen, elem_type, op);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
@@ -1103,7 +1104,6 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
         /* does not reach */
     }
-#endif
 
     me = _this_image;
     p = _num_images;
@@ -1134,8 +1134,8 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size, NULL);
+        base_buffer = coarray_allocatable_allocate_new_(
+                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
@@ -1159,8 +1159,8 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        work_buffers = coarray_allocatable_allocate_(
-                num_bufs*(sz+1)*elem_size, NULL);
+        work_buffers = coarray_allocatable_allocate_new_(
+                num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
     } else {
@@ -1425,8 +1425,8 @@ void co_reduce_predef_to_all_2level__( void *source, int *size, int *charlen,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size, NULL);
+        base_buffer = coarray_allocatable_allocate_new_(
+                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
@@ -1450,8 +1450,8 @@ void co_reduce_predef_to_all_2level__( void *source, int *size, int *charlen,
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
 
-        work_buffers = coarray_allocatable_allocate_(
-                num_bufs*(sz+1)*elem_size, NULL);
+        work_buffers = coarray_allocatable_allocate_new_(
+                num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
     } else {
@@ -1708,7 +1708,7 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
 
     k = sz;
     if (collectives_bufsize < k) {
-        base_buffer = coarray_allocatable_allocate_(sz, NULL);
+        base_buffer = coarray_allocatable_allocate_new_(sz, NULL, NULL);
         base_buffer_alloc = 1;
     } else {
         base_buffer = collectives_buffer;

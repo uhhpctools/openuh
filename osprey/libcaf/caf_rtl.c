@@ -228,12 +228,14 @@ void __coarray_nbread(size_t image, void *src, void *dest, size_t nbytes,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl)
@@ -254,12 +256,14 @@ void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* reads nbytes from src on proc 'proc_id' into local dest */
     CALLSITE_TIMED_TRACE(COMM, READ, comm_read, proc_id, src, dest,
@@ -277,12 +281,14 @@ void __coarray_write_from_lcb(size_t image, void *dest, void *src,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -301,12 +307,14 @@ void __coarray_write(size_t image, void *dest, void *src,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -332,12 +340,14 @@ void __coarray_strided_nbread(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl)
@@ -404,12 +414,14 @@ void __coarray_strided_read(size_t image,
 
     PROFILE_FUNC_ENTRY(CAFPROF_GET);
 
+    check_remote_image(image);
+
     size_t proc_id = image-1;
     if(current_team != NULL || current_team->codimension_mapping != NULL){
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig =
@@ -461,6 +473,8 @@ void __coarray_strided_write_from_lcb(size_t image,
     int local_is_contig = 0;
     int i;
 
+    check_remote_image(image);
+
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
     size_t proc_id = image-1;
@@ -468,7 +482,7 @@ void __coarray_strided_write_from_lcb(size_t image,
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -527,6 +541,8 @@ void __coarray_strided_write(size_t image,
     int local_is_contig = 0;
     int i;
 
+    check_remote_image(image);
+
     PROFILE_FUNC_ENTRY(CAFPROF_PUT);
 
     size_t proc_id = image-1;
@@ -534,7 +550,7 @@ void __coarray_strided_write(size_t image,
         proc_id = get_proc_id(current_team, image);
     }
 
-    check_remote_image(proc_id+1);
+    check_remote_image_initial_team(proc_id+1);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
@@ -2282,7 +2298,7 @@ void _EVENT_POST(event_t * event, int *image)
                              sizeof(event_t), img - 1);
     } else {
         event_t result, inc = 1;
-        check_remote_image(img);
+        check_remote_image_initial_team(img);
         check_remote_address(img, event);
 
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
@@ -2318,7 +2334,7 @@ void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
     if (*image == 0) {
         *state = (int) (*event) != 0;
     } else {
-        check_remote_image(img);
+        check_remote_image_initial_team(img);
         check_remote_address(img, event);
         switch (state_len) {
         case 1:
@@ -2386,7 +2402,7 @@ void _EVENT_WAIT(event_t * event, int *image)
             comm_service();
         } while (1);
     } else {
-        check_remote_image(img);
+        check_remote_image_initial_team(img);
         check_remote_address(img, event);
 
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
@@ -2437,6 +2453,18 @@ void _SYNC_MEMORY(int *status, int stat_len, char *errmsg, int errmsg_len)
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
+void _SYNC_TEAM(team_type *team_p, int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_SYNC_STATEMENTS);
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_team, *team_p, status, stat_len,
+                         errmsg, errmsg_len);
+
+    PROFILE_FUNC_EXIT(CAFPROF_SYNC_STATEMENTS);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
 void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
                   char *errmsg, int errmsg_len)
 {
@@ -2454,13 +2482,14 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
         hashed_image_list_t *check_duplicate;
 
         /* get image id with respect to initial team */
+        check_remote_image(images[i]);
         img = images[i];
         if(current_team != NULL ||
            current_team->codimension_mapping != NULL) {
             img = get_proc_id(current_team, images[i])+1;
         }
 
-        check_remote_image(img);
+        check_remote_image_initial_team(img);
         HASH_FIND_INT(image_list, &img, check_duplicate);
         if (check_duplicate != NULL) {
             new_image_count--;
@@ -2475,6 +2504,7 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
 #else
     int *new_image_list = malloc(image_count * sizeof *new_image_list);
     for (i = 0; i < image_count; i++) {
+        check_remote_image(images[i]);
         int img = images[i];
         /* get image id with respect to initial team */
         if(current_team != NULL ||
@@ -2482,7 +2512,7 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
             img = get_proc_id(current_team, images[i])+1;
         }
         new_image_list[i] = img;
-        check_remote_image(new_image_list[i]);
+        check_remote_image_initial_team(new_image_list[i]);
     }
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, new_image_list,
                          new_image_count, status, stat_len, errmsg, errmsg_len);
@@ -2506,6 +2536,31 @@ void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
 
     PROFILE_FUNC_EXIT(CAFPROF_SYNC_STATEMENTS);
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+int _NUM_IMAGES1(team_type *team)
+{
+    int num_images;
+
+    if (team && *team) {
+        num_images = (*team)->current_num_images;
+    } else {
+        Error("NULL team argument encountered for _NUM_IMAGES1");
+    }
+
+    return num_images;
+}
+
+int _NUM_IMAGES2(int *team_id)
+{
+    hashed_cdmapping_t *sibling_team;
+    HASH_FIND_INT(current_team->sibling_list, team_id, sibling_team);
+
+    if (sibling_team == NULL) {
+        Error("Could not find team_id=%d for current team", *team_id);
+    }
+
+    return sibling_team->num_images;
 }
 
 int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub)
@@ -2555,7 +2610,132 @@ int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub)
         return 0;
 }
 
-void _THIS_IMAGE1(DopeVectorType * ret, DopeVectorType * diminfo)
+int _IMAGE_INDEX1(DopeVectorType * diminfo, DopeVectorType * sub,
+        team_type *team)
+{
+    if (diminfo == NULL || sub == NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "image_index failed for "
+                     "&diminfo=%p, &codim=%p", diminfo, sub);
+    }
+
+    if (team == NULL || *team == NULL) {
+        Error("NULL team argument encountered for _IMAGE_INDEX1");
+    }
+
+    int num_images = (*team)->current_num_images;
+
+    int i;
+    int rank = diminfo->n_dim;
+    int corank = diminfo->n_codim;
+    int image = 0;
+    int lb_codim, ub_codim;
+    int *codim = (int *) sub->base_addr.a.ptr;
+    int str_m = 1;
+
+
+    if (sub->dimension[0].extent != corank) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "image_index failed due to corank mismatch "
+                     " (was %d, should be %d)",
+                      corank, sub->dimension[0].extent);
+        exit(1);
+    }
+
+    for (i = 0; i < corank; i++) {
+        int extent;
+        str_m = diminfo->dimension[rank + i].stride_mult;
+        if (i == (corank - 1))
+            extent = (num_images - 1) / str_m + 1;
+        else
+            extent = diminfo->dimension[rank + i].extent;
+        lb_codim = diminfo->dimension[rank + i].low_bound;
+        ub_codim = diminfo->dimension[rank + i].low_bound + extent - 1;
+        if (codim[i] >= lb_codim
+            && (ub_codim == 0 || codim[i] <= ub_codim)) {
+            image += str_m * (codim[i] - lb_codim);
+        } else {
+            return 0;
+        }
+    }
+
+    if (num_images > image)
+        return image + 1;
+    else
+        return 0;
+}
+
+int _IMAGE_INDEX2(DopeVectorType * diminfo, DopeVectorType * sub, int *team_id)
+{
+    if (diminfo == NULL || sub == NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "image_index failed for "
+                     "&diminfo=%p, &codim=%p", diminfo, sub);
+    }
+
+    hashed_cdmapping_t *sibling_team;
+    HASH_FIND_INT(current_team->sibling_list, team_id, sibling_team);
+
+    if (sibling_team == NULL) {
+        Error("Could not find team_id=%d for current team", *team_id);
+    }
+
+    int num_images = sibling_team->num_images;
+
+    int i;
+    int rank = diminfo->n_dim;
+    int corank = diminfo->n_codim;
+    int image = 0;
+    int lb_codim, ub_codim;
+    int *codim = (int *) sub->base_addr.a.ptr;
+    int str_m = 1;
+
+
+    if (sub->dimension[0].extent != corank) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "image_index failed due to corank mismatch "
+                     " (was %d, should be %d)",
+                      corank, sub->dimension[0].extent);
+        exit(1);
+    }
+
+    for (i = 0; i < corank; i++) {
+        int extent;
+        str_m = diminfo->dimension[rank + i].stride_mult;
+        if (i == (corank - 1))
+            extent = (num_images - 1) / str_m + 1;
+        else
+            extent = diminfo->dimension[rank + i].extent;
+        lb_codim = diminfo->dimension[rank + i].low_bound;
+        ub_codim = diminfo->dimension[rank + i].low_bound + extent - 1;
+        if (codim[i] >= lb_codim
+            && (ub_codim == 0 || codim[i] <= ub_codim)) {
+            image += str_m * (codim[i] - lb_codim);
+        } else {
+            return 0;
+        }
+    }
+
+    if (num_images > image)
+        return image + 1;
+    else
+        return 0;
+}
+
+int _THIS_IMAGE0(team_type *team)
+{
+    int image;
+
+    if (team && *team) {
+        image = (*team)->current_this_image;
+    } else {
+        image = _this_image;
+    }
+
+    return image;
+}
+
+void _THIS_IMAGE1(DopeVectorType *ret, DopeVectorType *diminfo, team_type *team)
 {
     int i;
     int corank = diminfo->n_codim;
@@ -2571,11 +2751,11 @@ void _THIS_IMAGE1(DopeVectorType * ret, DopeVectorType * diminfo)
     ret->dimension[0].stride_mult = 1;
     ret_int = (int *) ret->base_addr.a.ptr;
     for (i = 1; i <= corank; i++) {
-        ret_int[i - 1] = _THIS_IMAGE2(diminfo, &i);
+        ret_int[i - 1] = _THIS_IMAGE2(diminfo, &i, team);
     }
 }
 
-int _THIS_IMAGE2(DopeVectorType * diminfo, int *sub)
+int _THIS_IMAGE2(DopeVectorType *diminfo, int *sub, team_type *team)
 {
     int img = _this_image - 1;
     int rank = diminfo->n_dim;
@@ -2593,6 +2773,12 @@ int _THIS_IMAGE2(DopeVectorType * diminfo, int *sub)
     if (dim < 1 || dim > corank) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
                      "this_image failed as %d dim" " is not present", dim);
+    }
+
+    if (team && *team) {
+        img = (*team)->current_this_image - 1;
+    } else {
+        img = _this_image - 1;
     }
 
     lb_codim = diminfo->dimension[rank + dim - 1].low_bound;
@@ -2822,18 +3008,40 @@ static void local_dest_strided_copy(void *src, void *dest,
 }
 
 /*
- * image, assumed to be with respect to initial team, should be between 1 ..
- * NUM_IMAGES
+ * image, assumed to be with respect to current team, should be between 1 ..
+ * NUM_IMAGES(current team)
  *
  */
 int check_remote_image(size_t image)
 {
     const int error_len = 255;
     char error_msg[error_len];
+    if (image < 1 || image > _num_images) {
+        memset(error_msg, 0, error_len);
+        sprintf(error_msg,
+                "Image %lu is out of range of team. Should be "
+                "in [ %u ... %lu ].",
+                (unsigned long) image, 1,
+                (unsigned long) _num_images);
+        Error(error_msg);
+        /* should not reach */
+    }
+}
+
+/*
+ * image, assumed to be with respect to initial team, should be between 1 ..
+ * NUM_IMAGES
+ *
+ */
+
+int check_remote_image_initial_team(size_t image)
+{
+    const int error_len = 255;
+    char error_msg[error_len];
     if (image < 1 || image > initial_team->current_num_images) {
         memset(error_msg, 0, error_len);
         sprintf(error_msg,
-                "Image %lu is out of range. Should be in [ %u ... %lu ].",
+                "Image %lu is out of range of initial team. Should be in [ %u ... %lu ].",
                 (unsigned long) image, 1,
                 (unsigned long) initial_team->current_num_images);
         Error(error_msg);

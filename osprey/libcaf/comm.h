@@ -30,6 +30,7 @@
 #define _COMM_H
 
 
+#include "team.h"
 #include "uthash.h"
 
 /* use this if we want the runtime to skip over duplicate images in the sync
@@ -82,7 +83,7 @@ typedef enum {
   SYNC_ALL_DIS_NAIVE = 5,
   SYNC_ALL_DIS_MCS_SWAP = 6,
   SYNC_ALL_DIS_MCS = 7,
-  SYNC_ALL_DEFAULT = 0
+  SYNC_ALL_DEFAULT = 7
 } sync_all_t;
 
 /* different types of rma ordering strategies */
@@ -190,6 +191,8 @@ void comm_lcb_free(void *ptr);
 
 /* barriers */
 void comm_sync_all(int *status, int stat_len, char *errmsg,
+                   int errmsg_len);
+void comm_sync_team(team_type_t *team, int *status, int stat_len, char *errmsg,
                    int errmsg_len);
 
 

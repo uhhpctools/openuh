@@ -14723,9 +14723,8 @@ static void translate_uh_dv_component(opnd_type           *result_opnd,
       ATD_PTR_IDX(ptee_idx) = ptr_idx;
 
       if (ATD_ARRAY_IDX(tmp_dv_idx) != NULL_IDX) {
-         ATD_ARRAY_IDX(ptee_idx) = capture_bounds_from_dv(tmp_dv_idx,
-                                                          line,
-                                                          col);
+         int t = capture_bounds_from_dv(tmp_dv_idx, line, col);
+         ATD_ARRAY_IDX(ptee_idx) =  t;
       }
 
       if (ATD_IM_A_DOPE(pe_dim_ref_attr)) {

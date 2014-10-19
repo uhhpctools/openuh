@@ -152,7 +152,7 @@ void uhcaf_debug_dope(DopeVectorType *dopev)
 
     memset(str, 0, 800);
 
-    sprintf(str, "dope vector: \n");
+    sprintf(str, "dope vector (at %p): \n", dopev);
     sprintf(&str[strlen(str)], "  base address: %p\n", dopev->base_addr.a.ptr);
     sprintf(&str[strlen(str)], "     elem len : %ld\n", (long) dopev->base_addr.a.el_len >> 3);
     sprintf(&str[strlen(str)], "         assoc: %d\n", dopev->assoc);
