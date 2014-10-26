@@ -8,8 +8,7 @@
 */
 
 /*
-  Copyright (C)
-  Oak Ridge National Laboratory
+  Copyright (C) Oak Ridge National Laboratory
 */
 
 /*

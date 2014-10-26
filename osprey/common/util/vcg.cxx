@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2014 University of Houston. All Rights Reserved.
+ */
+
 #include <errno.h>
 #include <stdlib.h>
 #include <malloc.h>

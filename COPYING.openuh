@@ -1,0 +1,72 @@
+The following files and directories contain material owned by the University
+of Houston:
+
+    COPYING.openuh
+    Makefile.in
+    configure.ac
+    install_compiler.sh
+    osprey/Makefile.gsetup.in
+    osprey/be/be/Makefile.gbase
+    osprey/be/be/coarray_lower.cxx
+    osprey/be/be/coarray_lower.h
+    osprey/be/be/driver.cxx
+    osprey/be/be/driver_util.cxx
+    osprey/scripts/
+    osprey/driver/
+    osprey/common/com/
+    osprey/crayf90/fe90/
+    osprey/crayf90/sgi/
+    osprey/clibinc/cray/dopevec.h
+    osprey/be/vho/f90_l ower.cxx
+    osprey/be/be/omp_lower.cxx
+    osprey/be/com/wn_mp.cxx
+    osprey/be/com/wn_mp.h
+    osprey/be/com/wn_cyg_instrument.cxx
+    osprey/be/opt/opt_cfg.cxx
+    osprey/be/opt/opt_alias_analysis.cxx
+    osprey/ipa/common/ipc_link.cxx
+    osprey/ipa/inline/inline_driver.cxx
+    osprey/ipa/local/ipl_main.cxx
+    osprey/ipa/local/ipl_summarize_util.cxx
+    osprey/libcaf-extra/
+    osprey/libcaf/
+    osprey/libf/fort/allocation.c
+    osprey/libf/fort/stop.c
+    osprey/libfi/array/array.gmakeinclude
+    osprey/libfi/array/array.makeinclude
+    osprey/linux/make/gcommondefs
+    osprey/linux/make/gcommonrules
+    osprey/libfi/array/is_contiguous.c
+    osprey/libfi/array/sizeof.c
+    osprey/libfi/char/f90_stop.c
+    osprey/libfi/mathlb/iso_fortran_env.F90
+    osprey/libfortran/Makefile.gbase
+    osprey/libdwarf/libdwarf/dwarf.h
+    osprey/libdwarf/libdwarf/pro_forms.c
+
+These materials are licensed by the University of Houston under the terms
+below:
+
+Copyright (c) 2015, University of Houston
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

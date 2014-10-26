@@ -1,6 +1,10 @@
 //-*-c++-*-
 
 /*
+ * Copyright 2013 University of Houston.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 

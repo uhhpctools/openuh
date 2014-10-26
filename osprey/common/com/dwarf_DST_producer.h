@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2014 University of Houston. All Rights Reserved.
+ */
+
+/*
  * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
  */
 

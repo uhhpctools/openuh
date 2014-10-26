@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2011, 2013. University of Houston. All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 

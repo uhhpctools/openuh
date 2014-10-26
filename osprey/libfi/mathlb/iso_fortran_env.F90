@@ -1,3 +1,7 @@
+! Copyright (C) 2014 University of Houston.
+! Contact information:
+! http://www.cs.uh.edu/~hpctools
+
 !
 ! Copyright (c) 2006. QLogic Corporation.  All rights reserved.
 !
@@ -18,9 +22,6 @@
 ! accompanying license agreement. QLogic Corporation, 26650 Aliso Viejo 
 ! Parkway, Aliso Viejo, CA 92656.
 !
-! Copyright (C) 2012 University of Houston.
-! Contact information:
-! http://www.cs.uh.edu/~hpctools
 
 !
 ! Intrinsic module specified by ISO/IEC 1539-1:2004 Section 13.8.2

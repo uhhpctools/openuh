@@ -1,4 +1,8 @@
 /*
+  Copyright (C) 2010-2014 University of Houston.  All Rights Reserved.
+*/
+
+/*
   Copyright UT-Battelle, LLC.  All Rights Reserved. 2014
   Oak Ridge National Laboratory
 */

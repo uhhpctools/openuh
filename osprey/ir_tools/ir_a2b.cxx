@@ -1,4 +1,8 @@
 /*
+ * Copyright 2013 University of Houston.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004 PathScale, Inc.  All Rights Reserved.
  */
 

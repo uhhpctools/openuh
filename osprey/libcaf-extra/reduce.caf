@@ -1,3 +1,4 @@
+! Copyright (C) 2014 University of Houston. All Rights Reserved.
 
       module caf_reduction_types
         ! element types

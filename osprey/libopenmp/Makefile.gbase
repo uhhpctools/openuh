@@ -2,6 +2,8 @@
 #
 #  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
 #
+#  Copyright (C) 2014 University of Houston.  All Rights Reserved.
+#
 #  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2003 - 2009 Tsinghua University.

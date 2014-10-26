@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008. University of Houston. All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it

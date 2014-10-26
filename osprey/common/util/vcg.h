@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2014 University of Houston. All Rights Reserved.
+ */
+
 // Generic vcg graph dumping class 
 
 #ifndef __VCG_H

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 University of Houston.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
