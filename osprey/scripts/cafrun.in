@@ -32,6 +32,8 @@ this="`basename $0`"
 
 default_heap_size=@DEFAULT_CAF_HEAP_SIZE@
 
+default_init_heap_size=@DEFAULT_CAF_INIT_TEAM_HEAP_SIZE@
+
 version_num=@OPENUH_VERSION@
 
 GASNET_HOME=@GASNET_HOME@
@@ -86,6 +88,12 @@ Environment Variables:
                       of remotely-accessible data
                          Can be set with --image-heap
 
+   UHCAF_INIT_TEAM_HEAP_SIZE
+                      Specifies heap size per image for dynamic allocation
+                      of remotely-accessible data which is reserved for the
+                      initial team.
+                         Can be set with --init-team-heap
+
    UHCAF_PROGRESS_THREAD
                       Set to 1 to enable progress thread for CAF runtime. By
                       default it is 0.  Note: This is only used for GASNet to
@@ -99,6 +107,13 @@ Environment Variables:
    UHCAF_NB_XFER_LIMIT
                       Specifies the maximum number of outstanding non-blocking
                       PUT or GET transfers. By default it is 16.
+
+   UHCAF_TEAM_BARRIER_ALGORITHM
+                      Specifies the algorithm to use for sync all operation
+                      when executing in a team block, or for sync team:
+                      dissemination, 2level_multiflag_dissem, or
+                      2level_sharedcounter_dissem.  By default it is
+                      dissemination.
 
    UHCAF_SYNC_IMAGES_ALGORITHM
                       Specifies the algorithm to use for sync images
@@ -141,6 +156,15 @@ Environment Variables:
                       communication. Any value less than 1 means as many work
                       buffers as can be accomodated.  By default, it is set to
                       0.
+
+   UHCAF_COLLECTIVES_2LEVEL
+                      Enables a 2-level collectives algorithm. For reduce-to-all,
+                      the results are collected on the "leader" image within each
+                      node, and then the reduction follows among the leaders
+                      using a recursive doubling algorithm. For broadcast, results
+                      from root image are first broadcast to other "leader" images,
+                      and then each leader will write to its non-leader images.
+                      By default, it is set to 0.
 
 
    ---------------------------------------------------------------------------
@@ -231,11 +255,17 @@ Where OPTIONS are:
   --num-images=N
   -n,-np N            N is number of images to use
 
-  --image-heap=I      I is heap size per image for dynamic allocation of
+  --image-heap=H      H is heap size per image for dynamic allocation of
                       remotely-accessible data. It may be an integer which
                       indicates size in bytes, or it may have the suffixes
                       K, M, G which indicates size in kilobytes, megabytes,
                       and gigabytes, respectively.
+
+  --init-team-heap=I  I is heap size per image for dynamic allocation of
+                      remotely-accessible data in initial team. It may be an
+                      integer which indicates size in bytes, or it may have
+                      the suffixes K, M, G which indicates size in kilobytes,
+                      megabytes, and gigabytes, respectively.
 
   --verbose,-v        Verbose output
 
@@ -313,6 +343,9 @@ add_uhcaf_envs_to_list()
     if [ -n "$UHCAF_IMAGE_HEAP_SIZE" ]; then
         add_to_env_list UHCAF_IMAGE_HEAP_SIZE
     fi
+    if [ -n "$UHCAF_INIT_TEAM_HEAP_SIZE" ]; then
+        add_to_env_list UHCAF_INIT_TEAM_HEAP_SIZE
+    fi
     if [ -n "$UHCAF_PROGRESS_THREAD" ]; then
         add_to_env_list UHCAF_PROGRESS_THREAD
     fi
@@ -334,11 +367,17 @@ add_uhcaf_envs_to_list()
     if [ -n "$UHCAF_CO_REDUCE_ALGORITHM" ]; then
         add_to_env_list UHCAF_CO_REDUCE_ALGORITHM
     fi
+    if [ -n "$UHCAF_TEAM_BARRIER_ALGORITHM" ]; then
+        add_to_env_list UHCAF_TEAM_BARRIER_ALGORITHM
+    fi
     if [ -n "$UHCAF_SYNC_IMAGES_ALGORITHM" ]; then
         add_to_env_list UHCAF_SYNC_IMAGES_ALGORITHM
     fi
     if [ -n "$UHCAF_ALLOC_BYTE_ALIGNMENT" ]; then
         add_to_env_list UHCAF_ALLOC_BYTE_ALIGNMENT
+    fi
+    if [ -n "$UHCAF_COLLECTIVES_2LEVEL" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_2LEVEL
     fi
     if [ -n "$UHCAF_SHARED_MEM_RMA_BYPASS" ]; then
         add_to_env_list UHCAF_SHARED_MEM_RMA_BYPASS
@@ -511,6 +550,21 @@ for arg in "$@" ; do
           fi
         fi
         ;;
+      --init-team-heap=*)
+        image_init_heap=`echo UhCaf$arg | sed -e 's/UhCaf--init-team-heap=//g'`
+
+        if [[ ! $image_init_heap =~ ^[0-9]+$ ]]; then
+          if [[  $image_init_heap =~ ^[0-9]+[kK]$ ]]; then
+            image_init_heap=$((${image_init_heap%?}*1024))
+          elif [[ $image_init_heap =~ ^[0-9]+[mM]$ ]]; then
+            image_init_heap=$((${image_init_heap%?}*1024*1024))
+          elif [[ $image_init_heap =~ ^[0-9]+[gG]$ ]]; then
+            image_init_heap=$((${image_init_heap%?}*1024*1024*1024))
+          else
+            print_error "Invalid per-image init team heap size: $image_init_heap"
+          fi
+        fi
+        ;;
       --stats)
         set_env UHCAF_STATS 1
         ;;
@@ -657,6 +711,39 @@ else
     fi
   fi
   set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
+fi
+
+# heap size for initial team
+if [ -n "$image_init_heap" ]; then
+  set_env UHCAF_INIT_TEAM_HEAP_SIZE $image_init_heap
+elif [ -n "$UHCAF_INIT_TEAM_HEAP_SIZE" ]; then
+  image_heap=$UHCAF_INIT_TEAM_HEAP_SIZE
+  if [[ ! $image_init_heap =~ ^[0-9]+$ ]]; then
+    if [[  $image_init_heap =~ ^[0-9]+[kK]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024))
+    elif [[ $image_heap =~ ^[0-9]+[mM]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024*1024))
+    elif [[ $image_init_heap =~ ^[0-9]+[gG]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024*1024*1024))
+    else
+      print_error "Invalid per-image init team heap size: $image_init_heap"
+    fi
+  fi
+  set_env UHCAF_INIT_TEAM_HEAP_SIZE $image_init_heap
+else
+  image_init_heap=$default_init_heap_size
+  if [[ ! $image_init_heap =~ ^[0-9]+$ ]]; then
+    if [[  $image_init_heap =~ ^[0-9]+[kK]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024))
+    elif [[ $image_init_heap =~ ^[0-9]+[mM]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024*1024))
+    elif [[ $image_init_heap =~ ^[0-9]+[gG]$ ]]; then
+      image_init_heap=$((${image_init_heap%?}*1024*1024*1024))
+    else
+      print_error "Invalid per-image init team heap size: $image_init_heap"
+    fi
+  fi
+  set_env UHCAF_INIT_TEAM_HEAP_SIZE $image_init_heap
 fi
 
 ###########################################

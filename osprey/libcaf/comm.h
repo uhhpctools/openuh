@@ -75,16 +75,11 @@ typedef enum {
 } sync_images_t;
 
 typedef enum {
-  SYNC_ALL_DIS_NAIVE_SWAP = 0,
-  SYNC_ALL_2LEVEL_COUNTER_DIS = 1,
-  SYNC_ALL_2LEVEL_SENSEREV_DIS = 2,
-  SYNC_ALL_2LEVEL_MULTIFLAG = 3,
-  SYNC_ALL_2LEVEL_SHAREDCOUNTER = 4,
-  SYNC_ALL_DIS_NAIVE = 5,
-  SYNC_ALL_DIS_MCS_SWAP = 6,
-  SYNC_ALL_DIS_MCS = 7,
-  SYNC_ALL_DEFAULT = 7
-} sync_all_t;
+  BAR_DISSEM = 0,
+  BAR_2LEVEL_MULTIFLAG = 1,
+  BAR_2LEVEL_SHAREDCOUNTER = 2,
+  TEAM_BAR_DEFAULT = 0
+} team_barrier_t;
 
 /* different types of rma ordering strategies */
 typedef enum {

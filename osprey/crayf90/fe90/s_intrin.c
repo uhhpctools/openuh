@@ -3285,11 +3285,7 @@ EXIT:
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
-|*      Function  CO_BROADCAST(SOURCE, SOURCE IMAGE) intrinsic                *|
-|*      Function  CO_MAX(SOURCE, RESULT) intrinsic                            *|
-|*      Function  CO_MIN(SOURCE, RESULT) intrinsic                            *|
-|*      Function  CO_SUM(SOURCE, RESULT) intrinsic                            *|
-|*      Function  CO_PRODUCT(SOURCE, RESULT) intrinsic                        *|
+|*      Subroutine  CO_REDUCE(A, OPERATOR) intrinsic                          *|
 |* Input parameters:                                                          *|
 |*      NONE                                                                  *|
 |*                                                                            *|
@@ -3312,13 +3308,22 @@ void    co_reduce_intrinsic(opnd_type     *result_opnd,
    int            cn_idx;
    int            info_idx1;
    int            info_idx2;
+   int            info_idx3;
+   int            info_idx4;
+   int            info_idx5;
+   int            info_idx6;
    int            list_idx1;
    int            list_idx2;
+   int            list_idx3;
+   int            list_idx4;
+   int            list_idx5;
+   int            list_idx6;
    opnd_type      opnd;
    int            opnd_line;
    int            opnd_col;
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
+   enum intrinsic_values intrin;
 
 
    TRACE (Func_Entry, "co_reduce_intrinsic", NULL);
@@ -3333,6 +3338,46 @@ void    co_reduce_intrinsic(opnd_type     *result_opnd,
    /* TODO: check that SOURCE and RESULT are same shape ... */
 
    IR_RANK(ir_idx) = res_exp_desc->rank;
+   intrin = ATP_INTRIN_ENUM(*spec_idx);
+
+   if (intrin == Co_reduce_Intrinsic) {
+       if (IR_LIST_CNT_R(ir_idx) == 6) {
+         list_idx1 = IR_IDX_R(ir_idx);
+         info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+         list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+         info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+
+         list_idx3 = IL_NEXT_LIST_IDX(list_idx2);
+         info_idx3 = IL_ARG_DESC_IDX(list_idx3);
+
+         list_idx4 = IL_NEXT_LIST_IDX(list_idx3);
+         info_idx4 = IL_ARG_DESC_IDX(list_idx4);
+
+         list_idx5 = IL_NEXT_LIST_IDX(list_idx4);
+         info_idx5 = IL_ARG_DESC_IDX(list_idx5);
+
+         list_idx6 = IL_NEXT_LIST_IDX(list_idx5);
+         info_idx6 = IL_ARG_DESC_IDX(list_idx6);
+
+         if (IL_IDX(list_idx6) != NULL_IDX) {
+             PRINTMSG(line, 754, Error, column, "CO_REDUCE");
+         }
+
+         /* copy over the first argument to the 6th "hidden" argument, used
+          * by the runtime to compute the size of the array */
+         COPY_OPND(IL_OPND(list_idx6), IL_OPND(list_idx1));
+         arg_info_list_base = arg_info_list_top;
+         arg_info_list_top = arg_info_list_base + 1;
+
+         if (arg_info_list_top >= arg_info_list_size) {
+             enlarge_info_list_table();
+         }
+
+         IL_ARG_DESC_IDX(list_idx6) = arg_info_list_top;
+         arg_info_list[arg_info_list_top] = arg_info_list[info_idx1];
+       }
+   }
 
 EXIT:
    /* must reset foldable and will_fold_later because there is no */

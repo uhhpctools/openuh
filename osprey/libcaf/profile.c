@@ -115,8 +115,7 @@ void profile_stats_init()
     /* we pre-allocate NUM_IMAGES bins, since that's an upper bound on the
      * total number of nodes used */
     rma_node_stats = (rma_info_t **)
-        coarray_allocatable_allocate_new_(_num_images*sizeof(rma_info_t*), NULL,
-                                          NULL);
+        coarray_allocatable_allocate_(_num_images*sizeof(rma_info_t*), NULL, NULL);
 
     memset(rma_node_stats, 0, _num_images * sizeof(rma_info_t));
 
