@@ -509,6 +509,8 @@ void comm_init()
     extern mem_usage_info_t * init_mem_info;
     extern mem_usage_info_t * child_mem_info;
 
+    size_t static_align;
+
     if (init_common_slot != NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
                      "init_common_slot has already been initialized");
@@ -518,6 +520,9 @@ void comm_init()
 
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
+
+    /* static coarrays must be 16-byte aligned */
+    static_align = ((alloc_byte_alignment-1)*16+1)*16;
 
     /* get size for collectives buffer */
     collectives_bufsize = get_env_size_with_unit(ENV_COLLECTIVES_BUFSIZE,
@@ -531,17 +536,19 @@ void comm_init()
      * add that as well (treat is as part of save coarray memory).
      */
 
-    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
+    static_symm_data_total_size = get_static_symm_size(static_align,
                                                        collectives_bufsize);
     static_symm_data_total_size += sizeof(void *);
 
-    collectives_offset = static_symm_data_total_size -
-      ((collectives_bufsize-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
 
-    if (static_symm_data_total_size % alloc_byte_alignment) {
+    static_align = ((alloc_byte_alignment-1)/16+1)*16;
+
+    collectives_offset = static_symm_data_total_size -
+        ((collectives_bufsize-1)/static_align+1)*static_align;
+
+    if (static_symm_data_total_size % static_align) {
         static_symm_data_total_size =
-            ((static_symm_data_total_size-1)/alloc_byte_alignment+1)*
-              alloc_byte_alignment;
+            ((static_symm_data_total_size-1)/static_align+1)*static_align;
     }
 
     caf_shared_memory_size = static_symm_data_total_size;

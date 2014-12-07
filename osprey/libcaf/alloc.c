@@ -228,7 +228,6 @@ static void *split_empty_shared_memory_slot_from_top
     struct shared_memory_slot *new_empty_slot;
     new_empty_slot = (struct shared_memory_slot *) malloc
         (sizeof(struct shared_memory_slot));
-    // printf("allocating %p\n", new_empty_slot);
     new_empty_slot->addr = slot->addr + var_size;
     new_empty_slot->size = slot->size - var_size;
     new_empty_slot->feb = 0;
@@ -252,7 +251,6 @@ static void *split_empty_shared_memory_slot_from_bottom
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     new_full_slot = (struct shared_memory_slot *) malloc
         (sizeof(struct shared_memory_slot));
-    // printf("allocating %p\n", new_full_slot);
     new_full_slot->addr = slot->addr + slot->size - var_size;
     new_full_slot->size = var_size;
     new_full_slot->feb = 1;
@@ -373,6 +371,8 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
                          "asymmetric allocation, "
                          "so allocating out of normal system memory.");
             void *retval = comm_malloc(var_size);
+            PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+            LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
             return retval;
         }
         /* does not reach */
@@ -388,6 +388,8 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
                       var_size) / (1024 * 1024),
                      (mem_info->reserved_heap_usage) / (1024 * 1024));
         void *retval = comm_malloc(var_size);
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return retval;
         /* does not reach */
     }
@@ -543,22 +545,6 @@ static void join_3_shared_memory_slots(struct shared_memory_slot *slot,
     comm_free(next_slot);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-
-    /************************/
-
-#if 0
-    slot->prev->size = slot->prev->size + slot->size + slot->next->size;
-    slot->prev->next = slot->next->next;
-    if (slot->next->next)
-        slot->next->next->prev = slot->prev;
-    if (*common_slot_p == slot || *common_slot_p == slot->next)
-        *common_slot_p = slot->prev;
-    printf("517. freeing %p and %p\n", slot->next, slot);
-    comm_free(slot->next);
-    comm_free(slot);
-
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-#endif
 }
 
 /* Static function called from empty_shared_memory_slot (used in dealloc).
@@ -587,19 +573,6 @@ static void join_with_prev_shared_memory_slot(struct shared_memory_slot
     comm_free(prev_slot);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-    /************************/
-#if 0
-    slot->prev->size += slot->size;
-    slot->prev->next = slot->next;
-    if (slot->next)
-        slot->next->prev = slot->prev;
-    if (*common_slot_p == slot)
-        *common_slot_p = slot->prev;
-    printf("539. freeing %p\n", slot);
-    comm_free(slot);
-
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-#endif
 }
 
 /* Static function called from empty_shared_memory_slot (used in dealloc).
@@ -621,7 +594,6 @@ static void join_with_next_shared_memory_slot(struct shared_memory_slot
     if (*common_slot_p == tmp)
         *common_slot_p = slot;
 
-    // printf("563. freeing %p\n", tmp);
     comm_free(tmp);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -712,8 +684,11 @@ void deallocate_team_all()
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
-    if (team->allocated_list == NULL)
+    if (team->allocated_list == NULL) {
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
+    }
 
     MEMORY_SLOT_SELECT(common_slot, mem_info);
 
@@ -735,6 +710,8 @@ void deallocate_team_all()
 
     MEMORY_SLOT_SAVE(common_slot);
 
+    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void deallocate_within(void *start_addr, void *end_addr)
@@ -745,8 +722,11 @@ void deallocate_within(void *start_addr, void *end_addr)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
 
-    if (start_addr == end_addr)
+    if (start_addr == end_addr) {
+        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
+    }
 
     MEMORY_SLOT_SELECT(common_slot, mem_info);
 
@@ -823,7 +803,6 @@ static void free_prev_slots_recursively(struct shared_memory_slot *slot)
 {
     if (slot) {
         free_prev_slots_recursively(slot->prev);
-        // printf("722. freeing %p\n", slot);
         comm_free(slot);
     }
 }
@@ -836,7 +815,6 @@ static void free_next_slots_recursively(struct shared_memory_slot *slot)
 {
     if (slot) {
         free_next_slots_recursively(slot->next);
-        // printf("735. freeing %p\n", slot);
         comm_free(slot);
     }
 }

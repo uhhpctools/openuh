@@ -58,8 +58,7 @@ path without redoing the configure. If you only want to install/reinstall the
 openuh compiler/runtime and not the files associated with the GNU front-end,
 you can try make install_compiler instead.
 
-To install the compiler in a x86_64 machine
-without 32-bit compatible libraries:
+To install the compiler in a x86_64 machine without 32-bit compatible libraries:
 
 [openuh-build]$ ../source/configure <prev-options>    \
                  --build=x86_64-unknown-linux-gnu     \
@@ -89,15 +88,9 @@ Where options are
                         gasnet-<conduit>, where <conduit> may be one of: mpi smp udp
                         armci
 
-  --gasnet-path=G   G is the path to a specified GASNet installation
-                          Currently set to:
-
-  --armci-path=A    A is the path to a specified ARMCI source directory
-                          Currently set to:
+  --mpi             Compile CAF+MPI programs
 
   --static-libcaf   Force use of the static libcaf-* archive
-
-  --mpi             Compile CAF+MPI programs
 
   --help, -h        Displays this menu
 
@@ -111,7 +104,17 @@ Where options are
 
   --keep, -k        Keep any temporary files in current directory
 
+  --gasnet-path=G   G is the path to a specified GASNet installation
+                          Currently set to:
+
+  --armci-path=A    A is the path to a specified ARMCI source directory
+                          Currently set to:
+
 Environment Variables:
+   UHCAF_MPI_FCFLAGS
+                    Specify Fortran compiler options for MPI
+                        Currently:
+
    UHCAF_MPI_LDFLAGS
                     Specify linker options for MPI
                         Currently:
@@ -139,21 +142,17 @@ Where OPTIONS are:
   --num-images=N
   -n,-np N            N is number of images to use
 
-  --image-heap=I      I is heap size per image for dynamic allocation of
+  --image-heap=H      H is heap size per image for dynamic allocation of
                       remotely-accessible data. It may be an integer which
                       indicates size in bytes, or it may have the suffixes
                       K, M, G which indicates size in kilobytes, megabytes,
                       and gigabytes, respectively.
 
-  --dtrace=L          Sets diagnostic trace levels for runtime.
-                      L=all or trace levels delimited by ':'.
-                        Available trace levels:
-                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
-                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
-
-  --dtrace-dir=D      D is name of directory to store diagnostic traces
-
-  --stats             Turn on statistical collection
+  --init-team-heap=I  I is heap size per image for dynamic allocation of
+                      remotely-accessible data in initial team. It may be an
+                      integer which indicates size in bytes, or it may have
+                      the suffixes K, M, G which indicates size in kilobytes,
+                      megabytes, and gigabytes, respectively.
 
   --verbose,-v        Verbose output
 
@@ -168,6 +167,26 @@ Where OPTIONS are:
                       runtime environment and exits
 
   --version,-V        Print version of cafrun and exits
+
+   ---------------------------------------------------------------------------
+   Profiling (requires compiler to be configured with profiling enabled)
+   ---------------------------------------------------------------------------
+
+  --stats             Turn on statistical collection
+
+   ---------------------------------------------------------------------------
+   Diagnostics (requires compiler to be configured with dtrace enabled)
+   ---------------------------------------------------------------------------
+
+  --dtrace=L          Sets diagnostic trace levels for runtime.
+                      L=all or trace levels delimited by ':'.
+                        Available trace levels:
+                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
+                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:TEAM:SERVICE:
+                        MEMORY_SUMMARY
+
+  --dtrace-dir=D      D is name of directory to store diagnostic traces
+
 
 Example:
 
