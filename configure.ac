@@ -178,7 +178,7 @@ AS_HELP_STRING([--with-default-caf-initial-team-heap-size=<heap size>],
 [Default per-image heap size to use for coarray fortran programs for initial
  team. Can use suffixes K,M,G for kilobytes,megabytes,gigabytes respectively.
  Will be 20M if unspecified.]),
-DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_heap_size",
+DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_initial_team_heap_size",
 DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="20M")
 
 # set bash path

@@ -1557,7 +1557,7 @@ fi;
 # Check whether --with-default-caf-initial-team-heap-size or --without-default-caf-initial-team-heap-size was given.
 if test "${with_default_caf_initial_team_heap_size+set}" = set; then
   withval="$with_default_caf_initial_team_heap_size"
-  DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_heap_size"
+  DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_initial_team_heap_size"
 else
   DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="20M"
 fi;
