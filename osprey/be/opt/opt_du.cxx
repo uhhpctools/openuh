@@ -94,9 +94,80 @@ static char *rcs_id = 	opt_du_CXX"$Revision$";
 #include "optimizer.h"
 #endif
 
+#include <iostream>
+#include <map>
+
+#ifdef OPENSHMEM_ANALYZER
+//SP:Added for extracting DU-chain
+#include "wn_simp.h"
+#include "wintrinsic.h"
+#include "opcode.h"
+#include "wn_core.h"
+#include "symtab_access.h"
+#include "srcpos.h"
+//SP: Added to access global structure
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+#endif
+
+//end
+#include "opt_alias_class.h"
+/* General progress trace: */
+#include <stdlib.h>
+#include <stdarg.h>
+#include "glob.h"
+#include <fstream>
+#include <vector>
+#include <string>
+using namespace std;
+//FILE* iplmessagesout;
+#endif /* OPENSHMEM_ANALYZER */
+
 // Egads, a global variable.  Used to keep us from visiting a
 // phi-node twice during a use-def traversal.
 static mINT16 DU_Phi_Ctr = 0;
+
+#ifdef OPENSHMEM_ANALYZER
+static  WN_MAP OSA_reg_Map = WN_MAP_UNDEFINED;
+static  WN_MAP OSA_P_Map = WN_MAP_UNDEFINED;
+static INT64 osanode_id;
+
+#define Set_if_reg(wn, is_reg) (WN_MAP_Set(OSA_reg_Map, wn, (void*) is_reg))
+#define Get_if_reg(wn) ((unsigned long) WN_MAP_Get(OSA_reg_Map, (WN*) wn))
+#define Set_Parent(wn, p) (WN_MAP_Set(OSA_P_Map, wn, (void*)  p))
+#define Get_Parent(wn) ((WN*) WN_MAP_Get(OSA_P_Map, (WN*) wn))
+
+static void Parentize (WN* wn)
+{
+    unsigned long initzero = 0;
+    if (!OPCODE_is_leaf(WN_opcode(wn))) {
+        if (WN_opcode(wn) == OPC_BLOCK) {
+            WN *kid = WN_first(wn);
+            while (kid) {
+                Set_if_reg(kid,initzero);
+                Set_Parent(kid, wn);
+                Parentize(kid);
+                kid = WN_next(kid);
+            }
+        } else {
+            INT kidno;
+            for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+                WN *kid = WN_kid(wn, kidno);
+                if (kid) {
+                    Set_if_reg(kid,initzero);
+                    Set_Parent(kid, wn);
+                    Parentize(kid);
+                }
+            }
+        }
+    }
+}
+#endif
+
+#ifdef OPENSHMEM_ANALYZER
+//SP: Declaring function for use in Print_Detailed_Du_Info
+int IPL_IsOpenSHMEM(char *input, int begin, int end);
+#endif
 
 // ====================================================================
 // Various printing functions
@@ -193,6 +264,395 @@ DU_MANAGER::Print_Du_Info(FILE *fp)
   IR_dump_map_info = save_IR_dmi;
 }
 #endif
+
+#ifdef OPENSHMEM_ANALYZER
+//SP: Adding an extra function for OpenSHMEM analyzer, this will help
+//retrieve the line numbers of the parent for the uses that are expressions.
+void DU_MANAGER::Print_Detailed_Du_Info(WN *root_wn)
+{
+  extern OSAedge *cfged_ptr;
+  extern OSAnode *cfgentrynode_ptr, *cfgnode_ptr;
+  extern OSAgraph *cfgraph_ptr;
+  extern INT64 *cfgnode_id_ptr;
+  extern INT64 *cfgedge_id_ptr;
+
+  //Variables for osadunode
+  INT64 def_id, line, multiV=-1, is_cond=-1;
+  char *opcode, *varnm, *fname, *vid, *line1;
+  //Variables for osadunode
+  INT64 use_id, osaedgeid = 0;
+
+  //SP: First generate a Parent Map
+  // Create and initialize local memory pool
+  MEM_POOL local_mempool;
+  MEM_POOL_Initialize( &local_mempool, "WN_OSA_Mem_Pool", FALSE );
+  MEM_POOL_Push( &local_mempool );
+
+  OSA_reg_Map = WN_MAP_Create(&local_mempool);
+  OSA_P_Map = WN_MAP_Create(&local_mempool);
+  Set_Parent(root_wn,NULL);
+  Parentize (root_wn);
+
+  BOOL save_IR_dmi = IR_dump_map_info;
+  IR_dump_map_info = TRUE;
+
+  // For each node in the WHIRL tree,
+  // if this node has a use list, print info for the list and the
+  // node.
+  osanode_id = 0;
+  def_id = 0;
+  use_id = 0;
+  int printdu = 0;
+
+  for (WN_ITER* wni = WN_WALK_TreeIter(Entry_Wn()); wni != NULL;
+       wni = WN_WALK_TreeNext(wni)) {
+    WN *wn = WN_ITER_wn(wni);
+    USE_LIST *use_list = Du_Get_Use(wn);
+
+    multiV = -1;
+
+    // if uses exist for a def then record Def
+    if (use_list != NULL) {
+      if(printdu == 1){
+        fprintf(stdout, "Def: ");
+        fdump_wn(stdout, WN_ITER_wn(wni));
+      }
+
+      multiV=-1;
+      osanode_id++;
+      *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+
+      opcode  = OPCODE_name(WN_opcode(wn));
+      char opcode_ptr[20];
+      strcpy(opcode_ptr,OPCODE_name(WN_opcode(wn)));
+
+      /*
+      if(WN_operator(wn) == OPR_STID || WN_operator(wn) == OPR_LDID ||
+         WN_operator(wn) == OPR_LDA) {
+        ST *st = WN_st(wn);
+        if (ST_sclass(st) == SCLASS_UGLOBAL || ST_sclass(st) == SCLASS_DGLOBAL ||
+            ST_sclass(st) == SCLASS_COMMON  || ST_sclass(st) == SCLASS_EXTERN ||
+            ST_sclass(st) == SCLASS_FSTATIC || ST_sclass(st) == SCLASS_PSTATIC) {
+
+          multiV=1;
+        }//end-if
+      }//end-if
+      else multiV=0;
+      */
+      /*
+      else{//SP:TODO: Differentiate between other function calls and Shmem
+        if(WN_operator(wn) == OPR_CALL)
+          multiV=1;
+        else multiV=0;
+      }
+      */
+
+      string call;
+      if (WN_has_sym(wn)){
+        if(ST_name(WN_st(wn))){
+          //SP: This analysis will do for calls like my_pe and num_pes but not ones
+          //with parameters like puts and gets!
+          //For that we need to analize the WN tree and find the parent of the LD
+          //expression,if the parent statement is a shmem call then we can mark it
+          //as multivalued or not.
+          varnm = ST_name(WN_st(wn));
+          char *tmp_var = varnm;
+          if (strstr(tmp_var,".") && (ST_sclass(WN_st(wn)) != SCLASS_FSTATIC ||
+             ST_sclass(WN_st(wn)) != SCLASS_PSTATIC)) {
+            Set_if_reg(wn,(unsigned long)1);
+            varnm = strstr(varnm,".") + 1;
+          }
+          if (WN_operator(wn) == OPR_CALL) {
+            // printf("SP:This is a function call:%s\n",varnm);
+
+            if(IPL_IsOpenSHMEM(varnm,4,6))  // _my_pe and equivalent
+              multiV=1;
+            if(IPL_IsOpenSHMEM(varnm,7,10))
+              multiV=0;
+            if(IPL_IsOpenSHMEM(varnm,98,107))
+              call="red";
+            if(IPL_IsOpenSHMEM(varnm,82,83))
+              call="red";//printf("Barrier calls\n");
+            if(IPL_IsOpenSHMEM(varnm,186,188))
+              call="red";
+            if (IPL_IsOpenSHMEM(varnm,1,12)) // init, runtime queries
+              call="green";
+            if (IPL_IsOpenSHMEM(varnm,88,97)) // symetic memory management
+              call="yellow";
+            if (IPL_IsOpenSHMEM(varnm,108,128)) // atomics
+              multiV=1;//call="orange";
+            if (IPL_IsOpenSHMEM(varnm,135,178)) // reductions
+              call="purple";
+            if (IPL_IsOpenSHMEM(varnm,179,181)) // broadcast
+              call="red";
+            if (IPL_IsOpenSHMEM(varnm,135,178)) // reductions
+              call="purple";
+            if (IPL_IsOpenSHMEM(varnm,13,81)) // IO
+              multiV=1;//call="blue";
+            //else // all others
+            //  call="black";
+          }//end-if
+          if(printdu ==2)
+            printf("Def variable name:%s\n", varnm);
+        }//end-if
+        else varnm = "FCALL";
+      }//end-if WN_has_sym(wn)
+      //SP: Find line number
+      USRCPOS pos;
+      USRCPOS_srcpos(pos) = WN_Get_Linenum(wn);
+      line =  USRCPOS_linenum(pos);
+      fname = Src_File_Name;
+
+      //for the edge
+      def_id  = *cfgnode_id_ptr ;
+
+      INT64 tmp_defid = 0;
+      cfged_ptr->wn_def = wn;
+      unsigned long int stmt_off = wn - root_wn;
+
+      cfgentrynode_ptr->set_values(*cfgnode_id_ptr,tmp_defid,opcode_ptr,
+                                   varnm,line,wn,NULL,fname,multiV,is_cond);
+
+
+      if (printdu == 3) {
+        char ansV[20];
+        if(multiV == 1)
+          strcpy(ansV,"Y");
+        else
+          strcpy(ansV,"N");
+
+        printf("\n");
+        printf("Def node: osanode_id: %d, def_id: %d,opcode: %s,varnm: %s,"
+               "line: %d, wn_self: %p,multivalued:%s \n",osanode_id,tmp_defid,
+               opcode,varnm,line,wn,ansV);
+      }//end-if
+
+      if ( use_list->Incomplete() ) {
+        //fprintf( fp, "(Incomplete) " );
+      }//SP:TODO:Ask Oscar if it is OK to continue or move to the next def
+
+      // print the Use list
+      USE_LIST_ITER   use_lst_iter;
+      const DU_NODE *tmp;
+      FOR_ALL_NODE(tmp, use_lst_iter, Init(use_list)) //if use list exist
+      {
+        //printf("Edge: edgeid:%d, def_id: %d, use_id: %d\n",
+        //       ed.id,ed.def_id,ed.use_id);
+
+        *cfgnode_id_ptr = *cfgnode_id_ptr + 1;
+        *cfgedge_id_ptr = *cfgedge_id_ptr + 1;
+        //SP: Here use id referes to the the dominated
+        cfged_ptr->use_id = *cfgnode_id_ptr;
+        cfged_ptr->wn_use = tmp->Wn();
+        cfged_ptr->id = *cfgedge_id_ptr;
+        cfged_ptr->def_id = def_id;
+
+
+        multiV = -1; //Treating Def and use independently
+        WN    *tmp1 = tmp->Wn();
+        INT64 need_Pvarnm = -1;
+
+        opcode  = OPCODE_name(WN_opcode(tmp1));
+        char opcode_ptr[20];
+        strcpy(opcode_ptr,OPCODE_name(WN_opcode(tmp1)));
+
+        if(printdu == 1){
+          fprintf(stdout, "Use: ");
+          fdump_wn(stdout, tmp1);
+        }
+
+        /*
+        if(WN_operator(tmp1) == OPR_STID || WN_operator(tmp1) == OPR_LDID ||
+           WN_operator(tmp1) == OPR_LDA){
+          ST *st1 = WN_st(tmp1);
+          if (ST_sclass(st1) == SCLASS_UGLOBAL || ST_sclass(st1) == SCLASS_DGLOBAL ||
+              ST_sclass(st1) == SCLASS_COMMON  || ST_sclass(st1) == SCLASS_EXTERN ||
+              ST_sclass(st1) == SCLASS_FSTATIC || ST_sclass(st1) == SCLASS_PSTATIC) {
+
+            multiV=1;
+          }//end-if
+        }//end-if
+        else multiV=0;
+        */
+        /*
+        else{//SP:TODO: Differentiate between other function calls and Shmem
+          if(WN_operator(tmp1) == OPR_CALL)
+            multiV=1;
+          else multiV=0;
+        }
+        */
+
+        string call;
+        if (WN_has_sym(tmp1)){
+          if(ST_name(WN_st(tmp1))){
+            varnm = ST_name(WN_st(tmp1));
+            char *tmp_var = varnm;
+
+            if (strstr(tmp_var,".") && (ST_sclass(WN_st(tmp1)) != SCLASS_FSTATIC ||
+               ST_sclass(WN_st(tmp1)) != SCLASS_PSTATIC)){
+              Set_if_reg(tmp1,(unsigned long)1);
+              varnm = strstr(varnm,".") + 1;
+            }
+            if (WN_operator(tmp1) == OPR_CALL) {
+              //printf("SP:This is a function call:%s\n",varnm);
+              if(IPL_IsOpenSHMEM(varnm,4,6))  // _my_pe and equivalent
+                multiV=1;
+              if(IPL_IsOpenSHMEM(varnm,7,10))
+                multiV=0;
+              if(IPL_IsOpenSHMEM(varnm,98,107))
+                call="red";
+              if(IPL_IsOpenSHMEM(varnm,82,83))
+                call="red";//printf("Barrier calls\n");
+              if(IPL_IsOpenSHMEM(varnm,186,188))
+                call="red";
+              if (IPL_IsOpenSHMEM(varnm,1,12)) // init, runtime queries
+                call="green";
+              if (IPL_IsOpenSHMEM(varnm,88,97)) // symetic memory management
+                call="yellow";
+              if (IPL_IsOpenSHMEM(varnm,108,128)) // atomics
+                multiV=1;//call="orange";
+              if (IPL_IsOpenSHMEM(varnm,135,178)) // reductions
+                call="purple";
+              if (IPL_IsOpenSHMEM(varnm,179,181)) // broadcast
+                call="red";
+              if (IPL_IsOpenSHMEM(varnm,135,178)) // reductions
+                call="purple";
+              if (IPL_IsOpenSHMEM(varnm,13,81)) // IO
+                multiV=1;//call="blue";
+              //else // all others
+              //  call="black";
+            }//end-if
+            if(printdu ==2)
+              printf("Def variable name:%s\n", varnm);
+          }//end-if WN_has_sym
+          else varnm = "FCALL";
+
+        }//end-if WN_has_sym(tmp1)
+
+        //SP: pick varibale name from parent
+        else varnm = "FCALL";
+
+        fname = Src_File_Name;
+
+        if(printdu == 1){
+          fprintf(stdout, "Parent: ");
+        }
+
+        USRCPOS pos0;
+        USRCPOS_srcpos(pos0) = WN_Get_Linenum(tmp1);
+        line =  USRCPOS_linenum(pos0);
+        //SP: Hack to find out the exact statement where line !=0
+        while(line == 0)
+        {
+          tmp1 = Get_Parent(tmp1);
+          USRCPOS_srcpos(pos0) = WN_Get_Linenum(tmp1);
+          line =  USRCPOS_linenum(pos0);
+        }
+
+        cfged_ptr->wn_parent = tmp1;
+        cfgentrynode_ptr->edges.push_back(*cfged_ptr);
+
+        //tmp1 is the parent
+        if(printdu == 1){
+          fdump_wn(stdout,tmp1);
+          printf("\n");
+        }
+        //SP: Find line number of use
+        USRCPOS pos1;
+        USRCPOS_srcpos(pos1) = WN_Get_Linenum(tmp1);
+        line =  USRCPOS_linenum(pos1);
+
+        unsigned long int stmt_off = tmp->Wn() - root_wn;
+
+        cfgnode_ptr->set_values(*cfgnode_id_ptr,def_id,opcode_ptr,varnm,
+                                line,tmp->Wn(),tmp1,fname,multiV,is_cond);
+
+
+        if (printdu == 3) {
+          char ansV[20];
+          if(multiV == 1)
+            strcpy(ansV,"Y");
+          else
+            strcpy(ansV,"N");
+          printf("Use node: osanode_id: %d, def_id: %d,opcode: %s,varnm: %s,"
+                 "line: %d, wn_self: %p, multivalued: %s\n", osanode_id,def_id,
+                 opcode,varnm,line,tmp->Wn(), ansV);
+        }
+        cfgraph_ptr->nodes.push_back(*cfgnode_ptr);
+      }
+      cfgraph_ptr->nodes.push_back(*cfgentrynode_ptr);
+    }//end-if
+  }//end-for
+  printf("\n**********************************\n");
+  //SP: Testing the use-def chains for different programs
+  if(printdu == 1){
+    for (WN_ITER* wni = WN_WALK_TreeIter(Entry_Wn()); wni != NULL;
+         wni = WN_WALK_TreeNext(wni)) {
+      WN *wn = WN_ITER_wn(wni);
+      DEF_LIST *def_list = Ud_Get_Def(wn);
+      if ( def_list != NULL) {
+        fprintf(stdout, "\nUse: ");
+        fdump_wn(stdout, WN_ITER_wn(wni));
+        //if (def_list->Incomplete());// return;
+        DEF_LIST_ITER def_lst_iter;
+        const DU_NODE *tmp;
+        FOR_ALL_NODE(tmp, def_lst_iter, Init(def_list))
+        {
+          fprintf(stdout, "Def: ");
+          fdump_wn(stdout, tmp->Wn());
+        }
+      }
+    }
+  }
+
+  //SP: Propagationg multivalues to uses and parents
+  //for all nodes
+  for(int i=0; i< cfgraph_ptr->nodes.size();i++) {
+    //If I am a 'use'
+    if(cfgraph_ptr->nodes[i].def_id > 0){
+      for(int k=0; k< cfgraph_ptr->nodes.size();k++) {
+        //search for node with id == 'def_id'
+        if(cfgraph_ptr->nodes[k].id == cfgraph_ptr->nodes[i].def_id){
+          if(cfgraph_ptr->nodes[k].is_mVal == 1 ){
+            cfgraph_ptr->nodes[i].is_mVal = 1 ;
+            //search for node with id == 'wn_parent'
+            for(int l=0; l< cfgraph_ptr->nodes.size();l++) {
+              if(cfgraph_ptr->nodes[l].wn_self == cfgraph_ptr->nodes[i].wn_parent)
+                cfgraph_ptr->nodes[l].is_mVal = 1;
+            }
+          }//end-if
+        }//end-if
+      }//end-for
+    }//end-if
+  }//end-for
+
+  /*
+  //SP: If it is a register than all the Uses of the multivalued register have to be marked as multi-valued ---> Not required
+  for(int i=0; i< cfgraph_ptr->nodes.size();i++) {//for all nodes
+    if(cfgraph_ptr->nodes[i].edges.size() != 0 && cfgraph_ptr->nodes[i].is_mVal == 1 && Get_if_reg(cfgraph_ptr->nodes[i].wn_self) == 1){//If node is multivalued
+      printf("Found tmp def:%s\n",cfgraph_ptr->nodes[i].opcode);
+      for(int j=0; j< cfgraph_ptr->nodes[i].edges.size();j++) {//for all edges mark 'use_id' as multivalued
+        for(int k=0; k< cfgraph_ptr->nodes.size();k++) {//search for node with id == 'use_id'
+          if(cfgraph_ptr->nodes[k].wn_self == cfgraph_ptr->nodes[i].edges[j].wn_use){
+            cfgraph_ptr->nodes[k].is_mVal = 1 ;
+            for(int l=0; l< cfgraph_ptr->nodes.size();l++) {//search for node with id == 'wn_parent'
+              if(cfgraph_ptr->nodes[l].wn_self == cfgraph_ptr->nodes[k].wn_parent)
+                cfgraph_ptr->nodes[l].is_mVal = 1;
+            }
+          }//end-if
+        }//end-for
+      }//end-for
+    }//end-if
+  }//end-for
+  */
+
+  MEM_POOL_Pop( &local_mempool );
+  MEM_POOL_Delete( &local_mempool );
+
+  IR_dump_map_info = save_IR_dmi;
+}
+
+#endif /* OPENSHMEM_ANALYZER */
 
 // ====================================================================
 // Various Contains functions to see if a list contains a node

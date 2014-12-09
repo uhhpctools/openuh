@@ -76,6 +76,27 @@
 #include "opt_htable.h"
 #include "wodriver.h"
 
+#ifdef OPENSHMEM_ANALYZER
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+#endif
+
+extern OSAedge *cfged_ptr, *dued_ptr, *bbed_ptr;
+extern OSAnode *cfgentrynode_ptr, *cfgnode_ptr, *osadefnode_ptr,
+               *osausenode_ptr, *bbnode_ptr;
+extern OSAgraph *cfgraph_ptr, *osadu_ptr, *bbtree_ptr;
+
+extern OSAedge cfged, dued, bbed;
+extern OSAnode cfgentrynode, cfgnode, osadefnode, osausenode, bbnode;
+extern OSAgraph cfgraph, osadu, bbtree;
+
+extern INT64 *cfgnode_id_ptr, *dunode_id_ptr, *bbnode_id_ptr;
+extern INT64 *cfgedge_id_ptr, *duedge_id_ptr, *bbedge_id_ptr;
+extern INT64 cfgnode_id, dunode_id, bbnode_id;
+extern INT64 cfgedge_id, duedge_id, bbedge_id;
+#endif /* OPENSHMEM_ANALYZER */
+
+
 extern void (*wopt_main_p) (INT argc, char **argv, INT, char **);
 extern void (*Wopt_Init_p) ();
 extern void (*Wopt_Fini_p) ();
@@ -136,6 +157,29 @@ struct WOPT_INIT
 
 	Def_at_entry_p = &CODEREP::Def_at_entry;
 	Defbb_p = &CODEREP::Defbb;
+
+#ifdef OPENSHMEM_ANALYZER
+    //OSA
+    cfged_ptr = &cfged;
+    cfgentrynode_ptr = &cfgentrynode;
+    cfgnode_ptr = &cfgnode;
+    cfgraph_ptr = &cfgraph;
+    cfgnode_id_ptr = &cfgnode_id;
+    cfgedge_id_ptr = &cfgedge_id;
+
+    dued_ptr = &dued;
+    osadefnode_ptr = &osadefnode;
+    osausenode_ptr = &osausenode;
+    osadu_ptr = &osadu;
+    dunode_id_ptr = &dunode_id;
+    duedge_id_ptr = &duedge_id;
+
+    bbed_ptr = &bbed;
+    bbnode_ptr = &bbnode;
+    bbtree_ptr = &bbtree;
+    bbnode_id_ptr = &bbnode_id;
+    bbedge_id_ptr = &bbedge_id;
+#endif
     }
 } Wopt_Initializer;
 

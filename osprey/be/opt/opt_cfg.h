@@ -463,6 +463,9 @@ public:
   void         OpenSHMEM_Dump_CFG(FILE *fp=stderr,
              BOOL dfs_order = TRUE, IDTYPE bb_id = (IDTYPE) -1);
   void         Check_OpenSHMEM_Call(BB_NODE *, osacfgnode &node );
+  void         Print_OSA_GetDomInfo(WN *);
+  void         Print_OSA_GetBBlineno(void);
+  void         OpenSHMEM_barrier_tree(void);
 #endif
   void         PrintLoopVis(BB_LOOP * loop, int & id);
   void         PrintVis(BOOL draw_loops);

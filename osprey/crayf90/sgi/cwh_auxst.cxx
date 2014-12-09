@@ -918,12 +918,15 @@ cwh_auxst_patch_proc(TY_IDX rty_idx)
   e  = AUXST_Dummies(EP_Current) ;
 
   e->ret_type = rty_idx ;
-  e->parms = PARMS_next(e->parms);
-  e->total_args --;
-  e->arg_lengths_index --;
-  e->fe_given_args --;
 
-  e->last_parm_ty_seen = e->parms;   
+  if (e->parms) {
+      e->parms = PARMS_next(e->parms);
+      e->total_args --;
+      e->arg_lengths_index --;
+      e->fe_given_args --;
+
+      e->last_parm_ty_seen = e->parms;
+  }
 }
 
 /*===================================================

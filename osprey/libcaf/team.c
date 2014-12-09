@@ -80,6 +80,10 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     my_rank = current_team->current_this_image - 1;
     numimages = current_team->current_num_images;
 
+    if (*team_id <= 0) {
+        Error("TEAM_ID argument must be positive for FORM TEAM statement");
+    }
+
     if (new_team_p == NULL) {
         new_team_p = (team_type *) malloc(sizeof(team_type));
         *new_team_p = (team_type) malloc(sizeof(team_type_t));
@@ -735,12 +739,18 @@ void __place_codimension_mapping(team_info_t * team_info_list,
     }
 }
 
-int team_id_()
+int team_id__(team_type *team_p)
 {
-    return current_team->team_id;
+    if (team_p == NULL)
+        return current_team->team_id;
+    else if (*team_p) {
+        return (*team_p)->team_id;
+    } else {
+        Error("Invalid TEAM argument for TEAM_ID");
+    }
 }
 
-team_type get_team_(enum PREDEF_TEAM_LEVELS * team_level)
+team_type get_team__(enum PREDEF_TEAM_LEVELS *team_level)
 {
     if (team_level == NULL) {
         return current_team;

@@ -89,8 +89,8 @@ void _CHANGE_TEAM(team_type * new_team_p,
 
 void _END_TEAM(int *status, int stat_len, char *errmsg, int errmsg_len);
 
-int team_id_();
+int team_id__(team_type *team_p);
 
-team_type get_team_(enum PREDEF_TEAM_LEVELS *team_level);
+team_type get_team__(enum PREDEF_TEAM_LEVELS *team_level);
 
 #endif                          //TEAM_H

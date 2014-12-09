@@ -242,6 +242,10 @@ BE_OPT_CXX_SRCS = \
   opt_peel_unroll.cxx  \
   opt_zdl.cxx
 
+ifeq ($(ENABLE_OSA), YES)
+BE_OPT_CXX_SRCS += opt_OSA.cxx
+endif
+
 ifeq ($(BUILD_PCH), USE_PCH)
 BACK_END_PCH_OBJS = $(BE_OPT_CXX_SRCS:.cxx=.o)
 BACK_END_CXX_SRCS = $(BE_COM_CXX_SRCS)

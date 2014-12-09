@@ -127,8 +127,34 @@ void (*Print_IF_INFO_p) (FILE*, IF_INFO*);
 #include "opt_defs.h"
 #include "opt_wn.h"
 #include "opt_bb.h"
+#ifdef OPENSHMEM_ANALYZER
+#ifndef opt_OSA_INCLUDED
+#include "opt_OSA.h"
+#endif
+#endif
 
 // from be/opt/wodriver.h
+
+#ifdef OPENSHMEM_ANALYZER
+OSAedge *cfged_ptr=NULL;
+OSAnode *cfgentrynode_ptr=NULL, *cfgnode_ptr=NULL;
+OSAgraph *cfgraph_ptr=NULL;
+INT64 *cfgnode_id_ptr;
+INT64 *cfgedge_id_ptr;
+
+OSAedge *dued_ptr = NULL;
+OSAnode *osadefnode_ptr = NULL;
+OSAnode *osausenode_ptr = NULL;
+OSAgraph *osadu_ptr = NULL;
+INT64 *dunode_id_ptr = NULL;
+INT64 *duedge_id_ptr = NULL;
+
+OSAedge *bbed_ptr = NULL;
+OSAnode *bbnode_ptr = NULL;
+OSAgraph *bbtree_ptr = NULL;
+INT64 *bbnode_id_ptr = NULL;
+INT64 *bbedge_id_ptr = NULL;
+#endif
 
 void (*wopt_main_p) (INT argc, char **argv, INT, char **);
 void (*Wopt_Init_p) ();

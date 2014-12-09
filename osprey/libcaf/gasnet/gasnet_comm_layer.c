@@ -2827,7 +2827,7 @@ void comm_init()
     initial_team->current_rem_images    = rem_procs;
     initial_team->depth                 = 0;
     initial_team->parent                = NULL;
-    initial_team->team_id               = 0;
+    initial_team->team_id               = -1;
     initial_team->defined               = 1;
     initial_team->activated             = 1;
     initial_team->barrier.parity        = 0;
@@ -4000,7 +4000,7 @@ void comm_sync(comm_handle_t hdl)
          * it gets fully deleted */
         ((struct handle_list *)hdl)->state = INTERNAL;
 
-        check_remote_image(((struct handle_list *) hdl)->proc + 1);
+        check_remote_image_initial_team(((struct handle_list *) hdl)->proc + 1);
         sync_on_handle(hdl);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,

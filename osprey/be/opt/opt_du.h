@@ -452,6 +452,9 @@ public:
   void      Print_Du_Info(FILE *fp=stderr); // print all D-U lists
 #endif
 
+#ifdef OPENSHMEM_ANALYZER
+  void      Print_Detailed_Du_Info(WN *root); // print all D-U lists for OSA
+#endif
   void      Add_Def_Use( WN *def, WN *use );
   void      Delete_Def_Use( WN *def, WN *use );
 
