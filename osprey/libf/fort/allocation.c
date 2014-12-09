@@ -87,11 +87,9 @@ extern void _sma_fortran_deallocate_global(void *p);
 #endif		/* end MIPS */
 
 #ifdef _UH_COARRAYS
-extern void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar);
+extern void * coarray_allocatable_allocate_(unsigned long var_size,
+                                            DopeVectorType *dp, int * statvar);
 #pragma weak coarray_allocatable_allocate_
-extern void * coarray_allocatable_allocate_new_(unsigned long var_size, DopeVectorType *dp, 
-		int * statvar);
-#pragma weak coarray_allocatable_allocate_new_
 extern void *coarray_asymmetric_allocate_(unsigned long var_size);
 #pragma weak coarray_asymmetric_allocate_ = _coarray_asymmetric_allocate_dummy
 
@@ -279,8 +277,8 @@ _ALLOCATE(AllocHeadType *aloclist,
 		if (dva->is_coarray) {
             if (dva->n_codim) {
                 //base = coarray_allocatable_allocate_(nbytes, statvar);
-		base = coarray_allocatable_allocate_new_(nbytes, dva, statvar);
-		
+                base = coarray_allocatable_allocate_(nbytes, dva, statvar);
+
                 /* use returned status as error code */
                 if (lstat)
                     errflag = *statvar;
@@ -676,20 +674,9 @@ _DEALLOCATE(AllocHeadType *aloclist,
 		}
 #endif /* KEY Bug 4933 */
 
-#ifdef _UH_COARRAYS
-        if(dva->is_coarray && dva->n_codim) {
-			coarray_deallocate_((void *)base, statvar);
-            /* use returned status as error code */
-            if (lstat)
-                errflag = *statvar;
-        } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
-            coarray_asymmetric_deallocate_((void *)base);
-        }
-		else{
-#endif
 
 #ifdef KEY /* Bug 6845 */
-                if (dva->alloc_cpnt) {
+        if (dva->alloc_cpnt) {
 		  recursive_dealloc(dva, aloclist->version, aloclist->imalloc);
 		}
 # ifdef _DEBUG
@@ -700,7 +687,18 @@ _DEALLOCATE(AllocHeadType *aloclist,
 #endif /* KEY Bug 6845 */
 
 		/* free space when size not zero */
-		if (nsize != 0)
+		if (nsize != 0) {
+
+#ifdef _UH_COARRAYS
+            if(dva->is_coarray && dva->n_codim) {
+                coarray_deallocate_((void *)base, statvar);
+                /* use returned status as error code */
+                if (lstat)
+                    errflag = *statvar;
+            } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
+                coarray_asymmetric_deallocate_((void *)base);
+            } else
+#endif
 #if	defined(_CRAYT3E)
 			if (imalocflg != 0) {
 				/* free from symmetric heap, not private heap */
@@ -718,9 +716,8 @@ _DEALLOCATE(AllocHeadType *aloclist,
 				_sma_fortran_deallocate_global(base);
 		}
 #endif		/* endif of NOT mips */
-#ifdef _UH_COARRAYS
-	}
-#endif
+
+        }
 
 		/* clear fields to indicate unallocated/unassociated */
 		dva->assoc	= 0;
@@ -788,14 +785,6 @@ _DEALLOC(AllocHeadType *aloclist)
 		} else
 			base	= (void*) dva->base_addr.a.ptr;
 
-#ifdef _UH_COARRAYS
-        if(dva->is_coarray && dva->n_codim) {
-			coarray_deallocate_((void *)base, NULL);
-        } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
-            coarray_asymmetric_deallocate_((void *)base);
-        }
-		else{
-#endif
 
 #ifdef KEY /* Bug 6845 */
                 if (dva->alloc_cpnt) {
@@ -810,6 +799,13 @@ _DEALLOC(AllocHeadType *aloclist)
 
 		/* free space when size not zero */
 		if (dva->orig_size != 0) {
+#ifdef _UH_COARRAYS
+            if(dva->is_coarray && dva->n_codim) {
+                coarray_deallocate_((void *)base, NULL);
+            } else if (dva->is_coarray || dva->p_or_a == POINTTR) {
+                coarray_asymmetric_deallocate_((void *)base);
+            } else
+#endif
 #if	defined(_CRAYMPP) && !defined (_CRAYT3E)
 			if (_issddptr(base)) {
 				extern void _shfree(void *);
@@ -824,9 +820,6 @@ _DEALLOC(AllocHeadType *aloclist)
 				free (base);
 		}
 
-#ifdef _UH_COARRAYS
-		}
-#endif
 
 		/* clear fields to indicate unallocated/unassociated */
 		dva->assoc	= 0;

@@ -31,11 +31,57 @@
 #define CAF_COLLECTIVES_H
 
 #include "dopevec.h"
+#include <stdint.h>
 
-typedef char    INTEGER1;
-typedef short   INTEGER2;
-typedef int     INTEGER4;
-typedef size_t  INTEGER8;
+typedef int8_t   INTEGER1;
+typedef int16_t  INTEGER2;
+typedef int32_t  INTEGER4;
+typedef int64_t  INTEGER8;
+
+typedef union BYTE1_u {
+    INTEGER1 as_INTEGER1;
+    char as_char;
+} BYTE1;
+
+typedef union BYTE2_u {
+    INTEGER2 as_INTEGER2;
+} BYTE2;
+
+typedef union BYTE4_u {
+    INTEGER4 as_INTEGER4;
+    float as_float;
+} BYTE4;
+
+typedef union BYTE8_u {
+    double as_double;
+    INTEGER8 as_INTEGER8;
+} BYTE8;
+
+typedef struct BYTE16_s {
+    union BYTE16_u {
+        BYTE1 as_BYTE1[16];
+        BYTE2 as_BYTE2[8];
+        BYTE4 as_BYTE4[4];
+        BYTE8 as_BYTE8[2];
+    } value;
+} INTEGER16;
+
+typedef INTEGER16 BYTE16;
+
+typedef float REAL4;
+typedef double REAL8;
+typedef long double REAL16;
+
+typedef struct COMPLEX8_s {
+    REAL4 real;
+    REAL4 imag;
+} COMPLEX8;
+
+typedef struct COMPLEX16_s {
+    REAL8 real;
+    REAL8 imag;
+} COMPLEX16;
+
 
 typedef enum {
     CO_REDUCE_ALL2ALL = 1,

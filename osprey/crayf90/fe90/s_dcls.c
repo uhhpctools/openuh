@@ -6734,6 +6734,7 @@ static	void	attr_semantics(int	attr_idx,
 	  * initialization here than to remove the bypassing. */
 	 
 	 if (TYP_TYPE(type_idx) == Structure &&
+	    !AT_USE_ASSOCIATED(rslt_idx) &&
 	    ATT_DEFAULT_INITIALIZED(TYP_IDX(type_idx))) {
 #ifdef KEY /* Bug 7856 */ 
 	    /* Here's something else from attr_semantics() that we're missing.

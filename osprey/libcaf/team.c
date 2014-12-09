@@ -21,7 +21,7 @@ extern unsigned long _rem_images;
 
 extern int total_num_supernodes;
 
-extern sync_all_t sync_all_algorithm;
+extern team_barrier_t team_barrier_algorithm;
 
 team_type initial_team;
 
@@ -168,10 +168,8 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
 
     new_team->intranode_barflags[0] =
         (barrier_flags_t *)
-        coarray_allocatable_allocate_new_(sizeof
-                                          (*new_team->
-                                           intranode_barflags[0]), NULL,
-                                          NULL);
+        coarray_allocatable_allocate_(sizeof(*new_team-> intranode_barflags[0]),
+                                      NULL, NULL);
     int num_nonleaders = new_team->intranode_set[0] - 1;
     memset(&new_team->intranode_barflags[1], 0,
            num_nonleaders * sizeof(*new_team->intranode_barflags));
@@ -179,8 +177,8 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     int num_steps = (int) ceil(log2((double) sz));
     new_team->barrier.bstep =
         (barrier_round_t *)
-        coarray_allocatable_allocate_new_(sizeof(barrier_round_t) *
-                                          num_steps, NULL, NULL);
+        coarray_allocatable_allocate_(sizeof(barrier_round_t) *
+                                      num_steps, NULL, NULL);
     memset(new_team->barrier.bstep, 0,
            sizeof(barrier_round_t) * num_steps);
 
@@ -196,10 +194,8 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
         int leaders_count = new_team->leaders_count;
         int intranode_count = new_team->intranode_set[0];
 
-        if (sync_all_algorithm == SYNC_ALL_2LEVEL_COUNTER_DIS ||
-            sync_all_algorithm == SYNC_ALL_2LEVEL_SENSEREV_DIS ||
-            sync_all_algorithm == SYNC_ALL_2LEVEL_MULTIFLAG ||
-            sync_all_algorithm == SYNC_ALL_2LEVEL_SHAREDCOUNTER) {
+        if (team_barrier_algorithm == BAR_2LEVEL_MULTIFLAG ||
+            team_barrier_algorithm == BAR_2LEVEL_SHAREDCOUNTER) {
             /* node-aware barrier, so only leaders participate in
              * dissemination barrier */
             int nums = new_team->current_num_images;
@@ -454,8 +450,8 @@ int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
 
     /*Flag_coarray indicate if recv_peer have sent data to me */
     flag_coarray =
-        (int *) coarray_allocatable_allocate_new_(sizeof(int) * max_round,
-                                                  NULL, NULL);
+        (int *) coarray_allocatable_allocate_(sizeof(int) * max_round,
+                                              NULL, NULL);
     memset(flag_coarray, 0, sizeof(int) * max_round);
     comm_sync_all(NULL, 0, NULL, 0);
 

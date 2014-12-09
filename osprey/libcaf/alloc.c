@@ -275,63 +275,8 @@ static void *split_empty_shared_memory_slot_from_bottom
  * It finds empty slot from the shared memory list (common_slot & above)
  * and then splits the slot from top
  * Note: there is barrier as it is a collective operation*/
-void *coarray_allocatable_allocate_(unsigned long var_size, int *statvar)
-{
-    mem_usage_info_t *mem_info;
-    struct shared_memory_slot *common_slot;
-    struct shared_memory_slot *empty_slot;
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-    PROFILE_FUNC_ENTRY(CAFPROF_COARRAY_ALLOC_DEALLOC);
-
-    if (var_size % alloc_byte_alignment != 0) {
-        var_size =
-            ((var_size - 1) / alloc_byte_alignment +
-             1) * alloc_byte_alignment;
-    }
-
-    MEMORY_SLOT_SELECT(common_slot, mem_info);
-
-    empty_slot = find_empty_shared_memory_slot_above(common_slot,
-                                                     var_size);
-    if (empty_slot == 0)
-        Error
-            ("No more shared memory space available for allocatable coarray. "
-             "Set environment variable %s or cafrun option for more space.",
-             ENV_IMAGE_HEAP_SIZE);
-
-    if (mem_info) {
-        size_t current_size = mem_info->current_heap_usage + var_size;
-        mem_info->current_heap_usage = current_size;
-        if (mem_info->max_heap_usage < current_size)
-            mem_info->max_heap_usage = current_size;
-    }
-    // implicit barrier in case of allocatable.
-    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_all, statvar, sizeof(int),
-                         NULL, 0);
-
-
-    if (empty_slot != common_slot && empty_slot->size == var_size) {
-        empty_slot->feb = 1;
-
-        PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
-        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-        return empty_slot->addr;
-    }
-
-    void *retval =
-        split_empty_shared_memory_slot_from_top(empty_slot, var_size,
-                                                &common_slot);
-
-    MEMORY_SLOT_SAVE(common_slot);
-    PROFILE_FUNC_EXIT(CAFPROF_COARRAY_ALLOC_DEALLOC);
-
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
-
-    return retval;
-}
-
-void *coarray_allocatable_allocate_new_(unsigned long var_size,
-                                        DopeVectorType * dp, int *statvar)
+void *coarray_allocatable_allocate_(unsigned long var_size, DopeVectorType * dp,
+                                    int *statvar)
 {
     mem_usage_info_t *mem_info;
     struct shared_memory_slot *common_slot;

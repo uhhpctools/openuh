@@ -79,7 +79,7 @@ extern int rma_prof_rid;
 extern shared_memory_slot_t *init_common_slot;
 extern shared_memory_slot_t * child_common_slot;
 
-extern int reduction_2level;
+extern int enable_collectives_2level;
 extern int enable_collectives_1sided;
 extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
@@ -118,7 +118,7 @@ typedef union {
 } sync_flag_t;
 static sync_flag_t *sync_flags = NULL;
 
-sync_all_t sync_all_algorithm;
+team_barrier_t team_barrier_algorithm;
 
 /* rma ordering */
 static rma_ordering_t rma_ordering;
@@ -242,7 +242,7 @@ static void sync_images_sense_rev(int *image_list,
                       char *errmsg, int errmsg_len);
 #endif
 
-static inline void sync_all_dissemination_mcs(int *stat, int stat_len,
+static void sync_all_dissemination_mcs(int *stat, int stat_len,
 		char * errmsg, int errmsg_len, team_type_t *team);
 
 void set_static_symm_data(void *base_address, size_t alignment);
@@ -641,19 +641,19 @@ void comm_init()
         }
     }
 
-    /* which sync all algorithm are used */
-    char *sync_all_alg;
-    sync_all_alg = getenv(ENV_SYNC_ALL_ALGORITHM);
-    sync_all_algorithm = SYNC_ALL_DEFAULT;
+    /* which team barrier algorithm is used */
+    char *team_barrier_alg;
+    team_barrier_alg = getenv(ENV_TEAM_BARRIER_ALGORITHM);
+    team_barrier_algorithm = TEAM_BAR_DEFAULT;
 
-    if(sync_all_alg != NULL){
-        if (strncasecmp(sync_all_alg, "SYNC_ALL_DIS_MCS", 16) == 0) {
-            if (my_proc == 0) printf("dis mcs\n");
-            sync_all_algorithm = SYNC_ALL_DIS_MCS;
+    if(team_barrier_alg != NULL){
+        if (strncasecmp(team_barrier_alg, "dissemination", 16) == 0) {
+            team_barrier_algorithm = BAR_DISSEM;
         } else {
             if(my_proc == 0) {
-                Warning("SYNC_ALL_ALGORITHM %s is not supported."
-                        " Using default", sync_all_alg);
+                Warning("%s=%s is not supported."
+                        " Using default", ENV_TEAM_BARRIER_ALGORITHM,
+                        team_barrier_alg);
             }
         }
     }
@@ -910,34 +910,34 @@ void comm_init()
 
     /* update the init_mem_info*/
     init_mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_new_(sizeof(*init_mem_info), NULL, NULL);
+        coarray_allocatable_allocate_(sizeof(*init_mem_info), NULL, NULL);
 
     /* allocate space in symmetric heap for memory usage info */
     init_mem_info->current_heap_usage = sizeof(*init_mem_info);
     init_mem_info->max_heap_usage = sizeof(*init_mem_info);
     init_mem_info->reserved_heap_usage = init_heap_size;
     child_mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_new_(sizeof(*child_mem_info), NULL, NULL);
+        coarray_allocatable_allocate_(sizeof(*child_mem_info), NULL, NULL);
     child_mem_info->current_heap_usage = 0;
     child_mem_info->max_heap_usage = 0;
     child_mem_info->reserved_heap_usage = child_common_slot->size;
 
     /* allocate space for recording image termination */
     error_stopped_image_exists =
-        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
+        (int *) coarray_allocatable_allocate_(sizeof(int), NULL, NULL);
     this_image_stopped =
-        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
+        (int *) coarray_allocatable_allocate_(sizeof(int), NULL, NULL);
     *error_stopped_image_exists = 0;
     *this_image_stopped = 0;
 
-    stopped_image_exists = (char *) coarray_allocatable_allocate_new_(
+    stopped_image_exists = (char *) coarray_allocatable_allocate_(
                       (num_procs+1) * sizeof(char), NULL, NULL);
 
     memset(stopped_image_exists, 0, (num_procs+1)*sizeof(char));
 
     /* allocate flags for p2p synchronization via sync images */
     sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
-            num_procs * sizeof(sync_flag_t), NULL);
+            num_procs * sizeof(sync_flag_t), NULL, NULL);
     memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
 
     /* check whether to use 1-sided collectives implementation */
@@ -953,15 +953,15 @@ void comm_init()
     collectives_max_workbufs = get_env_flag(ENV_COLLECTIVES_MAX_WORKBUFS,
                                             DEFAULT_COLLECTIVES_MAX_WORKBUFS);
 
-    reduction_2level = get_env_flag(ENV_REDUCTION_2LEVEL,
-            DEFAULT_ENABLE_REDUCTION_2LEVEL);
+    enable_collectives_2level = get_env_flag(ENV_COLLECTIVES_2LEVEL,
+            DEFAULT_ENABLE_COLLECTIVES_2LEVEL);
 
     mpi_collectives_available = 1;
 
 
     /*allocate exhange buffer for form_team here*/
     exchange_teaminfo_buf = (team_info_t *)
-        coarray_allocatable_allocate_new_(sizeof(team_info_t)* num_procs, NULL, NULL);
+        coarray_allocatable_allocate_(sizeof(team_info_t)* num_procs, NULL, NULL);
 
     /*Push the first team into stack*/
     global_team_stack->stack[global_team_stack->count] = initial_team;
@@ -2173,8 +2173,8 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         }
 	} else {
 		//determine which algorithm we are going to use
-		switch(sync_all_algorithm) {
-			case SYNC_ALL_DIS_MCS:
+		switch(team_barrier_algorithm) {
+            case BAR_DISSEM:
 				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len,
                                            current_team);
 				break;
@@ -2190,7 +2190,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-static inline void sync_all_dissemination_mcs(int *status, int stat_len,
+static void sync_all_dissemination_mcs(int *status, int stat_len,
                                        char *errmsg, int errmsg_len,
                                        team_type_t *team)
 {
@@ -2309,9 +2309,9 @@ void comm_sync_team(team_type_t *team, int *status, int stat_len, char *errmsg,
         ARMCI_Barrier();
     }
 
-    //determine which algorithm we are going to use
-    switch(sync_all_algorithm) {
-        case SYNC_ALL_DIS_MCS:
+    /* determine which algorithm we are going to use */
+    switch(team_barrier_algorithm) {
+        case BAR_DISSEM:
             sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len, team);
             break;
         default:
