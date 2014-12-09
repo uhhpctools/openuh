@@ -1193,6 +1193,22 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
       Clear_BE_ST_pu_has_valid_addr_flags(PU_Info_proc_sym(current_pu)); 
 #endif
     }
+
+#if 0
+#if defined (_UH_COARRAYS)
+    if (Enable_Coarray) {
+      Set_Error_Phase( "Coarray Symbols Lowering" );
+      WN_Lower_Checkdump("Before Coarray Symbols Lowering", rwn, 0);
+
+      rwn = Coarray_Symbols_Lower( current_pu, rwn);
+      WN_Lower_Checkdump("After Coarray Symbols Lowering", rwn, 0);
+
+      if ( Cur_PU_Feedback ) {
+        Cur_PU_Feedback->Verify("After Coarray Symbols Lowering");
+      }
+    }
+#endif
+#endif
  
 #if defined(EMULATE_FLOAT_POINT) && defined(TARG_SL)
  	rwn = WN_Lower(rwn, LOWER_TO_CG | LOWER_FP_EMULATE, alias_mgr, "Lowering to CG/Lowering float point emulate");
@@ -1517,6 +1533,23 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
     Set_Error_Phase ( "Post LNO Processing" );
     Post_LNO_Processing (current_pu, pu);
     if (!Run_wopt && !Run_cg) return;
+
+    /* TODO: Can we push this to a later back-end stage? */
+#if 1
+#if defined (_UH_COARRAYS)
+    if (Enable_Coarray) {
+      Set_Error_Phase( "Coarray Symbols Lowering" );
+      WN_Lower_Checkdump("Before Coarray Symbols Lowering", pu, 0);
+
+      pu = Coarray_Symbols_Lower( current_pu, pu);
+      WN_Lower_Checkdump("After Coarray Symbols Lowering", pu, 0);
+
+      if ( Cur_PU_Feedback ) {
+        Cur_PU_Feedback->Verify("After Coarray Symbols Lowering");
+      }
+    }
+#endif
+#endif
 
 #ifdef KEY // bug 7741
     if (Run_lno && Run_wopt) {
@@ -2513,6 +2546,12 @@ main (INT argc, char **argv)
     Preorder_Process_PUs(current_pu);
   }
 #endif
+
+  /* TODO: Make sure that memory is not being reserved for these symbols. */
+#ifdef _UH_COARRAYS
+  Coarray_Global_Symbols_Remove();
+#endif
+
 
 #ifdef DRAGON
   if (Dragon_CFG_Phase){

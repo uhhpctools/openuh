@@ -2227,6 +2227,19 @@ DEP_RESULT DEPV_COMPUTE::Base_Test(const WN *ref1,  ARA_REF *ara_ref1,
   OPERATOR ob1 = WN_operator(base1);
   OPERATOR ob2 = WN_operator(base2);
 
+#ifdef _UH_COARRAYS
+  if (ob1 == OPR_LDID && TY_kind(WN_type(base1)) == KIND_POINTER &&
+      TY_is_coarray(TY_pointed(WN_type(base1))) ||
+      ob2 == OPR_LDID && TY_kind(WN_type(base2)) == KIND_POINTER &&
+      TY_is_coarray(TY_pointed(WN_type(base2)))) {
+      /* at least one of the bases is a pointer to a coarray. These should be
+       * treated as independent references if they are not both references to
+       * the same coarray */
+      if (ob1 != ob2 || WN_st(base1) != WN_st(base2))
+          return DEP_INDEPENDENT;
+  }
+#endif
+
   if (ob1 != ob2) return (DEP_DEPENDENT);
 
   BOOL different_structure_offsets = FALSE;

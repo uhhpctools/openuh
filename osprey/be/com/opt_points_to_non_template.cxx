@@ -955,6 +955,7 @@ void POINTS_TO::Analyze_Lda_Base(WN *wn_lda, const OPT_STAB &opt_stab)
 
   ST *st = opt_stab.Aux_stab_entry(aux)->St();
   INT64 st_ofst =  opt_stab.Aux_stab_entry(aux)->St_ofst();
+
   Copy_non_sticky_info(opt_stab.Aux_stab_entry(aux)->Points_to());
   Set_base(st);
   Set_byte_ofst(st_ofst);

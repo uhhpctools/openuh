@@ -257,7 +257,7 @@ static void Set_COR_Info(WN *wn, COR_INFO *info)
 
 static void Get_COR_Info(WN *wn, COR_INFO *info)
 {
-    int dat = (int) WN_MAP_Get(Caf_COR_Info_Map, (WN *)wn);
+    int dat = (long int) WN_MAP_Get(Caf_COR_Info_Map, (WN *)wn);
     info->is_cor = dat >> 16;
     info->cor_depth = dat & 0xFFFF;
 }
@@ -557,7 +557,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
     Parentize(func_body);
 
-    /* resize coarrays and generate new symbols for targets
+    /* resize coarrays
      * TODO: This should be fixed in front-end, actually.
      *       not tested on deferred-size / allocatables.
      * */
@@ -567,62 +567,15 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
             if (ST_sclass(sym) == SCLASS_PSTATIC) {
                 set_coarray_tsize(ST_type(sym));
-                gen_save_coarray_symbol(sym);
-            }
-        } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
-            if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
-                gen_save_target_symbol(sym);
-                /* don't allot space for this symbol in global memory, if
-                 * uninitialized */
-                if (!ST_is_initialized(sym)) {
-                    Set_ST_type(sym, null_array_type);
-                    Set_ST_is_not_used(sym);
-                }
-            } else if (ST_sclass(sym) == SCLASS_AUTO) {
-                gen_auto_target_symbol(sym);
-                ST *targ_ptr = auto_target_symbol_map[sym];
-                WN *insert_wnx = Generate_Call_target_alloc(
-                        WN_Intconst(MTYPE_U8, TY_size(ST_type(sym))),
-                        WN_Lda(Pointer_type, 0, targ_ptr));
-                WN_INSERT_BlockFirst( func_body, insert_wnx);
-                insert_wnx = Generate_Call_target_dealloc(
-                    WN_Lda(Pointer_type, 0, targ_ptr));
-                WN_INSERT_BlockLast( func_exit_stmts, insert_wnx);
-
-                /* don't allot space for this symbol in stack */
-                Set_ST_type(sym, null_array_type);
-                Set_ST_is_not_used(sym);
             }
         }
     }
-
 
     if (global_coarrays_processed == FALSE) {
         FOREACH_SYMBOL(GLOBAL_SYMTAB, sym, i) {
             if (sym->sym_class == CLASS_VAR &&
                 is_coarray_type(ST_type(sym))) {
                 set_coarray_tsize(ST_type(sym));
-                if (ST_sclass(sym) == SCLASS_COMMON ||
-                    ST_sclass(sym) == SCLASS_DGLOBAL) {
-                    gen_global_save_coarray_symbol(sym);
-                    /* don't allot space for this symbol in global memory, if
-                     * uninitialized */
-                    if (!ST_is_initialized(sym)) {
-                        Set_ST_type(sym, null_coarray_type);
-                        Set_ST_is_not_used(sym);
-                    }
-                }
-            } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
-                if (ST_sclass(sym) == SCLASS_COMMON ||
-                    ST_sclass(sym) == SCLASS_DGLOBAL) {
-                    gen_global_save_target_symbol(sym);
-                    /* don't allot space for this symbol in global memory, if
-                     * uninitialized */
-                    if (!ST_is_initialized(sym)) {
-                        Set_ST_type(sym, null_array_type);
-                        Set_ST_is_not_used(sym);
-                    }
-                }
             }
         }
         global_coarrays_processed = TRUE;
@@ -806,15 +759,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                     /* move initializers for static coarrays here */
                     move_stmts_from_initializer_list(insert_wnx, blk_node);
-                }
-                break;
-            case OPR_RETURN:
-                if (func_exit_stmts) {
-                    insert_wnx = WN_first(func_exit_stmts);
-                    while (insert_wnx) {
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, WN_COPY_Tree(insert_wnx));
-                        insert_wnx = WN_next(insert_wnx);
-                    }
                 }
                 break;
             case OPR_CALL:
@@ -1394,224 +1338,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     /* remove statements in caf_delete_list and clear the list */
     delete_caf_stmts_in_delete_list();
 
-    /* Pass 2: Replace Save Coarray and Target Symbols
-     * TODO: Try to integrate this into the previous pass if possible
-     */
-    if (!save_coarray_symbol_map.empty() ||
-        !common_save_coarray_symbol_map.empty() ||
-        !save_target_symbol_map.empty() ||
-        !common_save_target_symbol_map.empty() ||
-        !auto_target_symbol_map.empty() ) {
-        WN_TREE_CONTAINER<POST_ORDER> wcpost(func_body);
-        WN_TREE_CONTAINER<POST_ORDER> ::iterator wipost;
-        for (wipost = wcpost.begin(); wipost != wcpost.end(); ++wipost) {
-            WN *wn = wipost.Wn();
-            ST *st1;
-            TY_IDX ty;
-            WN_OFFSET offset = 0;
-            switch (WN_operator(wn)) {
-              case OPR_LDA:
-                  st1 = WN_st(wn);
-                  ty  = WN_ty(wn);
-                  offset = WN_offset(wn);
-                  if (st1 && is_coarray_type(ST_type(st1))) {
-                      ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          save_coarray_replace =
-                              common_save_coarray_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
-                          save_coarray_replace =
-                              save_coarray_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(save_coarray_replace,
-                        ("New symbol for save coarray was not created yet"));
-
-                      wipost.Replace(
-                              WN_Add( MTYPE_U8,
-                                 WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
-                                      0, save_coarray_replace, ty),
-                                 WN_Intconst(MTYPE_U8, offset))
-                              );
-                      WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
-                      ST *targptr_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          targptr_replace =
-                              common_save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
-                          targptr_replace =
-                              save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
-                          targptr_replace =
-                              auto_target_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(targptr_replace,
-                        ("New symbol for target ptr was not created yet"));
-
-                      wipost.Replace(
-                              WN_Add( MTYPE_U8,
-                                 WN_Ldid(TY_mtype(ST_type(targptr_replace)),
-                                      0, targptr_replace, ty),
-                                 WN_Intconst(MTYPE_U8, offset))
-                              );
-                      WN_Delete(wn);
-                  }
-                  break;
-
-              case OPR_LDID:
-                  st1 = WN_st(wn);
-                  ty  = WN_ty(wn);
-                  offset = WN_offset(wn);
-                  if (st1 && is_coarray_type(ST_type(st1))) {
-                      ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          save_coarray_replace =
-                              common_save_coarray_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
-                          save_coarray_replace =
-                              save_coarray_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(save_coarray_replace,
-                        ("New symbol for save coarray was not created yet"));
-                      wipost.Replace(
-                              WN_IloadLdid(WN_desc(wn),
-                                  offset, ty,
-                                  save_coarray_replace, 0)
-                              );
-                      WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
-                      ST *targptr_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          targptr_replace =
-                              common_save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
-                          targptr_replace =
-                              save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
-                          targptr_replace =
-                              auto_target_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(targptr_replace,
-                        ("New symbol for target ptr was not created yet"));
-
-                      wipost.Replace(
-                              WN_IloadLdid(WN_desc(wn),
-                                  offset, ty, targptr_replace, 0)
-                              );
-                      WN_Delete(wn);
-                  }
-
-                  break;
-
-              case OPR_STID:
-                  st1 = WN_st(wn);
-                  ty  = WN_ty(wn);
-                  offset = WN_offset(wn);
-                  if (st1 && is_coarray_type(ST_type(st1))) {
-                      ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          save_coarray_replace =
-                              common_save_coarray_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
-                          save_coarray_replace =
-                              save_coarray_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(save_coarray_replace,
-                        ("New symbol for save coarray was not created yet"));
-                      wipost.Replace(
-                              WN_Istore(WN_rtype(WN_kid0(wn)),
-                                  offset, Make_Pointer_Type(ty),
-                                  WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
-                                      0, save_coarray_replace,
-                                      ST_type(save_coarray_replace)),
-                                  WN_COPY_Tree(WN_kid0(wn)), 0)
-                              );
-                      Set_Coarray_Sync(wipost.Wn(), Coarray_Sync(wn));
-                      WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1)) {
-                      ST *targptr_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          targptr_replace =
-                              common_save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
-                          targptr_replace =
-                              save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
-                          targptr_replace =
-                              auto_target_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(targptr_replace,
-                        ("New symbol for target ptr was not created yet"));
-
-                      wipost.Replace(
-                              WN_Istore(WN_rtype(WN_kid0(wn)),
-                                  offset, Make_Pointer_Type(ty),
-                                  WN_Ldid(TY_mtype(ST_type(targptr_replace)),
-                                      0, targptr_replace,
-                                      ST_type(targptr_replace)),
-                                  WN_COPY_Tree(WN_kid0(wn)), 0)
-                              );
-                      Set_Coarray_Sync(wipost.Wn(), Coarray_Sync(wn));
-                      WN_Delete(wn);
-                  }
-                  break;
-
-              default:
-                  st1 = WN_has_sym(wn) ? WN_st(wn) :  NULL;
-                  if (st1 && is_coarray_type(ST_type(st1))) {
-                      ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          save_coarray_replace =
-                              common_save_coarray_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
-                          save_coarray_replace =
-                              save_coarray_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Fail_FmtAssertion
-                        ("Encountered unexpected save coarray symbol in whirl tree.");
-                  } else if (st1 && ST_is_f90_target(st1)) {
-                      ST *targptr_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          targptr_replace =
-                              common_save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
-                          targptr_replace =
-                              save_target_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
-                          targptr_replace =
-                              auto_target_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Fail_FmtAssertion
-                        ("Encountered unexpected target symbol in whirl tree.");
-                  }
-                  break;
-            }
-        }
-    }
 
     /* reconstruct parent and COR_Info map */
 
@@ -1654,7 +1380,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         }
     }
 
-    /* Pass 3: Generate Communication for coindexed array section accesses
+    /* Pass 2: Generate Communication for coindexed array section accesses
      * TODO: Move this to later back-end phase?
      */
     curr_wipre = NULL;
@@ -2547,20 +2273,6 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
         }
     }
 
-    ST *sym;
-    UINT32 i;
-    FOREACH_SYMBOL(CURRENT_SYMTAB, sym, i) {
-        if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
-            if (ST_sclass(sym) == SCLASS_PSTATIC) {
-                /* don't allot space for this symbol in global memory, if
-                 * uninitialized */
-                if (!ST_is_initialized(sym)) {
-                    Set_ST_type(sym, null_coarray_type);
-                    Set_ST_is_not_used(sym);
-                }
-            }
-        }
-    }
 
     /* remove statements in caf_delete_list and clear the list */
     delete_caf_stmts_in_delete_list();
@@ -2573,6 +2285,363 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
 
     return pu;
 } /* Coarray_Lower */
+
+WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
+{
+    BOOL is_main = FALSE;
+    static BOOL global_coarrays_processed = FALSE;
+
+    WN *func_body, *func_exit_stmts;
+
+    is_main  = currentpu_ismain();
+
+    /* insert call to caf_init if this is the main PU */
+    is_main  = currentpu_ismain();
+    func_body = WN_func_body( pu );
+    func_exit_stmts = WN_CreateBlock();
+
+    /* generate new coarray and target symbols,
+     * nullify local coarray symbols, which should disappear from the AST by
+     * the end of this routine */
+    ST *sym;
+    UINT32 i;
+    FOREACH_SYMBOL(CURRENT_SYMTAB, sym, i) {
+        if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
+            if (ST_sclass(sym) == SCLASS_PSTATIC) {
+                gen_save_coarray_symbol(sym);
+
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_coarray_type);
+                    Set_ST_is_not_used(sym);
+                }
+            }
+        } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
+            if (ST_sclass(sym) == SCLASS_PSTATIC || is_main) {
+                gen_save_target_symbol(sym);
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_array_type);
+                    Set_ST_is_not_used(sym);
+                }
+            } else if (ST_sclass(sym) == SCLASS_AUTO) {
+                gen_auto_target_symbol(sym);
+                ST *targ_ptr = auto_target_symbol_map[sym];
+                WN *insert_wnx = Generate_Call_target_alloc(
+                        WN_Intconst(MTYPE_U8, TY_size(ST_type(sym))),
+                        WN_Lda(Pointer_type, 0, targ_ptr));
+                WN_INSERT_BlockFirst( func_body, insert_wnx);
+                insert_wnx = Generate_Call_target_dealloc(
+                    WN_Lda(Pointer_type, 0, targ_ptr));
+                WN_INSERT_BlockLast( func_exit_stmts, insert_wnx);
+
+                /* don't allot space for this symbol in stack */
+                Set_ST_type(sym, null_array_type);
+                Set_ST_is_not_used(sym);
+            }
+        }
+    }
+
+
+    if (global_coarrays_processed == FALSE) {
+        FOREACH_SYMBOL(GLOBAL_SYMTAB, sym, i) {
+            if (sym->sym_class == CLASS_VAR &&
+                is_coarray_type(ST_type(sym))) {
+                if (ST_sclass(sym) == SCLASS_COMMON ||
+                    ST_sclass(sym) == SCLASS_DGLOBAL) {
+                    gen_global_save_coarray_symbol(sym);
+                }
+            } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
+                if (ST_sclass(sym) == SCLASS_COMMON ||
+                    ST_sclass(sym) == SCLASS_DGLOBAL) {
+                    gen_global_save_target_symbol(sym);
+                }
+            }
+        }
+        global_coarrays_processed = TRUE;
+    }
+
+    /* Replace Save Coarray and Target Symbols
+     */
+    if (!save_coarray_symbol_map.empty() ||
+        !common_save_coarray_symbol_map.empty() ||
+        !save_target_symbol_map.empty() ||
+        !common_save_target_symbol_map.empty() ||
+        !auto_target_symbol_map.empty() ) {
+        WN_TREE_CONTAINER<POST_ORDER> wcpost(func_body);
+        WN_TREE_CONTAINER<POST_ORDER> ::iterator wipost;
+        for (wipost = wcpost.begin(); wipost != wcpost.end(); ++wipost) {
+            WN *blk_node, *stmt_node;
+            WN *wn = wipost.Wn();
+            ST *st1;
+            TY_IDX ty;
+            WN_OFFSET offset = 0;
+            switch (WN_operator(wn)) {
+            case OPR_RETURN:
+                if (func_exit_stmts) {
+                    WN *insert_wnx;
+                    insert_wnx = WN_first(func_exit_stmts);
+                    while (insert_wnx) {
+                        WN_INSERT_BlockBefore(blk_node, stmt_node, WN_COPY_Tree(insert_wnx));
+                        insert_wnx = WN_next(insert_wnx);
+                    }
+                }
+                break;
+              case OPR_LDA:
+                  st1 = WN_st(wn);
+                  ty  = WN_ty(wn);
+                  offset = WN_offset(wn);
+                  if (st1 && is_coarray_type(ST_type(st1))) {
+                      ST *save_coarray_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          save_coarray_replace =
+                              common_save_coarray_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
+                          save_coarray_replace =
+                              save_coarray_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(save_coarray_replace,
+                        ("New symbol for save coarray was not created yet"));
+
+                      wipost.Replace(
+                              WN_Add( MTYPE_U8,
+                                 WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
+                                      0, save_coarray_replace, ty),
+                                 WN_Intconst(MTYPE_U8, offset))
+                              );
+                      WN_Delete(wn);
+                  } else if (st1 && ST_is_f90_target(st1)) {
+                      ST *targptr_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          targptr_replace =
+                              common_save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
+                          targptr_replace =
+                              save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
+                          targptr_replace =
+                              auto_target_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(targptr_replace,
+                        ("New symbol for target ptr was not created yet"));
+
+                      wipost.Replace(
+                              WN_Add( MTYPE_U8,
+                                 WN_Ldid(TY_mtype(ST_type(targptr_replace)),
+                                      0, targptr_replace, ty),
+                                 WN_Intconst(MTYPE_U8, offset))
+                              );
+                      WN_Delete(wn);
+                  }
+                  break;
+
+              case OPR_LDID:
+                  st1 = WN_st(wn);
+                  ty  = WN_ty(wn);
+                  offset = WN_offset(wn);
+                  if (st1 && is_coarray_type(ST_type(st1))) {
+                      ST *save_coarray_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          save_coarray_replace =
+                              common_save_coarray_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
+                          save_coarray_replace =
+                              save_coarray_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(save_coarray_replace,
+                        ("New symbol for save coarray was not created yet"));
+                      wipost.Replace(
+                              WN_IloadLdid(WN_desc(wn),
+                                  offset, ty,
+                                  save_coarray_replace, 0)
+                              );
+                      WN_Delete(wn);
+                  } else if (st1 && ST_is_f90_target(st1)) {
+                      ST *targptr_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          targptr_replace =
+                              common_save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
+                          targptr_replace =
+                              save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
+                          targptr_replace =
+                              auto_target_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(targptr_replace,
+                        ("New symbol for target ptr was not created yet"));
+
+                      wipost.Replace(
+                              WN_IloadLdid(WN_desc(wn),
+                                  offset, ty, targptr_replace, 0)
+                              );
+                      WN_Delete(wn);
+                  }
+
+                  break;
+
+              case OPR_STID:
+                  st1 = WN_st(wn);
+                  ty  = WN_ty(wn);
+                  offset = WN_offset(wn);
+                  if (st1 && is_coarray_type(ST_type(st1))) {
+                      ST *save_coarray_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          save_coarray_replace =
+                              common_save_coarray_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
+                          save_coarray_replace =
+                              save_coarray_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(save_coarray_replace,
+                        ("New symbol for save coarray was not created yet"));
+                      wipost.Replace(
+                              WN_Istore(WN_rtype(WN_kid0(wn)),
+                                  offset, Make_Pointer_Type(ty),
+                                  WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
+                                      0, save_coarray_replace,
+                                      ST_type(save_coarray_replace)),
+                                  WN_COPY_Tree(WN_kid0(wn)), 0)
+                              );
+                      WN_Delete(wn);
+                  } else if (st1 && ST_is_f90_target(st1)) {
+                      ST *targptr_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          targptr_replace =
+                              common_save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
+                          targptr_replace =
+                              save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
+                          targptr_replace =
+                              auto_target_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Is_True(targptr_replace,
+                        ("New symbol for target ptr was not created yet"));
+
+                      wipost.Replace(
+                              WN_Istore(WN_rtype(WN_kid0(wn)),
+                                  offset, Make_Pointer_Type(ty),
+                                  WN_Ldid(TY_mtype(ST_type(targptr_replace)),
+                                      0, targptr_replace,
+                                      ST_type(targptr_replace)),
+                                  WN_COPY_Tree(WN_kid0(wn)), 0)
+                              );
+                      WN_Delete(wn);
+                  }
+                  break;
+
+              default:
+                  st1 = WN_has_sym(wn) ? WN_st(wn) :  NULL;
+                  if (st1 && is_coarray_type(ST_type(st1))) {
+                      ST *save_coarray_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          save_coarray_replace =
+                              common_save_coarray_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
+                          save_coarray_replace =
+                              save_coarray_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Fail_FmtAssertion
+                        ("Encountered unexpected save coarray symbol in whirl tree.");
+                  } else if (st1 && ST_is_f90_target(st1)) {
+                      ST *targptr_replace;
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
+                          targptr_replace =
+                              common_save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_PSTATIC || is_main) {
+                          targptr_replace =
+                              save_target_symbol_map[st1];
+                      } else if (ST_sclass(st1) == SCLASS_AUTO) {
+                          targptr_replace =
+                              auto_target_symbol_map[st1];
+                      } else {
+                          continue;
+                      }
+                      Fail_FmtAssertion
+                        ("Encountered unexpected target symbol in whirl tree.");
+                  }
+                  break;
+            }
+        }
+    }
+
+    /* remove statements in func_exit_stmts */
+    WN *wnx = WN_first(func_exit_stmts);
+    while (wnx) {
+      WN_DELETE_Tree(WN_EXTRACT_FromBlock(func_exit_stmts, wnx));
+      wnx = WN_first(func_exit_stmts);
+    }
+    WN_Delete(func_exit_stmts);
+
+    func_exit_stmts = NULL;
+
+    save_coarray_symbol_map.clear();
+    save_target_symbol_map.clear();
+    auto_target_symbol_map.clear();
+
+    return pu;
+}
+
+void Coarray_Global_Symbols_Remove()
+{
+    ST *sym;
+    UINT32 i;
+
+    /* nullify global coarray symbols, which should by now be removed from all
+     * PUs in the AST.
+     * TODO: double-check that space is in fact not being allocated for these
+     * symbols
+     * */
+    FOREACH_SYMBOL(GLOBAL_SYMTAB, sym, i) {
+        if (sym->sym_class == CLASS_VAR &&
+                is_coarray_type(ST_type(sym))) {
+            if (ST_sclass(sym) == SCLASS_COMMON ||
+                    ST_sclass(sym) == SCLASS_DGLOBAL) {
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_coarray_type);
+                    Set_ST_is_not_used(sym);
+                }
+            }
+        } else if (sym->sym_class == CLASS_VAR && ST_is_f90_target(sym)) {
+            if (ST_sclass(sym) == SCLASS_COMMON ||
+                    ST_sclass(sym) == SCLASS_DGLOBAL) {
+                /* don't allot space for this symbol in global memory, if
+                 * uninitialized */
+                if (!ST_is_initialized(sym)) {
+                    Set_ST_type(sym, null_array_type);
+                    Set_ST_is_not_used(sym);
+                }
+            }
+        }
+    }
+}
 
 
 static const char * const dope_str_prefix = ".dope." ;
@@ -5800,6 +5869,12 @@ static ST* gen_save_symm_symbol(ST *sym)
     ST *new_sym = New_ST( GLOBAL_SYMTAB );
     ST_Init( new_sym, Save_Str(new_sym_str), CLASS_VAR, SCLASS_EXTERN,
             EXPORT_PREEMPTIBLE, Make_Pointer_Type(ST_type(sym)) );
+
+    /* indicate this pointer type is restricted (i.e. doesn't alias) */
+    TY_IDX ty = ST_type(new_sym);
+    Set_TY_is_restrict(ty);
+    Set_TY_is_const(ty);
+    Set_ST_type(new_sym, ty);
 
     /* if symbol is initialized, then we also generate a global pointer symbol
      * to it */
