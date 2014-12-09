@@ -4830,11 +4830,10 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
                         fout << parent_name;
                         fout <<" -> ";
                         fout << node_name;
-                        // syncrhonizations calls
-                        if(IsOpenSHMEM(node_name,98,107) || IsOpenSHMEM(node_name,82,85) || IsOpenSHMEM(node_name,186,188))
-                            fout << " [style=filled,color=red," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                        if(IsOpenSHMEM(node_name,98,107) || IsOpenSHMEM(node_name,82,85) || IsOpenSHMEM(node_name,186,188)) // Synchronizations
+                            fout << " [style=filled,color=black," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else if (IsOpenSHMEM(node_name,1,12)) // init, runtime queries
-                            fout << " [style=dashed,color=green," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                            fout << " [style=filled,color=green," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else if (IsOpenSHMEM(node_name,88,97)) // symetic memory management
                             fout << " [color=yellow," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else if (IsOpenSHMEM(node_name,108,128)) // atomics
@@ -4842,10 +4841,10 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
                         else if (IsOpenSHMEM(node_name,135,178)) // reductions
                             fout << " [color=purple," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else if (IsOpenSHMEM(node_name,179,181)) // broadcast
-                            fout << " [style=dashed,color=red," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
+                            fout << " [style=filled,color=red," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else if (IsOpenSHMEM(node_name,135,178)) // reductions
                             fout << " [color=purple," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
-                        else if (IsOpenSHMEM(node_name,13,81)) // IO
+                        else if (IsOpenSHMEM(node_name,13,81)) // RMA
                             fout << " [color=blue," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
                         else // all others
                             fout << " [color=black," << "URL=\"file:" << html<<current_file_ext<<".html#line"<<callsite_linenum<<"\"];\n";
@@ -4913,13 +4912,13 @@ void IPA_CALL_GRAPH::OpenSHMEM_Init_Checks(BOOL print)
         fout << "{ rank = sink; Legend [shape=none, margin=0, label=<" <<endl;
         fout << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"1\">" << endl;
         fout << "<TR><TD>Legend:</TD><TD>  </TD></TR>" << endl;
-        fout << "<TR><TD>I/O</TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
+        fout << "<TR><TD>Remote Memory Accesses</TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
         fout << "<TR><TD>Reductions</TD> <TD BGCOLOR=\"purple\"></TD></TR>" << endl;
         fout << "<TR><TD>Broadcast</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
         fout << "<TR><TD>Atomics</TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
         fout << "<TR><TD>Memory Mgt</TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
         fout << "<TR><TD>State Queries</TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
-        fout << "<TR><TD>Synchronizations</TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+        fout << "<TR><TD>Synchronizations</TD> <TD BGCOLOR=\"black\"></TD></TR>" << endl;
         fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
         fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
         fout << "</TABLE> >]; }" << endl;

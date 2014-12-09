@@ -835,12 +835,12 @@ void IPL_Check_Alias(WN *func_body, ALIAS_MANAGER* alias_mgr, WN* memopr_wn,
                           */
                           WN* temp_wn=WN_kid0(memopr_wn);
                           OPERATOR temp_op = WN_operator(memopr_wn);
-                          while(temp_wn!=NULL && ( op==OPR_LDID || op==OPR_STID ||
-                                                   op==OPR_ILOAD || op==OPR_ISTORE)) {
+                          while(temp_wn!=NULL && ( temp_op==OPR_LDID || temp_op==OPR_STID ||
+                                                   temp_op==OPR_ILOAD || temp_op==OPR_ISTORE)) {
                             memopr_wn = temp_wn;
-                            WN* temp_wn=WN_kid0(memopr_wn);
+                            temp_wn=WN_kid0(memopr_wn);
                             if(temp_wn==NULL){break;}
-                            OPERATOR temp_op = WN_operator(temp_wn);
+                            temp_op = WN_operator(temp_wn);
                           }
 
                           Print_OSA_Warning(Src_File_Name, line, 0,

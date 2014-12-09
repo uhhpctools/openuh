@@ -7587,13 +7587,13 @@ void osacfggraph::print(void) {
     fout << "{ rank = sink; Legend [shape=none, margin=0, label=<" <<endl;
     fout << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"1\">" << endl;
     fout << "<TR><TD align=\"left\">Legend                </TD><TD>  </TD></TR>" << endl;
-    fout << "<TR><TD align=\"left\">I/O                   </TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Remote Memory Accesses</TD> <TD BGCOLOR=\"blue\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">Reductions            </TD> <TD BGCOLOR=\"purple\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">Broadcast             </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">Atomics               </TD> <TD BGCOLOR=\"orange\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">Memory Mgt            </TD> <TD BGCOLOR=\"yellow\"></TD></TR>" << endl;
     fout << "<TR><TD align=\"left\">State Queries         </TD> <TD BGCOLOR=\"green\"></TD></TR>" << endl;
-    fout << "<TR><TD align=\"left\">Synchronizations      </TD> <TD BGCOLOR=\"red\"></TD></TR>" << endl;
+    fout << "<TR><TD align=\"left\">Synchronizations      </TD> <TD BGCOLOR=\"black\"></TD></TR>" << endl;
     //     fout << "<TR><TD>Contains OpenSHMEM</TD> <TD BGCOLOR=\"lightblue\"></TD></TR>" << endl;
     //fout << "<TR><TD>OpenSHMEM Call</TD> <TD BGCOLOR=\"lightpink\"></TD></TR>" << endl;
     fout << "</TABLE> >]; }" << endl;

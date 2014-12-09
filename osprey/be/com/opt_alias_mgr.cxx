@@ -1682,13 +1682,12 @@ BOOL Find_all_alias(const struct ALIAS_MANAGER * am, WN * src, WN * func_body,
     WN_TREE_CONTAINER<POST_ORDER> wcpre(func_body);
     WN_TREE_CONTAINER<POST_ORDER> :: iterator wipre, temp_iter;
     OPERATOR op;
-    WN * stmt;
 
     wipre =  wcpre.begin();
     WN * target=wipre.Wn();
     WN * end_wn=NULL;
+    USRCPOS target_linepos;
 
-    stmt=target;
     while(WN_operator(target) != OPR_FUNC_ENTRY) {
         if(target==src && is_blocking) {
             break;
@@ -1698,13 +1697,25 @@ BOOL Find_all_alias(const struct ALIAS_MANAGER * am, WN * src, WN * func_body,
                  op==OPR_ILOAD) && am->Id(target)>2){
                 result = Aliased(am, src,target, TRUE);
                 if(result == POSSIBLY_ALIASED /* || result==SAME_LOCATION*/){
-                    if(idx==arr_length) break;
-                    if((idx!=0 && arr_stmt[idx-1]!=stmt)|| (idx==0)) {
-                        /*This avoids  duplicate entries in the buffers in case of
-                          multiple aliases in the same statement
-                          */
+                    if(idx==arr_length)
+                      break;
+
+                    /*  Condition A:
+                     *  Avoid duplicate entries in case of
+                     *  multiple aliases in the same stmt
+                     *  Condition B:
+                     *  Ensure that the aliased node is a
+                     *  stmt or function call
+                     */
+                    if(( (idx!=0 && arr_stmt[idx-1]!=target) ||
+                         (idx==0)                              /* Condition A */
+                       ) &&
+                       ( OPERATOR_is_stmt(WN_operator(target)) ||
+                         OPERATOR_is_call(WN_operator(target)) /* Condition B */
+                       ))
+                    {
                         arr_alias_id[idx]=target;
-                        arr_stmt[idx++]=stmt;
+                        arr_stmt[idx++]=target;
                     }
                     is_src_aliased=TRUE;
                 }
@@ -1713,8 +1724,6 @@ BOOL Find_all_alias(const struct ALIAS_MANAGER * am, WN * src, WN * func_body,
         }
         wipre++;
         target  =  wipre.Wn();
-        stmt = (OPERATOR_is_stmt(WN_operator(target)) ||
-                OPERATOR_is_call(WN_operator(target))) ?  target : stmt;
     }
     return is_src_aliased;
 }
