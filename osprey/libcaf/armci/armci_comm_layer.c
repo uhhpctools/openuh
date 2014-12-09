@@ -32,6 +32,8 @@
 #include <assert.h>
 #include <unistd.h>
 #include <math.h>
+#include <stdint.h>
+#include <limits.h>
 #include "caf_rtl.h"
 #include "comm.h"
 #include "alloc.h"
@@ -41,6 +43,8 @@
 #include "util.h"
 #include "collectives.h"
 #include "profile.h"
+#include "utlist.h"
+#include "team.h"
 
 const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
 
@@ -53,22 +57,46 @@ extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern unsigned long _log2_images;
 extern unsigned long _rem_images;
-extern mem_usage_info_t *mem_info;
+extern team_type     initial_team;
+extern mem_usage_info_t * init_mem_info;
+extern mem_usage_info_t * child_mem_info;
 extern size_t alloc_byte_alignment;
 
 extern int rma_prof_rid;
 
-/* common_slot is a node in the shared memory link-list that keeps track
- * of available memory that can used for both allocatable coarrays and
- * asymmetric data. */
-extern shared_memory_slot_t *common_slot;
+/* init_common_slot and child_common_slot is a node in the shared memory
+ * link-list that keeps track of available memory that can used for both
+ * allocatable coarrays and asymmetric data.
+ *
+ * TEAM_SUPPORT: separate the common_slot into two.
+ *
+ * One is init_common_slot. Initialized in comm_init(). Keep tracking of
+ * shared memory of initial team.
+ *
+ * Another is child_comm_slot. Keep tracking the
+ * comm_slot of teams other than team_world comm_slot.
+ */
+extern shared_memory_slot_t *init_common_slot;
+extern shared_memory_slot_t * child_common_slot;
 
+extern int reduction_2level;
 extern int enable_collectives_1sided;
 extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
 extern void *collectives_buffer;
 extern size_t collectives_bufsize;
 extern int collectives_max_workbufs;
+
+/*
+ * team_info_t list, used for exhanging team_info structure within form_team.
+ * Allocated in comm_init.
+ */
+extern team_info_t * exchange_teaminfo_buf;
+
+/*
+ * Global team stack, initialized ini comm_init()
+ */
+extern team_stack_t * global_team_stack;
 
 /*
  * Static Variable declarations
@@ -90,8 +118,13 @@ typedef union {
 } sync_flag_t;
 static sync_flag_t *sync_flags = NULL;
 
+sync_all_t sync_all_algorithm;
+
 /* rma ordering */
 static rma_ordering_t rma_ordering;
+
+/*Tracking num of leaders, proc_id of leaders */
+int total_num_supernodes;
 
 /* Shared memory management:
  * coarray_start_all_images stores the shared memory start address of all
@@ -135,8 +168,9 @@ static int critical_mutex;
 
 
 /* Local function declarations */
+void *get_remote_address(void *src, size_t img);
+
 static inline void check_for_error_stop();
-static void *get_remote_address(void *src, size_t img);
 static void clear_all_cache();
 static void clear_cache(size_t node);
 static int cache_check_and_get(size_t node, void *remote_address,
@@ -208,6 +242,9 @@ static void sync_images_sense_rev(int *image_list,
                       char *errmsg, int errmsg_len);
 #endif
 
+static inline void sync_all_dissemination_mcs(int *stat, int stat_len,
+		char * errmsg, int errmsg_len, team_type_t *team);
+
 void set_static_symm_data(void *base_address, size_t alignment);
 unsigned long get_static_symm_size(size_t alignment,
                                    size_t collectives_bufsize);
@@ -230,6 +267,15 @@ size_t comm_get_node_id(size_t proc)
 {
     return (size_t) armci_domain_id(ARMCI_DOMAIN_SMP, (int)proc);
 }
+
+void *comm_get_sharedptr(void *addr, size_t proc)
+{
+  if (proc == my_proc)
+    return addr;
+
+  return NULL;
+}
+
 
 static int mpi_initialized_by_armci = 0;
 
@@ -320,7 +366,7 @@ inline void *comm_end_symmetric_mem(size_t proc)
     /* we can't directly use common_slot->addr as the argument, because the
      * translation algorithm will treat it as part of the asymmetric memory
      * space */
-    return get_remote_address(common_slot->addr - 1, proc) + 1;
+    return get_remote_address(child_common_slot->addr - 1, proc) + 1;
 }
 
 inline void *comm_start_asymmetric_heap(size_t proc)
@@ -328,7 +374,7 @@ inline void *comm_start_asymmetric_heap(size_t proc)
     if (proc != my_proc) {
         return comm_end_symmetric_mem(proc);
     } else {
-        return (char *) common_slot->addr + common_slot->size;
+        return (char *) child_common_slot->addr + child_common_slot->size;
     }
 }
 
@@ -348,11 +394,48 @@ static inline int address_in_symmetric_mem(void *addr)
     void *end_symm_mem;
 
     start_symm_mem = coarray_start_all_images[my_proc];
-    end_symm_mem = common_slot->addr;
+    end_symm_mem = child_common_slot->addr;
 
     return (addr >= start_symm_mem && addr < end_symm_mem);
 }
 
+static inline int address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    start_shared_mem = coarray_start_all_images[my_proc];
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
+}
+
+static inline int remote_address_in_shared_mem(size_t proc, void *address)
+{
+    return !((address < comm_start_symmetric_mem(my_proc) ||
+              address >= comm_end_symmetric_mem(my_proc)) &&
+             (address < comm_start_asymmetric_heap(proc) ||
+              address >= comm_end_asymmetric_heap(proc)));
+}
+
+static inline long get_leader( )
+{
+	if(current_team != NULL)
+		return current_team->intranode_set[1];
+	else
+		return -1;
+}
+
+int comm_address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    start_shared_mem = coarray_start_all_images[my_proc];
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
+}
 
 
 /**************************************************************
@@ -408,8 +491,8 @@ static void local_strided_copy(void *src, const int src_strides[],
  * 1) Initialize ARMCI
  * 2) Create flags and mutexes for sync_images
  * 3) Create pinned memory and populates coarray_start_all_images.
- * 4) Populates common_slot with the pinned memory data which is used by
- *    alloc.c to allocate/deallocate coarrays.
+ * 4) Populates init_common_slot and child_common_slot with the pinned memory
+ *    data which is used by alloc.c to allocate/deallocate coarrays.
  */
 
 void comm_init()
@@ -420,19 +503,25 @@ void comm_init()
     unsigned long caf_shared_memory_size;
     unsigned long image_heap_size;
     size_t collectives_offset;
+    unsigned long  init_heap_size;
     armci_handle_x_t *p;
-    shared_memory_slot_t *common_shared_memory_slot;
 
-    if (common_slot != NULL) {
+    extern mem_usage_info_t * init_mem_info;
+    extern mem_usage_info_t * child_mem_info;
+
+    if (init_common_slot != NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "common_slot has already been initialized");
+                     "init_common_slot has already been initialized");
     }
 
-    common_slot = malloc(sizeof(shared_memory_slot_t));
-    common_shared_memory_slot = common_slot;
+    init_common_slot = malloc(sizeof(shared_memory_slot_t));
 
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
+
+    /* get size for collectives buffer */
+    collectives_bufsize = get_env_size_with_unit(ENV_COLLECTIVES_BUFSIZE,
+                                                 DEFAULT_COLLECTIVES_BUFSIZE);
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap).
@@ -458,6 +547,8 @@ void comm_init()
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size_with_unit(ENV_IMAGE_HEAP_SIZE,
                                              DEFAULT_IMAGE_HEAP_SIZE);
+    init_heap_size = get_env_size_with_unit(ENV_INIT_TEAM_HEAP_SIZE,
+                                            DEFAULT_INIT_TEAM_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
 
     argc = ARGC;
@@ -546,6 +637,23 @@ void comm_init()
             if (my_proc == 0) {
                 Warning("SYNC_IMAGES_ALGORITHM %s is not supported. "
                         "Using default", si_alg);
+            }
+        }
+    }
+
+    /* which sync all algorithm are used */
+    char *sync_all_alg;
+    sync_all_alg = getenv(ENV_SYNC_ALL_ALGORITHM);
+    sync_all_algorithm = SYNC_ALL_DEFAULT;
+
+    if(sync_all_alg != NULL){
+        if (strncasecmp(sync_all_alg, "SYNC_ALL_DIS_MCS", 16) == 0) {
+            if (my_proc == 0) printf("dis mcs\n");
+            sync_all_algorithm = SYNC_ALL_DIS_MCS;
+        } else {
+            if(my_proc == 0) {
+                Warning("SYNC_ALL_ALGORITHM %s is not supported."
+                        " Using default", sync_all_alg);
             }
         }
     }
@@ -714,36 +822,118 @@ void comm_init()
     }
 
     /* initialize common shared memory slot */
-    common_shared_memory_slot->addr = coarray_start_all_images[my_proc]
+    init_common_slot->addr = coarray_start_all_images[my_proc]
         + static_symm_data_total_size;
-    common_shared_memory_slot->size = caf_shared_memory_size
+    init_common_slot->size = caf_shared_memory_size
         - static_symm_data_total_size;
-    common_shared_memory_slot->feb = 0;
-    common_shared_memory_slot->next = 0;
-    common_shared_memory_slot->prev = 0;
+    init_common_slot->feb = 0;
+    init_common_slot->next = 0;
+    init_common_slot->prev = 0;
 
     shared_memory_size = caf_shared_memory_size;
 
+    /*Init the team stack*/
+    global_team_stack = (team_stack_t *) malloc(sizeof(team_stack_t));
+    global_team_stack->count = 0;
+
+
+     /*Add team support here*/
+
+    initial_team = (team_type) malloc(sizeof(team_type_t));
+    initial_team->codimension_mapping = (long *)malloc(num_procs*sizeof(long));
+    for (i = 0; i < num_procs; i++) {
+        initial_team->codimension_mapping[i] = i;
+    }
+
+    /* Add intranode_set array
+     *
+     * Currently, treating each process as residing on its own node.
+     * TODO: get node info from ARMCI
+     */
+
+    {
+	    initial_team->intranode_set = (long *)malloc(sizeof(long)*2);
+	    initial_team->intranode_set[0] = 1;
+	    initial_team->intranode_set[1] = my_proc;
+    }
+
+    /*Forming the leader set */
+    {
+	    initial_team->leader_set =
+            (long *)malloc(sizeof(long) * num_procs);
+
+        initial_team->leaders_count = num_procs;
+
+	    for (i = 0; i < num_procs; i++) {
+		    initial_team->leader_set[i] = i;
+	    }
+    }
+
+    initial_team->current_this_image    = my_proc + 1;
+    initial_team->current_num_images    = num_procs;
+    initial_team->current_log2_images   = log2_procs;
+    initial_team->current_rem_images    = rem_procs;
+    initial_team->depth                 = 0;
+    initial_team->parent                = NULL;
+    initial_team->team_id               = 0;
+    initial_team->defined               = 1;
+    initial_team->activated             = 1;
+    initial_team->barrier.parity        = 0;
+    initial_team->barrier.sense         = 0;
+    initial_team->barrier.bstep         = NULL;
+
+    shared_memory_slot_t * tmp_slot;
+    tmp_slot = init_common_slot;
+
+    while(tmp_slot->prev != NULL)
+        tmp_slot = tmp_slot->prev;
+
+    initial_team->symm_mem_slot.start_addr = tmp_slot->addr;
+    initial_team->symm_mem_slot.end_addr =
+        init_common_slot->addr + init_heap_size;
+
+    initial_team->allocated_list = NULL;
+
+    /*Init the child_common_slot*/
+    if (child_common_slot == NULL) {
+        child_common_slot       = (shared_memory_slot_t *)
+                                   malloc(sizeof(shared_memory_slot_t));
+        child_common_slot->addr = init_common_slot->addr + init_heap_size;
+        child_common_slot->size = init_common_slot->size - init_heap_size;
+        child_common_slot->feb  = 0;
+        child_common_slot->next = NULL;
+        child_common_slot->prev = NULL;
+     }
+
+    init_common_slot->size = init_heap_size;
+    current_team = initial_team;
+
+    /* update the init_mem_info*/
+    init_mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_new_(sizeof(*init_mem_info), NULL, NULL);
+
+    /* allocate space in symmetric heap for memory usage info */
+    init_mem_info->current_heap_usage = sizeof(*init_mem_info);
+    init_mem_info->max_heap_usage = sizeof(*init_mem_info);
+    init_mem_info->reserved_heap_usage = init_heap_size;
+    child_mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_new_(sizeof(*child_mem_info), NULL, NULL);
+    child_mem_info->current_heap_usage = 0;
+    child_mem_info->max_heap_usage = 0;
+    child_mem_info->reserved_heap_usage = child_common_slot->size;
+
     /* allocate space for recording image termination */
     error_stopped_image_exists =
-        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
+        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
     this_image_stopped =
-        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
+        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
     *error_stopped_image_exists = 0;
     *this_image_stopped = 0;
 
-    stopped_image_exists = (char *) coarray_allocatable_allocate_(
-                      (num_procs+1) * sizeof(char), NULL);
+    stopped_image_exists = (char *) coarray_allocatable_allocate_new_(
+                      (num_procs+1) * sizeof(char), NULL, NULL);
 
     memset(stopped_image_exists, 0, (num_procs+1)*sizeof(char));
-
-    /* allocate space in symmetric heap for memory usage info */
-    mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(*mem_info), NULL);
-    mem_info->current_heap_usage = sizeof(*mem_info);
-    mem_info->max_heap_usage = sizeof(*mem_info);
-    mem_info->reserved_heap_usage =
-        caf_shared_memory_size - static_symm_data_total_size;
 
     /* allocate flags for p2p synchronization via sync images */
     sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
@@ -763,12 +953,23 @@ void comm_init()
     collectives_max_workbufs = get_env_flag(ENV_COLLECTIVES_MAX_WORKBUFS,
                                             DEFAULT_COLLECTIVES_MAX_WORKBUFS);
 
+    reduction_2level = get_env_flag(ENV_REDUCTION_2LEVEL,
+            DEFAULT_ENABLE_REDUCTION_2LEVEL);
+
     mpi_collectives_available = 1;
+
+
+    /*allocate exhange buffer for form_team here*/
+    exchange_teaminfo_buf = (team_info_t *)
+        coarray_allocatable_allocate_new_(sizeof(team_info_t)* num_procs, NULL, NULL);
+
+    /*Push the first team into stack*/
+    global_team_stack->stack[global_team_stack->count] = initial_team;
+    global_team_stack->count += 1;
 
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
-                 common_shared_memory_slot->addr,
-                 common_shared_memory_slot->size);
+                 init_common_slot->addr, init_common_slot->size);
 
     ARMCI_Barrier();
 
@@ -1590,7 +1791,8 @@ unsigned long get_static_symm_size_(size_t alignment,
 void allocate_static_symm_data(void *base_address)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-    set_static_symm_data(base_address, alloc_byte_alignment);
+    size_t align = ((alloc_byte_alignment-1)/16+1)*16;
+    set_static_symm_data(base_address, align);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
@@ -1631,7 +1833,7 @@ void comm_translate_remote_addr(void **remote_addr, int proc)
  * from coarray_start_all_images, remote_address = start+offset
  * NOTE: remote_address on this image might be different from the actual
  * address on that image. So don't rely on it while debugging*/
-static void *get_remote_address(void *src, size_t img)
+void *get_remote_address(void *src, size_t img)
 {
     size_t offset;
     void *remote_address;
@@ -1640,17 +1842,6 @@ static void *get_remote_address(void *src, size_t img)
     offset = src - coarray_start_all_images[my_proc];
     remote_address = coarray_start_all_images[img] + offset;
     return remote_address;
-}
-
-int comm_address_in_shared_mem(void *addr)
-{
-    void *start_shared_mem;
-    void *end_shared_mem;
-
-    start_shared_mem = coarray_start_all_images[my_proc];
-    end_shared_mem = start_shared_mem + shared_memory_size;
-
-    return (addr >= start_shared_mem && addr < end_shared_mem);
 }
 
 /****************************************************************
@@ -1965,6 +2156,166 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         }
     } else {
         ARMCI_Barrier();
+    }
+
+	if(current_team == NULL || current_team == initial_team ||
+       current_team->codimension_mapping == NULL) {
+	    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
+            if (status != NULL) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+            } else {
+                Error("Image %d attempted to synchronize with stopped image",
+                      _this_image);
+                /* doesn't reach */
+            }
+        } else {
+            ARMCI_Barrier();
+        }
+	} else {
+		//determine which algorithm we are going to use
+		switch(sync_all_algorithm) {
+			case SYNC_ALL_DIS_MCS:
+				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len,
+                                           current_team);
+				break;
+			default:
+				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len,
+                                           current_team);
+		}
+
+	}
+
+    comm_new_exec_segment();
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+static inline void sync_all_dissemination_mcs(int *status, int stat_len,
+                                       char *errmsg, int errmsg_len,
+                                       team_type_t *team)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dissemination algorithm");
+    /*Phase 1, init*/
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
+    char bar_parity;
+    char bar_sense;
+    barrier_round_t *bstep;
+    int i;
+
+    bar_parity = team->barrier.parity;
+    bar_sense = 1 - team->barrier.sense;
+
+    /*Phase 2*/
+    long round = 0;
+    int sendpeer_idx, recvpeer_idx;
+    long round_bound = ceil(log2((double)nums));
+
+    for(round = 0;round < round_bound; round++){
+        bstep = &team->barrier.bstep[round];
+        unsigned long send_dest;
+        unsigned long recv_peer;
+
+        send_dest = bstep->target;
+        recv_peer = bstep->source;
+
+        /* using gasnet_put here instead of gasnet_put_nbi seems to be a
+         * little faster */
+        ARMCI_Put(&bstep->remote[bar_parity], &bar_sense,
+                  sizeof bstep->remote[bar_parity], send_dest);
+
+        while (bstep->local[bar_parity] != bar_sense &&
+               !(*error_stopped_image_exists)) {
+            comm_service();
+            LOAD_STORE_FENCE();
+
+            if (stopped_image_exists[recv_peer] &&
+                bstep->local[bar_parity] != bar_sense) {
+                if (status != NULL) {
+                    *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                    LOAD_STORE_FENCE();
+                    return;
+                } else {
+                    /* error termination */
+                    Error("Image %d attempted to synchronize with "
+                          "stopped image %d.", my_proc+1, recv_peer+1);
+                    /* doesn't reach */
+                }
+            }
+        }
+
+        check_for_error_stop();
+
+        if (stopped_image_exists[recv_peer] &&
+            bstep->local[bar_parity] != bar_sense) {
+            /* q has stopped */
+            if (status != NULL) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                LOAD_STORE_FENCE();
+                return;
+            } else {
+                /* error termination */
+                Error("Image %d attempted to synchronize with stopped "
+                      "image %d.", my_proc+1, recv_peer+1);
+                /* doesn't reach */
+            }
+        }
+
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                     "value %d from peer %d received in round %d\n",
+                     bar_sense, recv_peer, round);
+
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
+    }
+
+    team->barrier.parity = 1 - bar_parity;
+    if (bar_parity == 1) team->barrier.sense = bar_sense;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+void comm_sync_team(team_type_t *team, int *status, int stat_len, char *errmsg,
+                    int errmsg_len)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    check_for_error_stop();
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    wait_on_all_pending_accesses();
+
+    LOAD_STORE_FENCE();
+
+    /* TODO: need to check for stopped image during the execution of the
+     * barrier, instead of just at the beginning */
+    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
+        if (status != NULL) {
+            *((INT2 *) status) = STAT_STOPPED_IMAGE;
+        } else {
+            Error("Image %d attempted to synchronize with stopped image",
+                  _this_image);
+            /* doesn't reach */
+        }
+    } else {
+        ARMCI_Barrier();
+    }
+
+    //determine which algorithm we are going to use
+    switch(sync_all_algorithm) {
+        case SYNC_ALL_DIS_MCS:
+            sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        default:
+            sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len, team);
     }
 
     comm_new_exec_segment();

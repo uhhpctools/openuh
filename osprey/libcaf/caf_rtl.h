@@ -32,6 +32,7 @@
 
 #include <ctype.h>
 #include "lock.h"
+#include "team.h"
 #include "dopevec.h"
 
 #define LOAD_STORE_FENCE() __sync_synchronize()
@@ -127,11 +128,26 @@ void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
                   char *errmsg, int errmsg_len);
 void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
                       int errmsg_len);
+void _SYNC_TEAM(team_type *team_p, int *status, int stat_len, char *errmsg,
+                int errmsg_len);
 
 /* IMAGE INQUIRY INTRINSICS */
+int _NUM_IMAGES1(team_type *team);
+int _NUM_IMAGES2(int *team_id);
+
 int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub);
-void _THIS_IMAGE1(DopeVectorType * ret, DopeVectorType * diminfo);
-int _THIS_IMAGE2(DopeVectorType * diminfo, int *sub);
+
+int _IMAGE_INDEX1(DopeVectorType * diminfo, DopeVectorType * sub,
+                 team_type *team);
+
+int _IMAGE_INDEX2(DopeVectorType * diminfo, DopeVectorType * sub,
+                  int *team_id);
+
+int _THIS_IMAGE0(team_type *team);
+
+void _THIS_IMAGE1(DopeVectorType *ret, DopeVectorType *diminfo, team_type *team);
+
+int _THIS_IMAGE2(DopeVectorType * diminfo, int *sub, team_type *team);
 
 void _LCOBOUND_1(DopeVectorType * ret, DopeVectorType * diminfo);
 int _LCOBOUND_2(DopeVectorType * diminfo, int *sub);
@@ -219,6 +235,7 @@ void coarray_translate_remote_addr(void **remote_addr, int image);
 /* runtime checks */
 int check_remote_address(size_t, void *);
 int check_remote_image(size_t);
+int check_remote_image_initial_team(size_t);
 
 /* UHCAF library routines */
 void uhcaf_check_comms(void);

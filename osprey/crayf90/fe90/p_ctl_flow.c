@@ -4917,6 +4917,7 @@ void parse_sync_stmt (void)
    int			ir_idx;
    int          ir_idx2;
    int			line;
+   opnd_type    team_var_opnd;
    opnd_type		opnd;
    opnd_type    stat_opnd;
    opnd_type    errmsg_opnd;
@@ -4933,7 +4934,6 @@ void parse_sync_stmt (void)
 
    NTR_IR_TBL(ir_idx);
    SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
-   IR_OPR(ir_idx) = Sync_Opr;
    IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
    IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
 
@@ -4941,12 +4941,7 @@ void parse_sync_stmt (void)
 
        if (TOKEN_VALUE(token) == Tok_Kwd_All) {
            strcat( sync_stmt_name, "all");
-           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-           NTR_IR_TBL(IR_IDX_L(ir_idx));
-           IR_OPR(IR_IDX_L(ir_idx)) =  All_Opr;
-           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+           IR_OPR(ir_idx) = SyncAll_Opr;
 
            if (LA_CH_VALUE == LPAREN) {
                /* contains STAT= or ERRMSG= or nothing ... handle below */
@@ -4970,30 +4965,14 @@ void parse_sync_stmt (void)
            OPND_IDX(opnd) = NULL_IDX;
 
            if (LA_CH_VALUE != STAR) {
-               IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-               NTR_IR_TBL(IR_IDX_L(ir_idx));
-               IR_OPR(IR_IDX_L(ir_idx)) =  Images_Opr;
-               IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
-               IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
-               IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-               IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-               IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+               IR_OPR(ir_idx) = SyncImages_Opr;
                parsed_ok = parse_expr(&opnd);
-               COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+               COPY_OPND(IR_OPND_L(ir_idx), opnd);
 
-               IR_FLD_R(IR_IDX_L(ir_idx)) = CN_Tbl_Idx;
-               IR_IDX_R(IR_IDX_L(ir_idx)) = CN_INTEGER_ZERO_IDX;
-               IR_LINE_NUM_R(IR_IDX_L(ir_idx)) = TOKEN_LINE(token);
-               IR_COL_NUM_R(IR_IDX_L(ir_idx)) = TOKEN_COLUMN(token);
            }
            else {
-               IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-               NTR_IR_TBL(IR_IDX_L(ir_idx));
-               IR_OPR(IR_IDX_L(ir_idx)) =  Imagestar_Opr;
-               IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-               IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-               IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-               COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+               IR_OPR(ir_idx) = SyncImagestar_Opr;
+               COPY_OPND(IR_OPND_L(ir_idx), opnd);
 
                NEXT_LA_CH;
            }
@@ -5009,19 +4988,46 @@ void parse_sync_stmt (void)
            /* handle the reset (e.g. STAT= or ERRMSG=) below */
 
        } else if (TOKEN_VALUE(token) == Tok_Kwd_Memory) {
+           IR_OPR(ir_idx) = SyncMemory_Opr;
            strcat( sync_stmt_name, "memory");
-           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-           NTR_IR_TBL(IR_IDX_L(ir_idx));
-           IR_OPR(IR_IDX_L(ir_idx)) =  Memory_Opr;
-           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
 
            if (LA_CH_VALUE == LPAREN) {
                /* contains STAT= or ERRMSG= or nothing ... handle below */
                has_paren = TRUE;
                NEXT_LA_CH;
            }
+
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Team) {
+           IR_OPR(ir_idx) = SyncTeam_Opr;
+           strcat( sync_stmt_name, "team");
+
+           if (LA_CH_VALUE != LPAREN) {
+               parse_err_flush(Find_EOS, "(");
+               goto EXIT;
+           }
+
+           has_paren = TRUE;
+
+           NEXT_LA_CH;
+           {
+               boolean matched_tok;
+
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               if (matched_tok) {
+                   /* parse TEAM_VAR arg */
+                   parsed_ok = parse_deref(&team_var_opnd, NULL_IDX) && parsed_ok;
+                   COPY_OPND(IR_OPND_L(ir_idx), team_var_opnd);
+               }
+           }
+
+
+           if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
+               parse_err_flush(Find_EOS, ", or )");
+               goto EXIT;
+           }
+
+           if (LA_CH_VALUE == COMMA) NEXT_LA_CH;
+
 
        } else {
            /* should have seen ALL, IMAGES, or MEMORY identifier */

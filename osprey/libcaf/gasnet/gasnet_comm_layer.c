@@ -129,6 +129,7 @@ extern shared_memory_slot_t * child_common_slot;
 
 extern int out_of_segment_rma_enabled;
 
+extern int reduction_2level;
 extern int enable_collectives_1sided;
 extern int mpi_collectives_available;
 extern int enable_collectives_use_canary;
@@ -142,6 +143,10 @@ extern int collectives_max_workbufs;
  */
 extern team_info_t * exchange_teaminfo_buf;
 
+/*
+ * Global team stack, initialized ini comm_init()
+ */
+extern team_stack_t * global_team_stack;
 /*
  * Static variable declarations
  */
@@ -158,7 +163,7 @@ static unsigned int barcount = 0;
 static unsigned int barflag = 0;        // GASNET_BARRIERFLAG_ANONYMOUS
 
 /*Tracking num of leaders, proc_id of leaders */
-int total_num_supernodes;;
+int total_num_supernodes;
 /* Shared memory management
  * coarray_start_all_images stores the shared memory start address and
  * size of all images.
@@ -240,7 +245,7 @@ static inline void check_for_error_stop();
 static inline int address_in_symmetric_mem(void *addr);
 static inline int address_in_shared_mem(void *addr);
 static inline void sync_on_handle(struct handle_list *handle);
-static inline long get_leader();
+static inline long get_leader(team_type_t *team);
 
 static inline int remote_address_in_shared_mem(size_t proc, void *address);
 
@@ -388,21 +393,21 @@ static void sync_images_csr(int *image_list,
 #endif
 
 static void sync_all_dissemination_naive_swap(int *stat, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_2level_counter_dis(int *status, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_2level_senserev_dis(int * status, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_2level_multiflag(int * status, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_2level_sharedcounter(int * status, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_dissemination_naive(int *stat, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static void sync_all_dissemination_mcs_swap(int *stat, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 static inline void sync_all_dissemination_mcs(int *stat, int stat_len,
-		char * errmsg, int errmsg_len);
+		char * errmsg, int errmsg_len, team_type_t *team);
 void set_static_symm_data(void *base_address, size_t alignment);
 unsigned long get_static_symm_size(size_t alignment,
                                    size_t collectives_bufsize);
@@ -617,10 +622,10 @@ static inline int remote_address_in_shared_mem(size_t proc, void *address)
               address >= comm_end_asymmetric_heap(proc)));
 }
 
-static inline long get_leader( )
+static inline long get_leader(team_type_t *team)
 {
-	if(current_team != NULL)
-		return current_team->intranode_set[1];
+	if(team != NULL)
+		return team->intranode_set[1];
 	else
 		return -1;
 }
@@ -2334,10 +2339,9 @@ void comm_init()
 
     size_t collectives_offset;
     unsigned long  init_heap_size;
-
-    shared_memory_slot_t *common_shared_memory_slot;
-    mem_usage_info_t * mem_info;
-    mem_info = init_mem_info;
+    
+    extern mem_usage_info_t * init_mem_info;
+    extern mem_usage_info_t * child_mem_info;
 
     if (init_common_slot != NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
@@ -2345,12 +2349,7 @@ void comm_init()
     }
 
     init_common_slot = malloc(sizeof(shared_memory_slot_t));
-    common_shared_memory_slot = init_common_slot;
 
-    /* Get total shared memory size, per image, requested by program (enough
-     * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
-     * accordingly.
-     */
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
 
@@ -2360,6 +2359,11 @@ void comm_init()
 
     static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
                                                        collectives_bufsize);
+
+    /* Get total shared memory size, per image, requested by program (enough
+     * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
+     * accordingly.
+     */
     collectives_offset = static_symm_data_total_size -
       ((collectives_bufsize-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
 
@@ -2736,100 +2740,22 @@ void comm_init()
     }
 
     /* initialize common shared memory slot */
-    common_shared_memory_slot->addr =
+    init_common_slot->addr =
         coarray_start_all_images[my_proc].addr +
         static_symm_data_total_size;
-    common_shared_memory_slot->size =
+    init_common_slot->size =
         caf_shared_memory_size - static_symm_data_total_size;
-    common_shared_memory_slot->feb = 0;
-    common_shared_memory_slot->next = 0;
-    common_shared_memory_slot->prev = 0;
+    init_common_slot->feb = 0;
+    init_common_slot->next = 0;
+    init_common_slot->prev = 0;
 
     shared_memory_size = caf_shared_memory_size;
+    /*Put the team initialize here, right before any allocatable_allcoate*/
 
-    /* allocate space for recording image termination */
-    error_stopped_image_exists =
-        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
-    this_image_stopped =
-        (int *) coarray_allocatable_allocate_(sizeof(int), NULL);
-    *error_stopped_image_exists = 0;
-    *this_image_stopped = 0;
-
-    stopped_image_exists = (char *) coarray_allocatable_allocate_(
-                     (num_procs+1) * sizeof(char), NULL);
-
-    memset(stopped_image_exists, 0, (num_procs+1) * sizeof(char));
-
-    /* allocate space in symmetric heap for memory usage info */
-    mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(*mem_info), NULL);
-    mem_info->current_heap_usage = sizeof(*mem_info);
-    mem_info->max_heap_usage = sizeof(*mem_info);
-    mem_info->reserved_heap_usage =
-        caf_shared_memory_size - static_symm_data_total_size;
-
-    init_mem_info = mem_info;
-
-    /* create a symmetric lock variable for guarding critical sections.
-     * What's really needed is a distinct lock variable created for each
-     * critical section in the program, but for now we'll keep this simple.
-      */
-    critical_lock =
-        (lock_t *) coarray_allocatable_allocate_(sizeof(lock_t), NULL);
-
-    /* allocate flags for p2p synchronization via sync images */
-    sync_flags = (sync_flag_t *) coarray_allocatable_allocate_(
-        num_procs * sizeof(sync_flag_t), NULL);
-    memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
-
-    /* allocate flags for synchronization via sync all */
-    bar_flags[0] = (sync_flag_t *) coarray_allocatable_allocate_(
-        num_procs * sizeof(sync_flag_t), NULL);
-    memset(bar_flags[0], 0, num_procs*sizeof(sync_flag_t));
-    bar_flags[1] = (sync_flag_t *) coarray_allocatable_allocate_(
-        num_procs * sizeof(sync_flag_t), NULL);
-    memset(bar_flags[1], 0, num_procs*sizeof(sync_flag_t));
-
-    bar_senses = malloc(num_procs * sizeof *bar_senses);
-    memset(bar_senses, 0, num_procs * sizeof *bar_senses);
-
-    /* check whether to use 1-sided collectives implementation */
-    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
-                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
-
-    /* check whether to enable use of canary protocol for some collectives */
-    enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
-                                    DEFAULT_ENABLE_COLLECTIVES_USE_CANARY);
-
-    /* determine if there is a maximum number of work buffers to use for
-     * collectives */
-    collectives_max_workbufs = get_env_flag(ENV_COLLECTIVES_MAX_WORKBUFS,
-                                            DEFAULT_COLLECTIVES_MAX_WORKBUFS);
-
-    /* enable 1-sided collectives MPI isn't already initialized */
-    mpi_collectives_available = mpi_initialized_by_gasnet;
-
-    /*allocate exhange buffer for form_team here*/
-    exchange_teaminfo_buf = (team_info_t *)
-        coarray_allocatable_allocate_(sizeof(team_info_t)* num_procs, NULL);
-
-    /* allocate child_mem_info in shared heap*/
-    child_mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(mem_usage_info_t), NULL);
-    child_mem_info->current_heap_usage = 0;
-    child_mem_info->max_heap_usage = 0;
-    child_mem_info->reserved_heap_usage =
-       common_shared_memory_slot->size - init_heap_size;
-
-
-    /* since we've just allocated a bunch of memory, need to point
-     * common_shared_memory_slot to the updated common slot */
-    common_shared_memory_slot = init_common_slot;
-
-    /* start progress thread */
-    comm_service_init();
-
-     /*Add team support here*/
+    /*Init the team stack*/
+    global_team_stack = (team_stack_t *)
+        malloc(sizeof(team_stack_t));
+    global_team_stack->count = 0;
 
     initial_team = (team_type) malloc(sizeof(team_type_t));
     initial_team->codimension_mapping = (long *)malloc(num_procs*sizeof(long));
@@ -2901,6 +2827,7 @@ void comm_init()
     initial_team->current_rem_images    = rem_procs;
     initial_team->depth                 = 0;
     initial_team->parent                = NULL;
+    initial_team->team_id               = 0;
     initial_team->defined               = 1;
     initial_team->activated             = 1;
     initial_team->barrier.parity        = 0;
@@ -2908,32 +2835,112 @@ void comm_init()
     initial_team->barrier.bstep         = NULL;
 
     shared_memory_slot_t * tmp_slot;
-    tmp_slot = common_shared_memory_slot;
+    tmp_slot = init_common_slot;
     while(tmp_slot->prev != NULL)
         tmp_slot = tmp_slot->prev;
     initial_team->symm_mem_slot.start_addr = tmp_slot->addr;
 
     initial_team->symm_mem_slot.end_addr =
-        common_shared_memory_slot->addr + init_heap_size;
+        init_common_slot->addr + init_heap_size;
+
+    initial_team->allocated_list = NULL;
 
     /*Init the child_common_slot*/
     if (child_common_slot == NULL) {
         child_common_slot       = (shared_memory_slot_t *)
                                    malloc(sizeof(shared_memory_slot_t));
-        child_common_slot->addr = common_shared_memory_slot->addr+init_heap_size;
-        child_common_slot->size = common_shared_memory_slot->size - init_heap_size;
+        child_common_slot->addr = init_common_slot->addr+init_heap_size;
+        child_common_slot->size = init_common_slot->size - init_heap_size;
         child_common_slot->feb  = 0;
         child_common_slot->next = NULL;
         child_common_slot->prev = NULL;
      }
     init_common_slot->size=init_heap_size;
+    current_team =  initial_team;
+
+    init_mem_info = (mem_usage_info_t *) 
+        coarray_allocatable_allocate_new_(sizeof(mem_usage_info_t), NULL, NULL);
     /* update the init_mem_info*/
-    init_mem_info->reserved_heap_usage =  init_heap_size + 
-                                        init_mem_info-> current_heap_usage;
+    init_mem_info->current_heap_usage = sizeof(*init_mem_info);
+    init_mem_info->max_heap_usage = sizeof(*init_mem_info);
+    init_mem_info->reserved_heap_usage = init_heap_size;
+    /* intialize the child_mem_info*/
+    child_mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_new_(sizeof(mem_usage_info_t), NULL, NULL);
+	child_mem_info->current_heap_usage = 0;
+    child_mem_info->max_heap_usage = 0;
+    child_mem_info->reserved_heap_usage = child_common_slot->size;
 
+ 
 
-    current_team = initial_team;
-    LIBCAF_TRACE(LIBCAF_LOG_INIT,
+    /* allocate space for recording image termination */
+    error_stopped_image_exists =
+        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
+    this_image_stopped =
+        (int *) coarray_allocatable_allocate_new_(sizeof(int), NULL, NULL);
+    *error_stopped_image_exists = 0;
+    *this_image_stopped = 0;
+
+    stopped_image_exists = (char *) coarray_allocatable_allocate_new_(
+                     (num_procs+1) * sizeof(char), NULL, NULL);
+
+    memset(stopped_image_exists, 0, (num_procs+1) * sizeof(char));
+
+    /* create a symmetric lock variable for guarding critical sections.
+     * What's really needed is a distinct lock variable created for each
+     * critical section in the program, but for now we'll keep this simple.
+      */
+    critical_lock =
+        (lock_t *) coarray_allocatable_allocate_new_(sizeof(lock_t), NULL, NULL);
+
+    /* allocate flags for p2p synchronization via sync images */
+    sync_flags = (sync_flag_t *) coarray_allocatable_allocate_new_(
+        num_procs * sizeof(sync_flag_t), NULL, NULL);
+    memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
+
+    /* allocate flags for synchronization via sync all */
+    bar_flags[0] = (sync_flag_t *) coarray_allocatable_allocate_new_(
+        num_procs * sizeof(sync_flag_t),NULL,  NULL);
+    memset(bar_flags[0], 0, num_procs*sizeof(sync_flag_t));
+    bar_flags[1] = (sync_flag_t *) coarray_allocatable_allocate_new_(
+        num_procs * sizeof(sync_flag_t),NULL,  NULL);
+    memset(bar_flags[1], 0, num_procs*sizeof(sync_flag_t));
+
+    bar_senses = malloc(num_procs * sizeof *bar_senses);
+    memset(bar_senses, 0, num_procs * sizeof *bar_senses);
+
+    /* check whether to use 1-sided collectives implementation */
+    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
+                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+
+    /* check whether to enable use of canary protocol for some collectives */
+    enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
+                                    DEFAULT_ENABLE_COLLECTIVES_USE_CANARY);
+
+    /* determine if there is a maximum number of work buffers to use for
+     * collectives */
+    collectives_max_workbufs = get_env_flag(ENV_COLLECTIVES_MAX_WORKBUFS,
+                                            DEFAULT_COLLECTIVES_MAX_WORKBUFS);
+
+    reduction_2level = get_env_flag(ENV_REDUCTION_2LEVEL,
+            DEFAULT_ENABLE_REDUCTION_2LEVEL);
+
+    /* enable 1-sided collectives MPI isn't already initialized */
+    mpi_collectives_available = mpi_initialized_by_gasnet;
+
+    /*allocate exhange buffer for form_team here*/
+    exchange_teaminfo_buf = (team_info_t *)
+        coarray_allocatable_allocate_new_(sizeof(team_info_t)* num_procs, NULL, NULL);
+    /* start progress thread */
+    comm_service_init();
+
+    /*Push the first team into stack*/
+    {
+        global_team_stack->stack[global_team_stack->count] = initial_team;
+        global_team_stack->count += 1;
+    }
+
+   LIBCAF_TRACE(LIBCAF_LOG_INIT,
                  "Finished. Waiting for global barrier. Gasnet_Everything is %d. "
                  "init_common_slot->addr=%p, init_common_slot->size=%lu,"
                  "child_common_slot->addr=%p,child_common_slot=%lu",
@@ -3649,7 +3656,8 @@ unsigned long get_static_symm_size_(size_t alignment,
 void allocate_static_symm_data(void *base_address)
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
-    set_static_symm_data(base_address, alloc_byte_alignment);
+    size_t align = ((alloc_byte_alignment-1)/16+1)*16;
+    set_static_symm_data(base_address, align);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
@@ -4021,16 +4029,8 @@ void comm_sync_all(int * status, int stat_len, char * errmsg, int errmsg_len)
 	LOAD_STORE_FENCE();
 
 	if(current_team == NULL || current_team == initial_team ||
-			current_team->codimension_mapping == NULL)
-	{
+       current_team->codimension_mapping == NULL) {
 	    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
-            int i;
-            for (i = 0; i < current_team->current_num_images; i++) {
-                if (stopped_image_exists[current_team->codimension_mapping[i]]) {
-                    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,"image %d stopped", i+1);
-                }
-            }
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "statvar = %p", status);
             if (status != NULL) {
                 *((INT2 *) status) = STAT_STOPPED_IMAGE;
             } else {
@@ -4050,38 +4050,47 @@ void comm_sync_all(int * status, int stat_len, char * errmsg, int errmsg_len)
 		switch(sync_all_algorithm) {
 			case SYNC_ALL_DIS_NAIVE_SWAP:
                 //printf("1\n");
-				sync_all_dissemination_naive_swap(status, stat_len, errmsg, errmsg_len);
+				sync_all_dissemination_naive_swap(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_2LEVEL_COUNTER_DIS:
                 //printf("2\n");
-				sync_all_2level_counter_dis(status, stat_len, errmsg, errmsg_len);
+				sync_all_2level_counter_dis(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_2LEVEL_SENSEREV_DIS:
                 //printf("3\n");
-				sync_all_2level_senserev_dis(status, stat_len, errmsg, errmsg_len);
+				sync_all_2level_senserev_dis(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_2LEVEL_MULTIFLAG:
                 //printf("3\n");
-				sync_all_2level_multiflag(status, stat_len, errmsg, errmsg_len);
+				sync_all_2level_multiflag(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_2LEVEL_SHAREDCOUNTER:
                 //printf("3\n");
-				sync_all_2level_sharedcounter(status, stat_len, errmsg, errmsg_len);
+				sync_all_2level_sharedcounter(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_DIS_NAIVE:
                 //printf("4\n");
-				sync_all_dissemination_naive(status, stat_len, errmsg, errmsg_len);
+				sync_all_dissemination_naive(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_DIS_MCS_SWAP:
                 //printf("checking\n");
-				sync_all_dissemination_mcs_swap(status, stat_len, errmsg, errmsg_len);
+				sync_all_dissemination_mcs_swap(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			case SYNC_ALL_DIS_MCS:
                 //printf("5\n");
-				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len);
+				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 				break;
 			default:
-				sync_all_dissemination_naive_swap(status, stat_len, errmsg, errmsg_len);
+				sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len,
+                        current_team);
 		}
 
 	}
@@ -4093,15 +4102,79 @@ void comm_sync_all(int * status, int stat_len, char * errmsg, int errmsg_len)
 
 }
 
+void comm_sync_team(team_type_t *team, int * status, int stat_len, char * errmsg,
+                    int errmsg_len)
+{
+	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+	check_for_error_stop();
+
+	if(status != NULL){
+		memset(status, 0, (size_t) stat_len);
+		*((INT2 *) status) = STAT_SUCCESS;
+	}
+	if(errmsg != NULL && errmsg_len) {
+		memset(errmsg, 0, (size_t)errmsg_len);
+	}
+
+	wait_on_all_pending_accesses();
+
+	LOAD_STORE_FENCE();
+
+    switch(sync_all_algorithm) {
+        case SYNC_ALL_DIS_NAIVE_SWAP:
+            //printf("1\n");
+            sync_all_dissemination_naive_swap(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_2LEVEL_COUNTER_DIS:
+            //printf("2\n");
+            sync_all_2level_counter_dis(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_2LEVEL_SENSEREV_DIS:
+            //printf("3\n");
+            sync_all_2level_senserev_dis(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_2LEVEL_MULTIFLAG:
+            //printf("3\n");
+            sync_all_2level_multiflag(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_2LEVEL_SHAREDCOUNTER:
+            //printf("3\n");
+            sync_all_2level_sharedcounter(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_DIS_NAIVE:
+            //printf("4\n");
+            sync_all_dissemination_naive(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_DIS_MCS_SWAP:
+            //printf("checking\n");
+            sync_all_dissemination_mcs_swap(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        case SYNC_ALL_DIS_MCS:
+            //printf("5\n");
+            sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len, team);
+            break;
+        default:
+            sync_all_dissemination_mcs(status, stat_len, errmsg, errmsg_len, team);
+    }
+
+
+	comm_new_exec_segment();
+	barcount += 1;
+
+	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+
+}
+
 static void sync_all_dissemination_naive(int *status, int stat_len,
-                                       char *errmsg, int errmsg_len)
+                                       char *errmsg, int errmsg_len, team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
     /*Phase 1, init*/
-    long nums = current_team->current_num_images;
-    long rank = current_team->current_this_image - 1;
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
     int i;
 
     /*Phase 2*/
@@ -4117,9 +4190,9 @@ static void sync_all_dissemination_naive(int *status, int stat_len,
         sendpeer_idx = (rank + tmp) % nums;
         recvpeer_idx = (rank - tmp + nums) % nums;
         unsigned long send_dest =
-            (current_team->codimension_mapping)[sendpeer_idx];
+            (team->codimension_mapping)[sendpeer_idx];
         unsigned long recv_peer =
-            (current_team->codimension_mapping)[recvpeer_idx];
+            (team->codimension_mapping)[recvpeer_idx];
 
         sending_bar_idx = (bar_senses[send_dest] + 1) % 2;
         receiving_bar_idx = (bar_senses[recv_peer] + 1) % 2;
@@ -4160,7 +4233,7 @@ static void sync_all_dissemination_naive(int *status, int stat_len,
     }
 
     for (i = 0; i < nums; i++) {
-      long j = (current_team->codimension_mapping)[i];
+      long j = (team->codimension_mapping)[i];
       /* cycle through 0 to 3 */
       bar_senses[j] = (bar_senses[j] + 1) % 4;
     }
@@ -4170,14 +4243,14 @@ static void sync_all_dissemination_naive(int *status, int stat_len,
 }
 
 static void sync_all_dissemination_naive_swap(int *status, int stat_len,
-                                       char *errmsg, int errmsg_len)
+                                       char *errmsg, int errmsg_len, team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
     /*Phase 1, init*/
-    long nums = current_team->current_num_images;
-    long rank = current_team->current_this_image - 1;
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
     int i;
 
     /*Phase 2*/
@@ -4192,9 +4265,9 @@ static void sync_all_dissemination_naive_swap(int *status, int stat_len,
         sendpeer_idx = (rank + tmp) % nums;
         recvpeer_idx = (rank - tmp + nums) % nums;
         unsigned long send_dest =
-            (current_team->codimension_mapping)[sendpeer_idx];
+            (team->codimension_mapping)[sendpeer_idx];
         unsigned long recv_peer =
-            (current_team->codimension_mapping)[recvpeer_idx];
+            (team->codimension_mapping)[recvpeer_idx];
 
         sending_sense = (bar_senses[send_dest]  % 2) + 1;
         receiving_sense = (bar_senses[recv_peer] % 2) + 1;
@@ -4239,7 +4312,7 @@ static void sync_all_dissemination_naive_swap(int *status, int stat_len,
     }
 
     for (i = 0; i < nums; i++) {
-      long j = (current_team->codimension_mapping)[i];
+      long j = (team->codimension_mapping)[i];
       /* cycle between 1 and 2   */
       bar_senses[j] = (bar_senses[j] % 2) + 1;
     }
@@ -4249,23 +4322,24 @@ static void sync_all_dissemination_naive_swap(int *status, int stat_len,
 }
 
 static void sync_all_dissemination_mcs_old(int *status, int stat_len,
-                                       char *errmsg, int errmsg_len)
+                                       char *errmsg, int errmsg_len,
+                                       team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
     /*Phase 1, init*/
-    long nums = current_team->current_num_images;
-    long rank = current_team->current_this_image - 1;
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
     char bar_parity;
     char bar_sense;
     barrier_round_t *bstep;
     int i;
 
-    bar_parity = current_team->barrier.parity;
-    bar_sense = 1 - current_team->barrier.sense;
+    bar_parity = team->barrier.parity;
+    bar_sense = 1 - team->barrier.sense;
 
-    bstep = current_team->barrier.bstep;
+    bstep = team->barrier.bstep;
 
     /*Phase 2*/
     long round = 0;
@@ -4281,9 +4355,9 @@ static void sync_all_dissemination_mcs_old(int *status, int stat_len,
         unsigned long recv_peer;
 
         send_dest =
-            (current_team->codimension_mapping)[sendpeer_idx];
+            (team->codimension_mapping)[sendpeer_idx];
         recv_peer =
-            (current_team->codimension_mapping)[recvpeer_idx];
+            (team->codimension_mapping)[recvpeer_idx];
 
         comm_nbi_write(send_dest, &bstep[round].local[bar_parity],
                        &bar_sense, sizeof bstep[round].local[bar_parity]);
@@ -4321,28 +4395,28 @@ static void sync_all_dissemination_mcs_old(int *status, int stat_len,
     }
 #endif
 
-    current_team->barrier.parity = 1 - bar_parity;
+    team->barrier.parity = 1 - bar_parity;
     if (bar_parity == 1) current_team->barrier.sense = bar_sense;
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static inline void sync_all_dissemination_mcs(int *status, int stat_len,
-                                       char *errmsg, int errmsg_len)
+                                       char *errmsg, int errmsg_len, team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
     /*Phase 1, init*/
-    long nums = current_team->current_num_images;
-    long rank = current_team->current_this_image - 1;
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
     char bar_parity;
     char bar_sense;
     barrier_round_t *bstep;
     int i;
 
-    bar_parity = current_team->barrier.parity;
-    bar_sense = 1 - current_team->barrier.sense;
+    bar_parity = team->barrier.parity;
+    bar_sense = 1 - team->barrier.sense;
 
     /*Phase 2*/
     long round = 0;
@@ -4350,7 +4424,7 @@ static inline void sync_all_dissemination_mcs(int *status, int stat_len,
     long round_bound = ceil(log2((double)nums));
 
     for(round = 0;round < round_bound; round++){
-        bstep = &current_team->barrier.bstep[round];
+        bstep = &team->barrier.bstep[round];
         unsigned long send_dest;
         unsigned long recv_peer;
 
@@ -4391,25 +4465,26 @@ static inline void sync_all_dissemination_mcs(int *status, int stat_len,
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
     }
 
-    current_team->barrier.parity = 1 - bar_parity;
-    if (bar_parity == 1) current_team->barrier.sense = bar_sense;
+    team->barrier.parity = 1 - bar_parity;
+    if (bar_parity == 1) team->barrier.sense = bar_sense;
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static void sync_all_dissemination_mcs_swap(int *status, int stat_len,
-                                       char *errmsg, int errmsg_len)
+                                       char *errmsg, int errmsg_len,
+                                       team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "Using dessertation algorithm");
     /*Phase 1, init*/
-    long nums = current_team->current_num_images;
-    long rank = current_team->current_this_image - 1;
+    long nums = team->current_num_images;
+    long rank = team->current_this_image - 1;
     char bar_sense;
     int i;
 
-    bar_sense = current_team->barrier.sense;
+    bar_sense = team->barrier.sense;
     bar_sense = bar_sense % 2 + 1;
 
     /*Phase 2*/
@@ -4418,7 +4493,7 @@ static void sync_all_dissemination_mcs_swap(int *status, int stat_len,
     long round_bound = ceil(log2((double)nums));
 
     for(round = 0;round < round_bound; round++){
-        barrier_round_t *bstep = &current_team->barrier.bstep[round];
+        barrier_round_t *bstep = &team->barrier.bstep[round];
         unsigned long send_dest;
         unsigned long recv_peer;
 
@@ -4464,20 +4539,20 @@ static void sync_all_dissemination_mcs_swap(int *status, int stat_len,
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
     }
 
-    current_team->barrier.sense = bar_sense;
+    team->barrier.sense = bar_sense;
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg,
-                                        int errmsg_len)
+                                        int errmsg_len, team_type_t *team)
 {
 
 	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 	check_for_error_stop();
 	long leader;
 
-	leader = get_leader();
+	leader = get_leader(team);
 
 #if GASNET_PSHM
 
@@ -4517,14 +4592,14 @@ static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg
 		bar_flags[0][leader].value -= 1;
 	} else {
 		/*I am the leader */
-		int count = current_team->intranode_set[0];
+		int count = team->intranode_set[0];
 		LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "the count of current intranode set is %d",
 				count);
 		int i;
 		long target;
 		/* wait on non-leader image */
 		for(i=1;i<=count;i++){
-			target = current_team->intranode_set[i];
+			target = team->intranode_set[i];
 			if(target == my_proc) continue;
 
 			GASNET_BLOCKUNTIL(bar_flags[0][target].value ||
@@ -4550,7 +4625,7 @@ static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg
 		/*Synced with non-leader image*/
 		/*step 2, dissermination with other leader*/
 		LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "step 2, sync with other leaders");
-		long * leader_set = current_team->leader_set;
+		long * leader_set = team->leader_set;
 		long forward_peer, backward_peer;
 		long forward_peer_img, backward_peer_img;
 		int my_index = 0, round, max_round;
@@ -4558,7 +4633,7 @@ static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg
 		int sending_sense_idx, receiving_sense_idx;
 		int offset;
 
-		count = current_team->leaders_count;
+		count = team->leaders_count;
 		LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "%d leaders to sync with", count);
 		/*Find my index in leader_set*/
 		for(i = 0;i<count;i++){
@@ -4626,17 +4701,17 @@ static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg
 			long image_id;
 			long proc_id;
 			for(int i=0;i<count;i++){
-				proc_id = current_team->leader_set[i];
+				proc_id = team->leader_set[i];
 				bar_senses[proc_id] = (bar_senses[proc_id] + 1) % 4;
 			}
 		}
 
 		/*Synced with other leaders
 		 * Notify my intranode set */
-		count = current_team->intranode_set[0];
+		count = team->intranode_set[0];
 		if(count != 1){
 			for(i=2;i<=count;i++){
-				target = current_team->intranode_set[i];
+				target = team->intranode_set[i];
 				const gasnet_nodeinfo_t * leader_node_info = &nodeinfo_table[target];
 				ssize_t ofst = leader_node_info->offset;
 				sync_flag_t * sync_target =
@@ -4653,7 +4728,7 @@ static void sync_all_2level_counter_dis(int *status, int stat_len, char * errmsg
 }
 
 static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errmsg,
-                                         int errmsg_len)
+                                         int errmsg_len, team_type_t *team)
 {
 	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 	check_for_error_stop();
@@ -4662,7 +4737,7 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 
 	long leader;
 
-	leader = get_leader();
+	leader = get_leader(team);
 
 	LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "the leader is %d\n", leader);
 	if(leader == -1)
@@ -4727,9 +4802,9 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 		long proc_id;
 		char local_sense;
 
-		count = current_team->intranode_set[0];
+		count = team->intranode_set[0];
 		for(i=2;i<=count;i++){
-			proc_id = current_team->intranode_set[i];
+			proc_id = team->intranode_set[i];
 			local_sense_idx = (bar_senses[proc_id] + 1) % 2;
 			local_sense = (bar_senses[proc_id] + 1) % 4;
 			GASNET_BLOCKUNTIL(bar_flags[local_sense_idx][proc_id].s.val
@@ -4759,7 +4834,7 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 		 * Doing dissermination as usual
 		 */
 		LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "step 2, sync with other leaders");
-		long * leader_set = current_team->leader_set;
+		long * leader_set = team->leader_set;
 		long forward_peer, backward_peer;
 		long forward_peer_img, backward_peer_img;
 		int my_index = 0, round, max_round;
@@ -4767,7 +4842,7 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 		int sending_sense_idx, receiving_sense_idx;
 		int offset;
 
-		count = current_team->leaders_count;
+		count = team->leaders_count;
 		LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "%d leaders to sync with", count);
 		/*Find my index in leader_set*/
 		for(i = 0;i<count;i++){
@@ -4836,7 +4911,7 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 			long proc_id;
 
 			for(i=0;i<count;i++){
-				proc_id = current_team->leader_set[i];
+				proc_id = team->leader_set[i];
 				bar_senses[proc_id] = (bar_senses[proc_id] + 1) %4;
 			}
 		}
@@ -4852,10 +4927,10 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
 			sync_flag_t * sync_target;
 			char target_sense;
 			ssize_t target_offset;
-			count = current_team->intranode_set[0];
+			count = team->intranode_set[0];
 			gasnet_nodeinfo_t * target_node_info;
 			for(i=2;i<=count;i++){
-				target_proc_id = current_team->intranode_set[i];
+				target_proc_id = team->intranode_set[i];
 				target_node_info = &nodeinfo_table[target_proc_id];
 				target_offset = target_node_info->offset;
 				sense_idx = (bar_senses[target_proc_id] + 1) % 2;
@@ -4884,20 +4959,22 @@ static void sync_all_2level_senserev_dis(int * status, int stat_len, char * errm
  * back a 0 to the nonleader's locally-owned flags, signalling to them that
  * they may continue.
  */
-static void sync_all_2level_multiflag(int *status, int stat_len, char *errmsg, int errmsg_len)
+static void sync_all_2level_multiflag(int *status, int stat_len,
+                                      char *errmsg, int errmsg_len,
+                                      team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     check_for_error_stop();
 
     long leader;
 
-    leader = get_leader();
+    leader = get_leader(team);
 
     //printf("%d step 1\n", my_proc);
 
 #if GASNET_PSHM
     if (my_proc != leader) {
-        barrier_flags_t *my_sync = current_team->intranode_barflags[0];
+        barrier_flags_t *my_sync = team->intranode_barflags[0];
 
         //printf("%ld: my_sync = %p\n", my_proc, my_sync);
         //printf("%ld: *my_sync = %d\n", my_proc, *my_sync);
@@ -4935,11 +5012,11 @@ static void sync_all_2level_multiflag(int *status, int stat_len, char *errmsg, i
     //printf("%d step 2\n", my_proc);
 
     /* wait until all the other nonleaders in the node reach the barrier */
-    int num_nonleaders = current_team->intranode_set[0] - 1;
+    int num_nonleaders = team->intranode_set[0] - 1;
 
     /* check on all nonleaders if they arrived done */
     for (int i = 0; i < num_nonleaders; i++) {
-      barrier_flags_t *nonleader_sync = current_team->intranode_barflags[i+1];
+      barrier_flags_t *nonleader_sync = team->intranode_barflags[i+1];
 
       //printf("%d nonleader_sync %d = %p\n", my_proc,i+1,nonleader_sync);
 
@@ -4963,17 +5040,17 @@ static void sync_all_2level_multiflag(int *status, int stat_len, char *errmsg, i
 
     //printf("%d step 3\n", my_proc);
     /* perform dissemination with other leaders */
-    long nums = current_team->leaders_count;
+    long nums = team->leaders_count;
 
-    char bar_parity = current_team->barrier.parity;
-    char bar_sense = 1 - current_team->barrier.sense;
+    char bar_parity = team->barrier.parity;
+    char bar_sense = 1 - team->barrier.sense;
 
     long round = 0;
     int sendpeer_idx, recvpeer_idx;
     long round_bound = ceil(log2((double)nums));
 
     for(round = 0; round < round_bound; round++) {
-        barrier_round_t *bstep = &current_team->barrier.bstep[round];
+        barrier_round_t *bstep = &team->barrier.bstep[round];
         unsigned long send_dest;
         unsigned long recv_peer;
 
@@ -5014,16 +5091,16 @@ static void sync_all_2level_multiflag(int *status, int stat_len, char *errmsg, i
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
     }
 
-    current_team->barrier.parity = 1 - bar_parity;
+    team->barrier.parity = 1 - bar_parity;
 
     if (bar_parity == 1)
-        current_team->barrier.sense = bar_sense;
+        team->barrier.sense = bar_sense;
 
     //printf("%d step 4\n", my_proc);
     /* notify all nonleaders that we're done */
 
     for (int i = 0; i < num_nonleaders; i++) {
-      *(current_team->intranode_barflags[1+i]) = 0;
+      *(team->intranode_barflags[1+i]) = 0;
     }
 
 #endif
@@ -5037,19 +5114,21 @@ static void sync_all_2level_multiflag(int *status, int stat_len, char *errmsg, i
  * leader will set a flag on each nonleader once it finishes synchronizing
  * with the other leaders.
  */
-static void sync_all_2level_sharedcounter(int *status, int stat_len, char *errmsg, int errmsg_len)
+static void sync_all_2level_sharedcounter(int *status, int stat_len,
+                                          char *errmsg, int errmsg_len,
+                                          team_type_t *team)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     check_for_error_stop();
 
     long leader;
 
-    leader = get_leader();
+    leader = get_leader(team);
 
 #if GASNET_PSHM
     if (my_proc != leader) {
-        barrier_flags_t *my_sync = current_team->intranode_barflags[0];
-        barrier_flags_t *leader_sync = current_team->intranode_barflags[1];
+        barrier_flags_t *my_sync = team->intranode_barflags[0];
+        barrier_flags_t *leader_sync = team->intranode_barflags[1];
 
         /* notify leader that I reached */
 
@@ -5086,8 +5165,8 @@ static void sync_all_2level_sharedcounter(int *status, int stat_len, char *errms
     /* I am the leader */
 
     /* wait until all the other nonleaders in the node reach the barrier */
-    int num_nonleaders = current_team->intranode_set[0] - 1;
-    barrier_flags_t *my_sync = current_team->intranode_barflags[0];
+    int num_nonleaders = team->intranode_set[0] - 1;
+    barrier_flags_t *my_sync = team->intranode_barflags[0];
     GASNET_BLOCKUNTIL(*my_sync == num_nonleaders || *error_stopped_image_exists);
     check_for_error_stop();
 
@@ -5108,17 +5187,17 @@ static void sync_all_2level_sharedcounter(int *status, int stat_len, char *errms
     *my_sync = 0;
 
     /* perform dissemination with other leaders */
-    long nums = current_team->leaders_count;
+    long nums = team->leaders_count;
 
-    char bar_parity = current_team->barrier.parity;
-    char bar_sense = 1 - current_team->barrier.sense;
+    char bar_parity = team->barrier.parity;
+    char bar_sense = 1 - team->barrier.sense;
 
     long round = 0;
     int sendpeer_idx, recvpeer_idx;
     long round_bound = ceil(log2((double)nums));
 
     for (round = 0; round < round_bound; round++) {
-        barrier_round_t *bstep = &current_team->barrier.bstep[round];
+        barrier_round_t *bstep = &team->barrier.bstep[round];
         unsigned long send_dest;
         unsigned long recv_peer;
 
@@ -5159,14 +5238,14 @@ static void sync_all_2level_sharedcounter(int *status, int stat_len, char *errms
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "ending round %d\n", round);
     }
 
-    current_team->barrier.parity = 1 - bar_parity;
+    team->barrier.parity = 1 - bar_parity;
 
     if (bar_parity == 1)
-        current_team->barrier.sense = bar_sense;
+        team->barrier.sense = bar_sense;
 
     /* notify all nonleaders that we're done */
     for (int i = 0; i < num_nonleaders; i++) {
-        barrier_flags_t *nonleader_sync = current_team->intranode_barflags[1+i];
+        barrier_flags_t *nonleader_sync = team->intranode_barflags[1+i];
         *nonleader_sync = 1;
     }
 

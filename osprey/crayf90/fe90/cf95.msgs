@@ -22069,5 +22069,13 @@ Error : TEAM must not be followed by any constructs/strings
 TEAM must not be followed by any constructs/strings
 .ME
 $
-$ LAST NUMBER USED : 1729
+$ Error : 1730
+$msg  1730 Optional TEAM argument must be a scalar, non-coarray of type TEAM_TYPE
+$nexp 1730
+Error : Optional TEAM argument must be a scalar, non-coarray of type TEAM_TYPE
+.PP
+Optional TEAM argument must be a scalar, non-coarray of type TEAM_TYPEt be followed by any constructs/strings
+.ME
+$
+$ LAST NUMBER USED : 1730
 

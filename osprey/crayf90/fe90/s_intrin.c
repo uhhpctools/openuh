@@ -3971,10 +3971,13 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
    int            power_idx;
    int            div_idx;
    int            info_idx1;
+   int            info_idx2;
+   int            info_idx3;
    int            int_idx;
    int            mod_idx;
    int            list_idx1;
    int            list_idx2;
+   int            list_idx3;
    opnd_type      opnd;
    int            opnd_line;
    int            opnd_col;
@@ -4098,9 +4101,7 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
       IR_FLD_L(ir_idx) = IR_Tbl_Idx;
       IR_OPND_R(ir_idx) = null_opnd;
       IR_OPR(ir_idx) = Int_Opr;
-   } else
-#endif /* !defined(_UH_COARRAYS) */
-   if (ATP_INTRIN_ENUM(*spec_idx) == This_Image_Intrinsic) {
+   } else if (ATP_INTRIN_ENUM(*spec_idx) == This_Image_Intrinsic) {
 
       if (IR_LIST_CNT_R(ir_idx) > 0) {
 
@@ -4195,17 +4196,12 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                 attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
-#ifndef _UH_COARRAYS
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
-#else
-            if (!arg_info_list[info_idx1].ed.is_coarray) {
-#endif
                /* error, not a co-array */
                PRINTMSG(opnd_line, 1575, Error, opnd_col);
             }
             else {
-#ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
                }
@@ -4216,32 +4212,239 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                                     &loc_exp_desc);
                COPY_OPND(IL_OPND(list_idx1), opnd);
                arg_info_list[info_idx1].ed = loc_exp_desc;
-#endif
             }
          }
+      }
+   }
+#else /* defined(_UH_COARRAYS) */
+   if (ATP_INTRIN_ENUM(*spec_idx) == This_Image_Intrinsic) {
 
-#ifdef _UH_COARRAYS
-         /* convert coarray arg to a whole coarray  */
-         COPY_OPND(opnd, IL_OPND(list_idx1));
-         convert_to_whole_coarray(&opnd, &loc_exp_desc);
-         COPY_OPND(IL_OPND(list_idx1), opnd);
-         arg_info_list[info_idx1].ed = loc_exp_desc;
-#endif
+      if (IR_LIST_CNT_R(ir_idx) > 0) {
+         list_idx1 = IR_IDX_R(ir_idx);
+         info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+         if (IR_LIST_CNT_R(ir_idx) > 1) {
+             list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+             info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+             if (IR_LIST_CNT_R(ir_idx) > 2) {
+                 list_idx3 = IL_NEXT_LIST_IDX(list_idx2);
+                 info_idx3 = IL_ARG_DESC_IDX(list_idx3);
+             }
+         }
+
+         /* check on team variable, if present */
+         {
+             int team_list_idx = 0;
+             if (IR_LIST_CNT_R(ir_idx) == 1)
+                 team_list_idx = list_idx1;
+             else if (IR_LIST_CNT_R(ir_idx) == 2)
+                 team_list_idx = list_idx2;
+             else if (IR_LIST_CNT_R(ir_idx) == 3)
+                 team_list_idx = list_idx3;
+
+             if (IL_FLD(team_list_idx) != NO_Tbl_Idx) {
+                 expr_arg_type team_exp_desc = init_exp_desc;
+                 opnd_type op = IL_OPND(team_list_idx);
+                 int team_info_idx = IL_ARG_DESC_IDX(team_list_idx);
+
+                 if (arg_info_list[team_info_idx].ed.reference) {
+                    act_arg_type arg_type;
+                    attr_idx = find_base_attr(&IL_OPND(team_list_idx),
+                                              &opnd_line, &opnd_col);
+
+                    if (AT_DCL_ERR(attr_idx)) {
+                       goto EXIT;
+                    }
+
+                    expr_semantics(&op, &team_exp_desc);
+                    arg_type = get_act_arg_type(&team_exp_desc);
+
+                    while (AT_ATTR_LINK(attr_idx) &&
+                            !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                        attr_idx = AT_ATTR_LINK(attr_idx);
+                    }
+
+                    if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                        ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX ||
+                        (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                        strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
+                            "TEAM_TYPE") ) {
+                        PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                    }
+
+                 } else {
+                    find_opnd_line_and_column(&IL_OPND(team_list_idx),
+                                              &opnd_line, &opnd_col);
+                     PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                 }
+             }
+
+         }
+
+
+         if (IR_LIST_CNT_R(ir_idx) > 1) {
+
+             if (arg_info_list[info_idx1].ed.reference) {
+                attr_idx = find_base_attr(&IL_OPND(list_idx1),
+                                          &opnd_line, &opnd_col);
+
+                if (AT_DCL_ERR(attr_idx)) {
+                   goto EXIT;
+                }
+
+                while (AT_ATTR_LINK(attr_idx) &&
+                        !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                    attr_idx = AT_ATTR_LINK(attr_idx);
+                }
+
+                if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+                    ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+                    IR_LIST_CNT_R(ir_idx) == 2 &&
+                    BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) == 1) {
+
+                   /* change to this_image3 with dim == 1 */
+
+                   sn_idx = ATI_FIRST_SPECIFIC_IDX(ATP_INTERFACE_IDX(*spec_idx));
+
+                   while (sn_idx) {
+                      if (ATP_NUM_DARGS(SN_ATTR_IDX(sn_idx)) == 3) {
+                         break;
+                      }
+                      sn_idx = SN_SIBLING_LINK(sn_idx);
+                   }
+
+                   if (sn_idx != NULL_IDX) {
+                      IR_IDX_L(ir_idx) = SN_ATTR_IDX(sn_idx);
+                      *spec_idx = SN_ATTR_IDX(sn_idx);
+                      ATP_EXTERNAL_INTRIN((*spec_idx)) = TRUE;
+                      ATD_TYPE_IDX(ATP_RSLT_IDX((*spec_idx))) =
+                                               INTEGER_DEFAULT_TYPE;
+
+                      NTR_IR_LIST_TBL(list_idx2);
+                      IL_NEXT_LIST_IDX(list_idx1) = list_idx2;
+                      IL_ARG_DESC_VARIANT(list_idx2) = TRUE;
+                      IR_LIST_CNT_R(ir_idx) += 1;
+
+                      IL_FLD(list_idx2) = CN_Tbl_Idx;
+                      IL_IDX(list_idx2) = CN_INTEGER_ONE_IDX;
+                      IL_LINE_NUM(list_idx2) = line;
+                      IL_COL_NUM(list_idx2) = column;
+
+                      arg_info_list_base = arg_info_list_top;
+                      arg_info_list_top = arg_info_list_base + 1;
+
+                      if (arg_info_list_top >= arg_info_list_size) {
+                         enlarge_info_list_table();
+                      }
+
+                      IL_ARG_DESC_IDX(list_idx2) = arg_info_list_top;
+                      arg_info_list[arg_info_list_top] = init_arg_info;
+                      arg_info_list[arg_info_list_top].ed.constant = TRUE;
+                      arg_info_list[arg_info_list_top].ed.foldable = TRUE;
+                      arg_info_list[arg_info_list_top].ed.type     = Integer;
+                      arg_info_list[arg_info_list_top].ed.type_idx =
+                                                        CG_INTEGER_DEFAULT_TYPE;
+                      arg_info_list[arg_info_list_top].ed.linear_type =
+                                                        CG_INTEGER_DEFAULT_TYPE;
+                      arg_info_list[arg_info_list_top].line = line;
+                      arg_info_list[arg_info_list_top].col = column;
+                   }
+                }
+
+             }
+
+             if (! arg_info_list[info_idx1].ed.reference) {
+                /* error, not a co-array */
+                find_opnd_line_and_column(&IL_OPND(list_idx1),
+                                          &opnd_line, &opnd_col);
+                PRINTMSG(opnd_line, 1575, Error, opnd_col);
+             }
+             else {
+                attr_idx = find_base_attr(&IL_OPND(list_idx1),
+                                          &opnd_line, &opnd_col);
+
+                while (AT_ATTR_LINK(attr_idx) &&
+                        !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                    attr_idx = AT_ATTR_LINK(attr_idx);
+                }
+
+                if (!arg_info_list[info_idx1].ed.is_coarray) {
+                   /* error, not a co-array */
+                   PRINTMSG(opnd_line, 1575, Error, opnd_col);
+                }
+                else {
+                }
+             }
+
+             /* convert coarray arg to a whole coarray  */
+             COPY_OPND(opnd, IL_OPND(list_idx1));
+             convert_to_whole_coarray(&opnd, &loc_exp_desc);
+             COPY_OPND(IL_OPND(list_idx1), opnd);
+             arg_info_list[info_idx1].ed = loc_exp_desc;
+
+         }
 
       }
    }
-#ifdef _UH_COARRAYS
    /* image_index, lcobound, and ucobound only support in UH coarray
     * implementation */
 
    else if (ATP_INTRIN_ENUM(*spec_idx) == Image_Index_Intrinsic) {
       if (IR_LIST_CNT_R(ir_idx) > 0) {
-
          list_idx1 = IR_IDX_R(ir_idx);
          info_idx1 = IL_ARG_DESC_IDX(list_idx1);
 
-         if (IR_LIST_CNT_R(ir_idx) == 2) {
-            list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+         if (IR_LIST_CNT_R(ir_idx) > 1) {
+             list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+             info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+             if (IR_LIST_CNT_R(ir_idx) > 2) {
+                 list_idx3 = IL_NEXT_LIST_IDX(list_idx2);
+                 info_idx3 = IL_ARG_DESC_IDX(list_idx3);
+             }
+         }
+
+         /* check on team variable, if present */
+         if (IR_LIST_CNT_R(ir_idx) == 3 &&
+             !strcmp(AT_OBJ_NAME_PTR(*spec_idx), "_IMAGE_INDEX1")) {
+             int team_list_idx = list_idx3;
+
+             if (IL_FLD(team_list_idx) != NO_Tbl_Idx) {
+                 expr_arg_type team_exp_desc = init_exp_desc;
+                 opnd_type op = IL_OPND(team_list_idx);
+                 int team_info_idx = IL_ARG_DESC_IDX(team_list_idx);
+
+                 if (arg_info_list[team_info_idx].ed.reference) {
+                    act_arg_type arg_type;
+                    attr_idx = find_base_attr(&IL_OPND(team_list_idx),
+                                              &opnd_line, &opnd_col);
+
+                    if (AT_DCL_ERR(attr_idx)) {
+                       goto EXIT;
+                    }
+
+                    expr_semantics(&op, &team_exp_desc);
+                    arg_type = get_act_arg_type(&team_exp_desc);
+
+                    while (AT_ATTR_LINK(attr_idx) &&
+                            !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                        attr_idx = AT_ATTR_LINK(attr_idx);
+                    }
+
+                    if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                        ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX ||
+                        (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                        strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
+                            "TEAM_TYPE") ) {
+                        PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                    }
+
+                 } else {
+                    find_opnd_line_and_column(&IL_OPND(team_list_idx),
+                                              &opnd_line, &opnd_col);
+                     PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                 }
+             }
+
          }
 
          if (arg_info_list[info_idx1].ed.reference) {
@@ -4512,6 +4715,54 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
          arg_info_list[info_idx1].ed = loc_exp_desc;
        }
     }
+   else if (ATP_INTRIN_ENUM(*spec_idx) == Num_Images_Intrinsic) {
+       if (IR_LIST_CNT_R(ir_idx) > 0) {
+           list_idx1 = IR_IDX_R(ir_idx);
+           info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+           if (IR_LIST_CNT_R(ir_idx) == 1 &&
+                   !strcmp(AT_OBJ_NAME_PTR(*spec_idx), "_NUM_IMAGES1")) {
+               int team_list_idx = list_idx1;
+
+               if (IL_FLD(team_list_idx) != NO_Tbl_Idx) {
+                   expr_arg_type team_exp_desc = init_exp_desc;
+                   opnd_type op = IL_OPND(team_list_idx);
+                   int team_info_idx = IL_ARG_DESC_IDX(team_list_idx);
+
+                   if (arg_info_list[team_info_idx].ed.reference) {
+                       act_arg_type arg_type;
+                       attr_idx = find_base_attr(&IL_OPND(team_list_idx),
+                               &opnd_line, &opnd_col);
+
+                       if (AT_DCL_ERR(attr_idx)) {
+                           goto EXIT;
+                       }
+
+                       expr_semantics(&op, &team_exp_desc);
+                       arg_type = get_act_arg_type(&team_exp_desc);
+
+                       while (AT_ATTR_LINK(attr_idx) &&
+                               !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                           attr_idx = AT_ATTR_LINK(attr_idx);
+                       }
+
+                       if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                               ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX ||
+                               (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                               strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
+                                   "TEAM_TYPE") ) {
+                           PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                       }
+
+                   } else {
+                       find_opnd_line_and_column(&IL_OPND(team_list_idx),
+                               &opnd_line, &opnd_col);
+                       PRINTMSG(opnd_line, 1730, Error, opnd_col);
+                   }
+               }
+           }
+       }
+   }
 #endif
 
 EXIT:

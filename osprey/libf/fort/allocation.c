@@ -72,7 +72,7 @@ static short ps_debug_alloc = -1; /* -1 is uninitialized
 				   * 1 to fill allocations with 0s
 				   * 2 to fill allocations with 32 bit NaNs
 				   * 3 to fill allocations with 64 bit NaNs */
-
+ 
 /*
  *      The alloc list describes all the items in the allocation list
  *      for the ALLOCATE and DEALLOCATE statements.
@@ -89,6 +89,9 @@ extern void _sma_fortran_deallocate_global(void *p);
 #ifdef _UH_COARRAYS
 extern void *coarray_allocatable_allocate_(unsigned long var_size, int* statvar);
 #pragma weak coarray_allocatable_allocate_
+extern void * coarray_allocatable_allocate_new_(unsigned long var_size, DopeVectorType *dp, 
+		int * statvar);
+#pragma weak coarray_allocatable_allocate_new_
 extern void *coarray_asymmetric_allocate_(unsigned long var_size);
 #pragma weak coarray_asymmetric_allocate_ = _coarray_asymmetric_allocate_dummy
 
@@ -275,7 +278,9 @@ _ALLOCATE(AllocHeadType *aloclist,
 #ifdef _UH_COARRAYS
 		if (dva->is_coarray) {
             if (dva->n_codim) {
-                base = coarray_allocatable_allocate_(nbytes, statvar);
+                //base = coarray_allocatable_allocate_(nbytes, statvar);
+		base = coarray_allocatable_allocate_new_(nbytes, dva, statvar);
+		
                 /* use returned status as error code */
                 if (lstat)
                     errflag = *statvar;

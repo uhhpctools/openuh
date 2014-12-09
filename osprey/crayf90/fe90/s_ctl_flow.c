@@ -5832,7 +5832,7 @@ void sync_stmt_semantics (void)
    ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
    OPND_FLD(opnd) = NO_Tbl_Idx;
 
-   if (IR_OPR(IR_IDX_L((ir_idx))) == All_Opr) {
+   if (IR_OPR(ir_idx) == SyncAll_Opr) {
         if (glb_tbl_idx[Sync_All_Attr_Idx] == NULL_IDX) {
             glb_tbl_idx[Sync_All_Attr_Idx] =
                 create_lib_entry_attr(SYNC_ALL_LIB_ENTRY,
@@ -5862,7 +5862,7 @@ void sync_stmt_semantics (void)
        num_args = 3;
 
    }
-    else if ((IR_OPR(IR_IDX_L(ir_idx))) == Images_Opr) {
+    else if ((IR_OPR(ir_idx)) == SyncImages_Opr) {
         if (glb_tbl_idx[Sync_Images_Attr_Idx] == NULL_IDX) {
             glb_tbl_idx[Sync_Images_Attr_Idx] =
                 create_lib_entry_attr(SYNC_IMAGES_LIB_ENTRY,
@@ -5895,20 +5895,23 @@ void sync_stmt_semantics (void)
        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-       COPY_OPND(IL_OPND(list_idx), IR_OPND_L(IR_IDX_L(ir_idx)));
+       COPY_OPND(IL_OPND(list_idx), IR_OPND_L(ir_idx));
 
        NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
        IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
 
-       COPY_OPND(IL_OPND(IL_NEXT_LIST_IDX(list_idx)),
-                 IR_OPND_R(IR_IDX_L(ir_idx)));
+       OPND_FLD(opnd) = CN_Tbl_Idx;
+       OPND_IDX(opnd) = CN_INTEGER_ZERO_IDX;
+       OPND_LINE_NUM(opnd) = stmt_start_line;
+       OPND_COL_NUM(opnd) = stmt_start_col;
+       COPY_OPND(IL_OPND(IL_NEXT_LIST_IDX(list_idx)), opnd);
 
        list_idx = IL_NEXT_LIST_IDX(list_idx);
 
        num_args = 5;
 
    }
-   else if ((IR_OPR(IR_IDX_L(ir_idx))) == Memory_Opr) {
+   else if ((IR_OPR(ir_idx)) == SyncMemory_Opr) {
         if (glb_tbl_idx[Sync_Memory_Attr_Idx] == NULL_IDX) {
             glb_tbl_idx[Sync_Memory_Attr_Idx] =
                 create_lib_entry_attr(SYNC_MEMORY_LIB_ENTRY,
@@ -5937,7 +5940,7 @@ void sync_stmt_semantics (void)
 
        num_args = 3;
 
-   } else if ((IR_OPR(IR_IDX_L(ir_idx))) == Imagestar_Opr) {
+   } else if (IR_OPR(ir_idx) == SyncImagestar_Opr) {
            if (glb_tbl_idx[Sync_Images_All_Attr_Idx] == NULL_IDX) {
                glb_tbl_idx[Sync_Images_All_Attr_Idx] =
                    create_lib_entry_attr(SYNC_IMAGES_ALL_LIB_ENTRY,
@@ -5966,6 +5969,43 @@ void sync_stmt_semantics (void)
 
        num_args = 3;
 
+   } else if ((IR_OPR(ir_idx)) == SyncTeam_Opr) {
+        if (glb_tbl_idx[Sync_Team_Attr_Idx] == NULL_IDX) {
+            glb_tbl_idx[Sync_Team_Attr_Idx] =
+                create_lib_entry_attr(SYNC_TEAM_LIB_ENTRY,
+                        SYNC_TEAM_NAME_LEN,
+                        stmt_start_line, stmt_start_col);
+        }
+        lib_idx = glb_tbl_idx[Sync_Team_Attr_Idx];
+
+       ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+
+       NTR_IR_TBL(call_idx);
+       IR_OPR(call_idx) = Call_Opr;
+       IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+       IR_LINE_NUM(call_idx) = stmt_start_line;
+       IR_COL_NUM(call_idx) = stmt_start_col;
+       IR_FLD_L(call_idx) = AT_Tbl_Idx;
+       IR_IDX_L(call_idx) = lib_idx;
+       IR_LINE_NUM_L(call_idx) = stmt_start_line;
+       IR_COL_NUM_L(call_idx) = stmt_start_col;
+
+       NTR_IR_LIST_TBL(list_idx);
+       IL_ARG_DESC_VARIANT(list_idx) = TRUE;
+       IL_ARG_DESC_IDX(list_idx) = list_idx;
+       IR_FLD_R(call_idx) = IL_Tbl_Idx;
+       IR_IDX_R(call_idx) = list_idx;
+
+       gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
+               FALSE, FALSE, TRUE);
+
+       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+       COPY_OPND(IL_OPND(list_idx), IR_OPND_L(ir_idx));
+
+       num_args = 4;
+
    }
 
    IR_LIST_CNT_R(call_idx) = num_args;
@@ -5990,7 +6030,7 @@ void sync_stmt_semantics (void)
            NTR_IR_LIST_TBL(list2_idx);
            IR_FLD_R(call_idx) = IL_Tbl_Idx;
            IR_IDX_R(call_idx) = list2_idx;
-       } else if (num_args == 5) {
+       } else {
            NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
            list2_idx = IL_NEXT_LIST_IDX(list_idx);
            IL_PREV_LIST_IDX(list2_idx) = list_idx;
@@ -6761,6 +6801,9 @@ void form_team_stmt_semantics (void)
 
 		   COPY_OPND(IL_OPND(list_idx), IL_OPND(next_idx));
            next_idx = IL_NEXT_LIST_IDX(next_idx);
+
+           IL_LINE_NUM(list_idx) = call_line_num;
+           IL_COL_NUM(list_idx) = call_col_num;
 	   } else {
            cn_idx = C_INT_TO_CN(Integer_8, 0);
            val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
@@ -6808,6 +6851,9 @@ void form_team_stmt_semantics (void)
 
 				   IL_FLD(list_idx) = OPND_FLD(op);
 				   IL_IDX(list_idx) = OPND_IDX(op);
+
+                   IL_LINE_NUM(list_idx) = call_line_num;
+                   IL_COL_NUM(list_idx) = call_col_num;
 
 				   /* calculate size of type in bytes */
 				   integer_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
@@ -6882,6 +6928,9 @@ void form_team_stmt_semantics (void)
 
 				   IL_FLD(list_idx) = OPND_FLD(op);
 				   IL_IDX(list_idx) = OPND_IDX(op);
+
+				   IL_LINE_NUM(list_idx) = call_line_num;
+				   IL_COL_NUM(list_idx) = call_col_num;
 
 			   } else {
 				   cn_idx = C_INT_TO_CN(Integer_8, 0);
@@ -6979,8 +7028,10 @@ void form_team_stmt_semantics (void)
        }
    } else {
        int cn_idx, val_idx;
-       int line, col;
        int call_line_num, call_col_num;
+
+       call_line_num = IR_LINE_NUM(call_idx);
+       call_col_num = IR_COL_NUM(call_idx);
 
        /* add new_index */
        NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
@@ -7422,6 +7473,9 @@ void change_team_stmt_semantics (void)
        int line, col;
        int call_line_num, call_col_num;
 
+       call_line_num = IR_LINE_NUM(call_idx);
+       call_col_num = IR_COL_NUM(call_idx);
+
        /* add stat */
        NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
        IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
@@ -7811,6 +7865,9 @@ void end_team_stmt_semantics (void)
        int cn_idx, val_idx;
        int line, col;
        int call_line_num, call_col_num;
+
+       call_line_num = IR_LINE_NUM(call_idx);
+       call_col_num = IR_COL_NUM(call_idx);
 
        /* add stat */
        NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
