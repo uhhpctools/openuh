@@ -8,6 +8,33 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2014-12-08: (3.0.39)
+
+* improvements for OpenSHMEM Analyzer (OSA)
+  * fixes reporting of aliasing errors for OpenSHMEM programs
+  * adds barrier matching analysis for OpenSHMEM programs
+
+* misc. improvements/fixes for CAF
+  * adds early support for Fortran 2015 new parallel features based on draft
+    of TS 18508:
+	* adds support for teams (FORM TEAM, CHANGE TEAM, END TEAM, SYNC TEAM,
+	  GET_TEAM(), TEAM_ID(), extensions to THIS_IMAGE(), NUM_IMAGES(), and
+	  IMAGE_INDEX()); uses UHCAF_INIT_TEAM_HEAP_SIZE to set the initial team's
+	  heap size (20MB by default).
+    * adds support for CO_REDUCE
+  * adds node-aware algorithms for team barriers, reductions, and broadcasts
+    * uses UHCAF_TEAM_BARRIER_ALGORITHM to select team barrier algorithm
+	  (dissemination, 2level_multiflag_dissem, 2level_sharedcounter_dissem)
+	* uses UHCAF_COLLECTIVES_2LEVEL to use 2-level algorithms for reductions
+	  and broadcasts
+  * enable more loop optimizations for loops contains references to SAVE
+    coarrays
+  * fix to prevent unsafe -O3 optimizations across image control statements
+  * fix for handling coarrays declared in an external module
+
+
+----------------------------------------------------------------------------
+
 2014-07-09: (3.0.38)
 
 * adding OpenSHMEM Analyzer (OSA) into OpenUH main trunk
@@ -41,7 +68,7 @@ revision, please refer to the version control commit history for OpenUH.
 * misc. improvements/fixes for CAF
   * performance improvements for SYNC IMAGES
   * corrects atomic behavior for ATOMIC_DEFINE and ATOMIC_REF
-  * partial suppot for intrinsic routines described in N2007:
+  * partial support for intrinsic routines described in draft of TS 18508:
 	* adds support for ATOMIC_ADD, ATOMIC_AND, ATOMIC_OR, ATOMIC_XOR, and
 	  ATOMIC_CAS
 	* adds improved collectives support. CO_SUM, CO_MAX, CO_MIN, as well as

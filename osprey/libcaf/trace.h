@@ -91,6 +91,7 @@ typedef enum {
     LIBCAF_LOG_CACHE,           /* cache operationss */
     LIBCAF_LOG_SYNC,            /* synchronization */
     LIBCAF_LOG_COLLECTIVE,      /* collective operations */
+    LIBCAF_LOG_TEAM,            /* team operations */
     LIBCAF_LOG_SERVICE,         /* show progress service */
     LIBCAF_LOG_MEMORY_SUMMARY,  /* print summary of memory usage */
     NUM_TRACERS = LIBCAF_LOG_MEMORY_SUMMARY + 1

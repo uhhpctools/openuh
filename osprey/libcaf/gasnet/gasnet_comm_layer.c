@@ -2330,9 +2330,11 @@ void comm_init()
 
     size_t collectives_offset;
     unsigned long  init_heap_size;
-    
+
     extern mem_usage_info_t * init_mem_info;
     extern mem_usage_info_t * child_mem_info;
+
+    size_t static_align;
 
     if (init_common_slot != NULL) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
@@ -2344,24 +2346,27 @@ void comm_init()
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
 
+    /* static coarrays must be 16-byte aligned */
+    static_align = ((alloc_byte_alignment-1)/16+1)*16;
+
     /* get size for collectives buffer */
     collectives_bufsize = get_env_size_with_unit(ENV_COLLECTIVES_BUFSIZE,
                                                  DEFAULT_COLLECTIVES_BUFSIZE);
 
-    static_symm_data_total_size = get_static_symm_size(alloc_byte_alignment,
+    static_symm_data_total_size = get_static_symm_size(static_align,
                                                        collectives_bufsize);
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
      * accordingly.
      */
-    collectives_offset = static_symm_data_total_size -
-      ((collectives_bufsize-1)/alloc_byte_alignment+1)*alloc_byte_alignment;
 
-    if (static_symm_data_total_size % alloc_byte_alignment) {
+    collectives_offset = static_symm_data_total_size -
+        ((collectives_bufsize-1)/static_align+1)*static_align;
+
+    if (static_symm_data_total_size % static_align) {
         static_symm_data_total_size =
-            ((static_symm_data_total_size-1)/alloc_byte_alignment+1)*
-              alloc_byte_alignment;
+            ((static_symm_data_total_size-1)/static_align+1)*static_align;
     }
 
     caf_shared_memory_size = static_symm_data_total_size;
@@ -2705,6 +2710,7 @@ void comm_init()
     /* set collectives buffer */
     collectives_buffer = coarray_start_all_images[my_proc].addr +
                          collectives_offset;
+
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "collectives_buffer = %p\n",
                 collectives_buffer);
 

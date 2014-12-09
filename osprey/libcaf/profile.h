@@ -54,6 +54,8 @@ typedef enum caf_prof_groups {
      CAFPROF_BCAST                 = 0X00001000,
      CAFPROF_REDUCE                = 0X00002000,
 
+     CAFPROF_TEAM                  = 0X00010000,
+
      /* group collections */
      CAFPROF_NONE                  = 0x00000000,
      CAFPROF_MEM_ALLOC             = 0x0000001C,

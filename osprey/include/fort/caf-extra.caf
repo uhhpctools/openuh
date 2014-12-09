@@ -62,6 +62,8 @@ module caf_profiles
   integer, parameter :: CAFPROF_BCAST                 = X'00001000'
   integer, parameter :: CAFPROF_REDUCE                = X'00002000'
 
+  integer, parameter :: CAFPROF_TEAM                  = X'00010000'
+
   ! profile group collections start here
   integer, parameter :: CAFPROF_NONE                  = X'00000000'
   integer, parameter :: CAFPROF_MEM_ALLOC             = X'0000001C'

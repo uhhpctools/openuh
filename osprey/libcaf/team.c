@@ -75,7 +75,9 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     int i;
     team_info_t my_tinfo;
     team_type new_team;
-    //  team_info_t * team_info_list = NULL; //destination
+
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_TEAM);
 
     my_rank = current_team->current_this_image - 1;
     numimages = current_team->current_num_images;
@@ -120,7 +122,6 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
 
     __alltoall_exchange(&(my_tinfo), sizeof(my_tinfo),
                         exchange_teaminfo_buf, current_team);
-    //when sequence reach here, we have correspoding team_info_t in the team_info_list
 
     __setup_subteams(new_team, exchange_teaminfo_buf, numimages, *team_id);
 
@@ -266,6 +267,9 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     new_team->symm_mem_slot.end_addr = NULL;
 
     comm_sync_all(status, stat_len, errmsg, errmsg_len);
+
+    PROFILE_FUNC_EXIT(CAFPROF_TEAM);
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "exit");
 }
 
 void _CHANGE_TEAM(team_type * new_team_p,
@@ -276,7 +280,8 @@ void _CHANGE_TEAM(team_type * new_team_p,
     extern unsigned long _num_images;
     extern shared_memory_slot_t *init_common_slot;
     extern shared_memory_slot_t *child_common_slot;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_TEAM);
 
     new_team = *new_team_p;
     if (new_team == NULL) {
@@ -308,10 +313,16 @@ void _CHANGE_TEAM(team_type * new_team_p,
     push_stack(new_team);
 
     comm_sync_all(status, stat_len, errmsg, errmsg_len);
+
+    PROFILE_FUNC_EXIT(CAFPROF_TEAM);
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "exit");
 }
 
 void _END_TEAM(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_TEAM);
+
     //move back to its parent, cleanup WITH CARE!
     //do something in case someone is communication with me,barrier or pending something?
     __coarray_wait_all();
@@ -330,6 +341,9 @@ void _END_TEAM(int *status, int stat_len, char *errmsg, int errmsg_len)
     }
 
     __change_to(tmp_team);      //move out
+
+    PROFILE_FUNC_EXIT(CAFPROF_TEAM);
+    LIBCAF_TRACE(LIBCAF_LOG_TEAM, "exit");
 }
 
 void clear_team_()
