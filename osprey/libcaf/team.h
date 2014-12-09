@@ -35,7 +35,7 @@ typedef struct team {
 typedef team_type_t *team_type;
 
 enum exchange_algorithm { ALLTOALL_PRIMI, ALLTOALL_LOG2POLLING,
-    ALLTOALL_LOG2 };
+    ALLTOALL_BRUCK};
 
 //global pointer to current team
 extern team_type_t *current_team;
@@ -54,4 +54,6 @@ void change_team_(team_type * new_team_pp);
 void end_change_team_(void);
 
 int team_id_();
+team_type get_team_(int* distance_p);
+
 #endif              //TEAM_H

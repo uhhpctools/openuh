@@ -34,7 +34,6 @@
 #include "lock.h"
 #include "dopevec.h"
 
-
 /* if an required asymmetric allocation will result in this percentage or
  * greater of the heap space consumed, then allocate out of default system
  * memory instead. Only used when out_of_segment_rma_enabed is set to 1. */
@@ -73,6 +72,8 @@ void coarray_asymmetric_deallocate_(void *var_address);
 void coarray_deallocate_(void *var_address, int* statvar);
 void coarray_free_all_shared_memory_slots();
 void deallocate_within(void * start_addr, void * end_addr);
+
+unsigned long largest_allocatable_slot_avail(unsigned long size);
 
 
 #endif
