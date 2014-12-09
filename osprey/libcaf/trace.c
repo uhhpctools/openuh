@@ -45,8 +45,8 @@
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
-extern shared_memory_slot_t *common_slot;
-extern mem_usage_info_t *mem_info;
+extern shared_memory_slot_t *init_common_slot;
+extern mem_usage_info_t *init_mem_info;
 
 typedef enum {
     OFF = 0,
@@ -218,16 +218,16 @@ void __libcaf_tracers_init(void)
 
 static void __print_memory_summary(char *mem_usg_str)
 {
-    if (mem_info) {
+    if (init_mem_info) {
         snprintf(mem_usg_str, BUF_SIZE,
                  " current usage: %lu bytes (%.2lf%%), "
                  " max usage: %lu bytes (%.2lf%%)\n",
-                 (unsigned long) mem_info->current_heap_usage,
-                 100 * mem_info->current_heap_usage /
-                 ((double) mem_info->reserved_heap_usage),
-                 (unsigned long) mem_info->max_heap_usage,
-                 100 * mem_info->max_heap_usage /
-                 ((double) mem_info->reserved_heap_usage));
+                 (unsigned long) init_mem_info->current_heap_usage,
+                 100 * init_mem_info->current_heap_usage /
+                 ((double) init_mem_info->reserved_heap_usage),
+                 (unsigned long) init_mem_info->max_heap_usage,
+                 100 * init_mem_info->max_heap_usage /
+                 ((double) init_mem_info->reserved_heap_usage));
     }
 }
 
@@ -312,7 +312,7 @@ static void __print_shared_memory_slots()
             "Above common-slot: ", _this_image);
     fflush(trace_log_stream);
 
-    temp_slot = common_slot->prev;
+    temp_slot = init_common_slot->prev;
     while (temp_slot) {
         fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
                 temp_slot->addr, temp_slot->size, temp_slot->feb);
@@ -322,7 +322,7 @@ static void __print_shared_memory_slots()
     fflush(trace_log_stream);
 
     fprintf(trace_log_stream, "Common-slot & below: ");
-    temp_slot = common_slot;
+    temp_slot = init_common_slot;
     while (temp_slot) {
         fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
                 temp_slot->addr, temp_slot->size, temp_slot->feb);

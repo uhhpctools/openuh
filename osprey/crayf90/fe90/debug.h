@@ -1478,6 +1478,9 @@ char		*operator_str[]		= {
             "Caf_Wait_Dir_Opr",
             "AllocTarget_Opr",
             "DeallocTarget_Opr",
+            "FormTeam_Opr",
+            "ChangeTeam_Opr",
+            "EndTeam_Opr",
 #endif
 
                         "The_Last_Opr"

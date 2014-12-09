@@ -190,6 +190,9 @@ enum	glb_tbl_idx_values	{Allocate_Attr_Idx,
                  Event_Query_Attr_Idx,
                  Event_Wait_Attr_Idx,
                  Coarray_Addr_Trans_Attr_Idx,
+                 Form_Team_Attr_Idx,
+                 Change_Team_Attr_Idx,
+                 End_Team_Attr_Idx,
 #endif
                  Size_Attr_Idx,
 				 Num_Glb_Tbl_Idxs
@@ -1622,6 +1625,9 @@ enum    operator_values      {  Null_Opr,
                 Caf_Wait_Dir_Opr,
                 AllocTarget_Opr,
                 DeallocTarget_Opr,
+                FormTeam_Opr,
+                ChangeTeam_Opr,
+                EndTeam_Opr,
 #endif
 
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
@@ -1828,6 +1834,9 @@ enum stmt_type_values           {Null_Stmt,
                  Unlock_Stmt,
                  Error_Stop_Stmt,
                  Event_Stmt,
+                 Form_Team_Stmt,
+                 Change_Team_Stmt,
+                 End_Team_Stmt,
 #endif
 
                                  /* When you add a stmt, make sure you change */

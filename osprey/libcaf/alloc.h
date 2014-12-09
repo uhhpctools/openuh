@@ -50,6 +50,13 @@ struct shared_memory_slot {
 };
 typedef struct shared_memory_slot shared_memory_slot_t;
 
+/*
+ * mem_block_t keeps track of shared memory slot for each team.
+ */
+typedef struct {
+    void * start_addr;
+    void * end_addr;
+} mem_block_t;
 
 typedef struct {
     size_t current_heap_usage;
@@ -65,6 +72,7 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size);
 void coarray_asymmetric_deallocate_(void *var_address);
 void coarray_deallocate_(void *var_address, int* statvar);
 void coarray_free_all_shared_memory_slots();
+void deallocate_within(void * start_addr, void * end_addr);
 
 
 #endif

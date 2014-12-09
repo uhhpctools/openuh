@@ -1313,6 +1313,21 @@ OPT_STAB::Not_affected_by_barrier(AUX_ID aux, BB_NODE *bb)
   return FALSE;
 }
 
+#ifdef _UH_COARRAYS
+/*
+ * is_coarray_type
+ *
+ * Checks if array type is coarray (has codimensions)
+ */
+static BOOL is_coarray_type(const TY_IDX tyi)
+{
+    if (TY_kind(tyi) == KIND_POINTER)
+      return TY_is_coarray(TY_pointed(tyi));
+    else
+      return TY_is_coarray(tyi);
+} /* is_coarray_type */
+#endif
+
 
 // is_mp_barrier is TRUE for FORWARD_BARRIER and BACKWARD_BARRIER
 // is_mp_barrier is FALSE for DEALLOCA
@@ -1383,6 +1398,10 @@ OPT_STAB::Compute_barrier_mu_chi( OCC_TAB_ENTRY *occ, POINTS_TO_LIST *defs,
 	  continue;
       } else {
 	if (aux_pt->Local() && 
+#ifdef _UH_COARRAYS
+	    (psym->St() && !is_coarray_type(ST_type(*psym->St()))) &&
+	    (psym->St() && !ST_is_f90_target(*psym->St())) &&
+#endif
 	    (psym->St() && !ST_is_shared_auto(*psym->St())) &&
 	    (psym->St() && ST_sclass(psym->St()) != SCLASS_FORMAL_REF))
 	  continue;

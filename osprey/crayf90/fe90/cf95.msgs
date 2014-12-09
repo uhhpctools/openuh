@@ -22027,5 +22027,47 @@ Error : This allocatable is to the right of a part-ref with nonzero rank.
 A part_ref with a nonzero rank cannot have another part_ref to the right
 with the ALLOCATABLE attribute.
 .ME
-$ LAST NUMBER USED : 1724
+$
+$ Error : 1725
+$msg  1725 The STAT=, ERRMSG=, or NEXT_INDEX= specifer should occur no more than once
+$nexp 1725
+Error : The STAT=, ERRMSG=, or NEXT_INDEX= specifer should occur no  more than once
+.PP
+The STAT=, ERRMSG=, or NEXT_INDEX= specifer should occur no more than once.
+.ME
+$
+$ Error : 1726
+$msg  1726 This argument to the %s statement must be a scalar of intrinsic type TEAM_TYPE
+$nexp 1726
+Error : This argument to the %s statements must be a scalar of type TEAM_TYPE
+.PP
+This argument to the %s statements must be a scalar of type TEAM_TYPE
+.ME
+$
+$ Error : 1727
+$msg  1727 The NEW_INDEX= variable must be a scalar integer variable
+$nexp 1727
+Error : The NEW_INDEX= variable must be a scalar integer variable
+.PP
+The NEW_INDEX= variable must be a scalar integer variable
+.ME
+$
+$ Error : 1728
+$msg  1728 The first argument for FORM TEAM must be a scalar integer variable
+$nexp 1728
+Error : The first argument for FORM TEAM must be a scalar integer variable
+.PP
+The FORM TEAM statement takes an scalar integer variable indicating team id as
+the first argument.
+.ME
+$
+$ Error : 1729
+$msg  1729 TEAM must not be followed by any constructs/strings
+$nexp 1729
+Error : TEAM must not be followed by any constructs/strings
+.PP
+TEAM must not be followed by any constructs/strings
+.ME
+$
+$ LAST NUMBER USED : 1729
 

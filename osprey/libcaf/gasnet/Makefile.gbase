@@ -86,6 +86,7 @@ CFILES = \
 	service.c \
 	lock.c \
 	collectives.c \
+	team.c \
 	env.c \
 	util.c
 

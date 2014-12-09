@@ -5447,7 +5447,7 @@ EXIT:
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
-|*   Parses EVENT POST, EVENT QUERY, and EVENT WAIT statements (Fortran 2008) *|
+|*   Parses EVENT POST, EVENT QUERY, and EVENT WAIT statements (Fortran 2015) *|
 |*                                                                            *|
 |* Input parameters:                                                          *|
 |*   NONE                                                                     *|
@@ -5569,6 +5569,483 @@ EXIT:
    return;
 } /* parse_event_stmt */
 
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*   Parses FORM TEAM statements (Fortran 2015)								  *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+\******************************************************************************/
+void parse_form_team_stmt (void)
+{
+   int			col;
+   int			ir_idx, ir_idx2;
+   int          list1_idx, list2_idx;
+   int			line;
+   boolean      parsed_ok  = TRUE;
+   opnd_type		opnd;
+   opnd_type	team_id_opnd;
+   opnd_type	team_var_opnd;
+   opnd_type	new_index_opnd;
+   opnd_type	syncstat_opnd;
+   opnd_type	stat_opnd;
+   opnd_type	errmsg_opnd;
+   boolean      has_new_index = FALSE;
+   boolean      has_stat = FALSE;
+   boolean      has_errmsg = FALSE;
+   int			save_curr_stmt_sh_idx;
+   int      blk_idx;
+
+   TRACE (Func_Entry, "parse_form_team_stmt", NULL);
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+
+   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+       if (TOKEN_VALUE(token) == Tok_Kwd_Team) {
+           IR_OPR(ir_idx) = FormTeam_Opr;
+       } else {
+           /* should have seen TEAM keyword */
+           parse_err_flush(Find_Lparen,
+                   "TEAM keyword");
+       }
+   }
+
+   if (LA_CH_VALUE != LPAREN) {
+      parse_err_flush(Find_EOS, "(");
+      goto EXIT;
+   }
+
+   NEXT_LA_CH;
+
+   OPND_FLD(team_id_opnd) = IR_Tbl_Idx;
+   OPND_IDX(team_id_opnd) = NULL_IDX;
+
+   /* parse TEAM_ID arg */
+   parsed_ok = parse_expr(&team_id_opnd) && parsed_ok;
+
+   if (LA_CH_VALUE == COMMA) {
+	   boolean matched_tok;
+	   NEXT_LA_CH;
+
+	   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+	   if (matched_tok) {
+		   /* parse TEAM_VAR arg */
+		   parsed_ok = parse_deref(&team_var_opnd, NULL_IDX) && parsed_ok;
+	   }
+
+	   if (LA_CH_VALUE == COMMA) {
+           NEXT_LA_CH;
+
+		   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+		   while (matched_tok) {
+			   if (LA_CH_VALUE == EQUAL) {
+				   /* process the acquired_lock specifier */
+				   if (strcmp(TOKEN_STR(token), "NEW_INDEX") == 0) {
+
+					   if (has_new_index) {
+						   PRINTMSG(TOKEN_LINE(token), 1725, Error,
+								   TOKEN_COLUMN(token), TOKEN_STR(token));
+					   } else {
+						   has_new_index = TRUE;
+					   }
+
+					   NEXT_LA_CH;
+
+					   /* parse NEW_INDEX arg */
+					   parsed_ok = parse_expr(&new_index_opnd) && parsed_ok;
+
+				   } else if (strcmp(TOKEN_STR(token), "STAT") == 0) {
+
+					   if (has_stat) {
+						   PRINTMSG(TOKEN_LINE(token), 1725, Error,
+								   TOKEN_COLUMN(token), TOKEN_STR(token));
+					   } else {
+						   has_stat = TRUE;
+					   }
+
+					   NEXT_LA_CH;
+
+					   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+						   /* have stat var */
+						   parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+							   parsed_ok;
+						   COPY_OPND(stat_opnd, opnd);
+						   mark_attr_defined(&opnd);
+					   } else {
+						   parse_err_flush(Find_Comma_Rparen,
+								   "scalar integer STAT variable");
+						   goto EXIT;
+					   }
+
+				   } else if (strcmp(TOKEN_STR(token), "ERRMSG") == 0) {
+
+					   if (has_errmsg) {
+						   PRINTMSG(TOKEN_LINE(token), 1725, Error,
+								   TOKEN_COLUMN(token), TOKEN_STR(token));
+						   goto EXIT;
+					   } else {
+						   has_errmsg = TRUE;
+					   }
+
+					   NEXT_LA_CH;
+
+					   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+						   /* have errmsg var */
+						   parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+							   parsed_ok;
+						   COPY_OPND(errmsg_opnd, opnd);
+						   mark_attr_defined(&opnd);
+					   } else {
+						   parse_err_flush(Find_Comma_Rparen,
+								   "scalar character string ERRMSG variable");
+						   goto EXIT;
+					   }
+
+				   } else {
+					   parse_err_flush(Find_Expr_End,
+							   "NEW_INDEX= | STAT= | ERRMSG=");
+				   }
+			   } else {
+				   parse_err_flush(Find_EOS, "=");
+				   goto EXIT;
+			   }
+
+               if (LA_CH_VALUE == COMMA) {
+                   NEXT_LA_CH;
+                   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+                   if (!matched_tok) {
+                       /* error */
+                       parse_err_flush(Find_EOS,
+                               "NEW_INDEX= | STAT= | ERRMSG=");
+                       goto EXIT;
+                   }
+               } else {
+                   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               }
+		   }
+
+		   if (LA_CH_VALUE != RPAREN) {
+			   /* error */
+			   parse_err_flush(Find_EOS, ")");
+			   goto EXIT;
+		   }
+	   }
+   }
+
+   NEXT_LA_CH;
+
+   IR_FLD_L(ir_idx) = IL_Tbl_Idx;
+   IR_LIST_CNT_L(ir_idx) = 2;
+
+   /* add team_id and team_var opnds to list */
+   NTR_IR_LIST_TBL(list1_idx);
+   IR_IDX_L(ir_idx) = list1_idx;
+   COPY_OPND(IL_OPND(list1_idx), team_id_opnd);
+
+   NTR_IR_LIST_TBL(list2_idx);
+   IL_NEXT_LIST_IDX(list1_idx) = list2_idx;
+   IL_PREV_LIST_IDX(list2_idx) = list1_idx;
+   COPY_OPND(IL_OPND(list2_idx), team_var_opnd);
+
+   list1_idx = list2_idx;
+
+   /* add new_index opnd to list */
+   if (has_new_index) {
+	   NTR_IR_LIST_TBL(list2_idx);
+	   IL_NEXT_LIST_IDX(list1_idx) = list2_idx;
+	   IL_PREV_LIST_IDX(list2_idx) = list1_idx;
+	   COPY_OPND(IL_OPND(list2_idx), new_index_opnd);
+
+	   list1_idx = list2_idx;
+
+	   (IR_LIST_CNT_L(ir_idx))++;
+   }
+
+   /* add stat/errmsg opnd to list */
+   if (has_stat || has_errmsg) {
+       NTR_IR_TBL(ir_idx2);
+	   OPND_FLD(syncstat_opnd) = IR_Tbl_Idx;
+	   OPND_IDX(syncstat_opnd) = ir_idx2;
+       IR_OPR(ir_idx2) = Stat_Errmsg_Opr;
+       IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+	   NTR_IR_LIST_TBL(list2_idx);
+	   IL_NEXT_LIST_IDX(list1_idx) = list2_idx;
+	   IL_PREV_LIST_IDX(list2_idx) = list1_idx;
+	   COPY_OPND(IL_OPND(list2_idx), syncstat_opnd);
+
+	   list1_idx = list2_idx;
+
+	   if (has_stat) {
+		   COPY_OPND(IR_OPND_L(ir_idx2), stat_opnd);
+	   }
+
+	   if (has_errmsg) {
+		   COPY_OPND(IR_OPND_R(ir_idx2), errmsg_opnd);
+	   }
+
+	   (IR_LIST_CNT_L(ir_idx))++;
+   }
+
+
+#if 0
+   if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
+       /* error */
+       parse_err_flush(Find_EOS, ", or )");
+       goto EXIT;
+   }
+
+   if (LA_CH_VALUE != RPAREN) {
+       /* error */
+      parse_err_flush(Find_EOS, ")");
+      goto EXIT;
+   }
+
+   NEXT_LA_CH;
+#endif
+
+EXIT:
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               "FORM TEAM");
+   }
+
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_form_team_stmt", NULL);
+
+   return;
+} /* parse_form_team_stmt */
+
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*   Parses CHANGE TEAM statements (Fortran 2015)							  *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+\******************************************************************************/
+void parse_change_team_stmt (void)
+{
+   boolean parsed_ok = TRUE;
+   int			col;
+   int			ir_idx, ir_idx2;
+   int			line;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+   opnd_type	team_var_opnd;
+   opnd_type	syncstat_opnd;
+   opnd_type	stat_opnd;
+   opnd_type	errmsg_opnd;
+   boolean      has_stat = FALSE;
+   boolean      has_errmsg = FALSE;
+   int  blk_idx;
+   int  list1_idx, list2_idx;
+
+   TRACE (Func_Entry, "parse_change_team_stmt", NULL);
+
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               "CHANGE TEAM");
+       goto EXIT;
+   }
+
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+
+   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+       if (TOKEN_VALUE(token) == Tok_Kwd_Team) {
+           IR_OPR(ir_idx) = ChangeTeam_Opr;
+           IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+           IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+       }
+   }
+
+   if (LA_CH_VALUE != LPAREN) {
+      parse_err_flush(Find_EOS, "(");
+      goto EXIT;
+   }
+
+   NEXT_LA_CH;
+   {
+	   boolean matched_tok;
+
+	   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+	   if (matched_tok) {
+		   /* parse TEAM_VAR arg */
+		   parsed_ok = parse_deref(&team_var_opnd, NULL_IDX) && parsed_ok;
+	   }
+
+	   if (LA_CH_VALUE == COMMA) {
+           NEXT_LA_CH;
+
+		   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+		   while (matched_tok) {
+			   if (LA_CH_VALUE == EQUAL) {
+				   if (strcmp(TOKEN_STR(token), "STAT") == 0) {
+
+					   if (has_stat) {
+						   PRINTMSG(TOKEN_LINE(token), 1725, Error,
+								   TOKEN_COLUMN(token), TOKEN_STR(token));
+					   } else {
+						   has_stat = TRUE;
+					   }
+
+					   NEXT_LA_CH;
+
+					   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+						   /* have stat var */
+						   parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+							   parsed_ok;
+						   COPY_OPND(stat_opnd, opnd);
+						   mark_attr_defined(&opnd);
+					   } else {
+						   parse_err_flush(Find_Comma_Rparen,
+								   "scalar integer STAT variable");
+						   goto EXIT;
+					   }
+
+				   } else if (strcmp(TOKEN_STR(token), "ERRMSG") == 0) {
+
+					   if (has_errmsg) {
+						   PRINTMSG(TOKEN_LINE(token), 1725, Error,
+								   TOKEN_COLUMN(token), TOKEN_STR(token));
+						   goto EXIT;
+					   } else {
+						   has_errmsg = TRUE;
+					   }
+
+					   NEXT_LA_CH;
+
+					   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+						   /* have errmsg var */
+						   parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+							   parsed_ok;
+						   COPY_OPND(errmsg_opnd, opnd);
+						   mark_attr_defined(&opnd);
+					   } else {
+						   parse_err_flush(Find_Comma_Rparen,
+								   "scalar character string ERRMSG variable");
+						   goto EXIT;
+					   }
+
+				   } else {
+					   parse_err_flush(Find_Expr_End,
+							   "STAT= | ERRMSG=");
+				   }
+			   } else {
+				   parse_err_flush(Find_EOS, "=");
+				   goto EXIT;
+			   }
+
+               if (LA_CH_VALUE == COMMA) {
+                   NEXT_LA_CH;
+                   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+                   if (!matched_tok) {
+                       /* error */
+                       parse_err_flush(Find_EOS,
+                               "STAT= | ERRMSG=");
+                       goto EXIT;
+                   }
+               } else {
+                   matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               }
+		   }
+
+		   if (LA_CH_VALUE != RPAREN) {
+			   /* error */
+			   parse_err_flush(Find_EOS, ")");
+			   goto EXIT;
+		   }
+	   }
+   }
+
+   NEXT_LA_CH;
+
+   IR_FLD_L(ir_idx) = IL_Tbl_Idx;
+   IR_LIST_CNT_L(ir_idx) = 1;
+
+   /* add team_var operand */
+   NTR_IR_LIST_TBL(list1_idx);
+   IR_IDX_L(ir_idx) = list1_idx;
+   COPY_OPND(IL_OPND(list1_idx), team_var_opnd);
+
+
+   /* add stat/errmsg opnd to list */
+   if (has_stat || has_errmsg) {
+       NTR_IR_TBL(ir_idx2);
+	   OPND_FLD(syncstat_opnd) = IR_Tbl_Idx;
+	   OPND_IDX(syncstat_opnd) = ir_idx2;
+       IR_OPR(ir_idx2) = Stat_Errmsg_Opr;
+       IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+	   NTR_IR_LIST_TBL(list2_idx);
+	   IL_NEXT_LIST_IDX(list1_idx) = list2_idx;
+	   IL_PREV_LIST_IDX(list2_idx) = list1_idx;
+	   COPY_OPND(IL_OPND(list2_idx), syncstat_opnd);
+
+	   list1_idx = list2_idx;
+
+	   if (has_stat) {
+		   COPY_OPND(IR_OPND_L(ir_idx2), stat_opnd);
+	   }
+
+	   if (has_errmsg) {
+		   COPY_OPND(IR_OPND_R(ir_idx2), errmsg_opnd);
+	   }
+
+	   (IR_LIST_CNT_L(ir_idx))++;
+   }
+
+
+   /* Generate a block stack entry. */
+
+   PUSH_BLK_STK(Team_Blk);
+   CURR_BLK_FIRST_SH_IDX    = curr_stmt_sh_idx;
+   LINK_TO_PARENT_BLK;
+
+EXIT:
+
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_change_team_stmt", NULL);
+
+   return;
+
+}
+
+
 /*parse_critical_stmt*/
 void parse_critical_stmt(void)
 {
@@ -5634,64 +6111,6 @@ EXIT:
 
 
 }  /*parse_critical_stmt*/
-
-/*parse_end_critical_stmt*/
-void parse_end_critical_stmt(void)
-{
-    boolean parsed_ok = TRUE;
-   int			col;
-   int			ir_idx;
-   int			line;
-   opnd_type		opnd;
-   int			save_curr_stmt_sh_idx;
-
-
-   TRACE (Func_Entry, "parse_end_critical_stmt", NULL);
-
-
-   NTR_IR_TBL(ir_idx);
-   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
-   IR_OPR(ir_idx) = Sync_Opr;
-   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
-   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
-
-   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
-       if (TOKEN_VALUE(token) == Tok_Kwd_Critical) {
-           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-           NTR_IR_TBL(IR_IDX_L(ir_idx));
-           IR_OPR(IR_IDX_L(ir_idx)) =  Critical_Opr;
-           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-
-       }  else {
-           /* should have seen CRITICAL */
-           PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
-                   TOKEN_STR(token));
-       }
-   } else {
-       /* should have seen ALL, IMAGES, or MEMORY identifier */
-       PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
-               TOKEN_STR(token));
-   }
-
-   NEXT_LA_CH;
-EXIT:
-   if (LA_CH_VALUE != EOS) {
-      parse_err_flush(Find_EOS, EOS_STR);
-   }
-
-   if (!cmd_line_flags.co_array_fortran) {
-       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
-               "end critical");
-   }
-
-   TRACE (Func_Exit, "parse_end_critical_stmt", NULL);
-
-
-   return;
-} /* parse_end_critical_stmt */
-
 
 #endif /* defined(_UH_COARRAYS) */
 

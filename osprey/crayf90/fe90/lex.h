@@ -163,9 +163,12 @@ static	kwd_type		kwd[] = {
 				"CONTINUE",	     Tok_Kwd_Continue,
 #ifdef _UH_COARRAYS
 				"CRITICAL",      Tok_Kwd_Critical,
-#endif                
+#endif
                 "COMPLEX",	     Tok_Kwd_Complex,
 				"COMMON",	     Tok_Kwd_Common,
+#ifdef _UH_COARRAYS
+				"CHANGE",	     Tok_Kwd_Change,
+#endif
 				"CLOSE",	     Tok_Kwd_Close,
 				"CYCLE",	     Tok_Kwd_Cycle,
 				"CALL",		     Tok_Kwd_Call,
@@ -201,6 +204,9 @@ static	kwd_type		kwd[] = {
 				"FUNCTION",	     Tok_Kwd_Function,
 				"FORALL",	     Tok_Kwd_Forall,
 				"FORMAT",	     Tok_Kwd_Format,
+#ifdef _UH_COARRAYS
+				"FORM",	         Tok_Kwd_Form,
+#endif
 				"FILE",		     Tok_Kwd_File,
 
 				"GO",		     Tok_Kwd_Go,
@@ -286,9 +292,12 @@ static	kwd_type		kwd[] = {
 				"STAT",		     Tok_Kwd_Stat,
 				"STOP",		     Tok_Kwd_Stop,
 				"SPAN",		     Tok_Kwd_Span,
- 
+
 				"TARGET",	     Tok_Kwd_Target,
 				"TASK",		     Tok_Kwd_Task,
+#ifdef _UH_COARRAYS
+				"TEAM",	         Tok_Kwd_Team,
+#endif
 				"THEN",		     Tok_Kwd_Then,
 				"TYPE",		     Tok_Kwd_Type,
 				"TO",		     Tok_Kwd_To,

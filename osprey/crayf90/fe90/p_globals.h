@@ -113,7 +113,8 @@ enum    blk_cntxt_values       {Unknown_Blk,
 #endif /* KEY Bug 10572 */
 #ifdef _UH_COARRAYS
                   ,
-                  Critical_Blk
+                  Critical_Blk,
+                  Team_Blk
 #endif
 
 				};
@@ -505,6 +506,9 @@ extern	void parse_subroutine_stmt (void);
 extern	void parse_sync_stmt (void);
 extern  void parse_lock_stmt (void);
 extern  void parse_event_stmt (void);
+extern  void parse_form_team_stmt (void);
+extern  void parse_change_team_stmt (void);
+extern  void parse_end_team_stmt (void);
 #endif
 extern	void parse_target_stmt (void);
 extern  void parse_task_common_stmt (void);
@@ -515,7 +519,7 @@ extern	void parse_where_stmt (void);
 extern	void parse_write_stmt (void);
 #ifdef _UH_COARRAYS
 extern  void parse_critical_stmt (void);
-extern  void parse_end_critical_stmt (void);
+extern  void parse_team_stmt (void);
 #endif
 
 

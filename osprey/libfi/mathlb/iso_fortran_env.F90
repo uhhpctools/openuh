@@ -79,4 +79,9 @@ module iso_fortran_env
       integer(kind=int32) :: e = 0
   end type EVENT_TYPE
 
+  type :: TEAM_TYPE
+      private
+      integer(kind=int64) :: t = 0
+  end type TEAM_TYPE
+
 end module iso_fortran_env
