@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <alloca.h>
+#include <limits.h>
+
 #include "team.h"
 #include "caf_rtl.h"
 #include "comm.h"
@@ -17,11 +19,17 @@ extern unsigned long _num_images;
 extern unsigned long _log2_images;
 extern unsigned long _rem_images;
 
+extern int total_num_supernodes;
+
+extern sync_all_t sync_all_algorithm;
+
 team_type initial_team;
+
+extern void *get_remote_address(void *src, size_t proc);
 
 /* allocated in comm_init*/
 team_info_t *exchange_teaminfo_buf;
-enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_PRIMI;
+enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_BRUCK;
 
 void __change_to(team_type team);
 
@@ -122,12 +130,137 @@ team_type *form_team_(int *team_id, team_type * new_team_p, int *new_index)
     new_team->activated = 0;
     new_team->depth = current_team->depth + 1;
     new_team->parent = current_team;
+    new_team->intranode_barflags =  malloc(new_team->intranode_set[0] *
+                sizeof(*new_team->intranode_barflags));
+    new_team->barrier.parity = 0;
+    new_team->barrier.sense = 0;
+    new_team->barrier.bstep = NULL;
+
+    /* compute log2_images and rem_images */
+    {
+      int log2_procs = 0;
+      long n = new_team->current_num_images;
+      long m = 1;
+      while (n > 0) {
+        static int first = 1;
+        if (first) {
+          first = 0;
+        } else {
+          log2_procs++;
+          m <<= 1;
+        }
+        n >>= 1;
+      }
+      long rem_procs = new_team->current_num_images - m;
+      new_team->current_log2_images = log2_procs;
+      new_team->current_rem_images = rem_procs;
+    }
+
+    /* compute maximum subteam size */
+    int sz = new_team->current_num_images;
+    hashed_cdmapping_t *subteam;
+    for (subteam = new_team->sibling_list; subteam != NULL;
+         subteam = subteam->hh.next) {
+        if (subteam->num_images > sz) sz = subteam->num_images;
+    }
+
+    new_team->intranode_barflags[0] =
+        (barrier_flags_t *)coarray_allocatable_allocate_(
+                sizeof(*new_team->intranode_barflags[0]), NULL);
+    int num_nonleaders =  new_team->intranode_set[0]-1;
+    memset(&new_team->intranode_barflags[1], 0,
+        num_nonleaders * sizeof(*new_team->intranode_barflags));
+
+    int num_steps = (int)ceil(log2((double)sz));
+    new_team->barrier.bstep =
+        (barrier_round_t *)coarray_allocatable_allocate_(
+                sizeof(barrier_round_t) * num_steps, NULL);
+    memset(new_team->barrier.bstep, 0, sizeof(barrier_round_t) * num_steps);
+
+
+    /* precompute barrier information */
+    {
+        int i;
+        int ofst = 1;
+        int rank = new_team->current_this_image - 1;
+        int my_proc = new_team->codimension_mapping[rank];
+        long leader = new_team->intranode_set[1];
+        long *leader_set = new_team->leader_set;
+        int leaders_count = new_team->leaders_count;
+        int intranode_count = new_team->intranode_set[0];
+
+        if (sync_all_algorithm == SYNC_ALL_2LEVEL_COUNTER_DIS ||
+            sync_all_algorithm == SYNC_ALL_2LEVEL_SENSEREV_DIS ||
+            sync_all_algorithm == SYNC_ALL_2LEVEL_MULTIFLAG ||
+            sync_all_algorithm == SYNC_ALL_2LEVEL_SHAREDCOUNTER) {
+            /* node-aware barrier, so only leaders participate in
+             * dissemination barrier */
+            int nums = new_team->current_num_images;
+
+            if (my_proc == leader) {
+                int num_flags = 1+(int)ceil(log2((double)leaders_count));
+                int leader_rank = 0;
+
+                for (i = 1; i < intranode_count; i++) {
+                  int target = new_team->intranode_set[i+1];
+                  new_team->intranode_barflags[i] =
+                    comm_get_sharedptr(new_team->intranode_barflags[0], target);
+
+                  /*
+              printf("***leader*** %d %p %p\n",
+                  target, new_team->intranode_barflags[0], new_team->intranode_barflags[i]);
+                  */
+                }
+
+                for (i = 0; i < leaders_count; i++) {
+                    if (leader_set[i] == my_proc) {
+                      leader_rank = i;
+                      break;
+                    }
+                }
+
+                for (i = 0; i < num_flags; i++) {
+                    int target = leader_set[(leader_rank+ofst)%leaders_count];
+                    int source = leader_set[(leader_rank-ofst+leaders_count)%leaders_count];
+                    new_team->barrier.bstep[i].target = target;
+                    new_team->barrier.bstep[i].source = source;
+                    new_team->barrier.bstep[i].remote = (barrier_flags_t *)
+                      get_remote_address(&new_team->barrier.bstep[i].local, target);
+                    ofst = ofst * 2;
+                }
+
+            } else {
+              int leader = new_team->intranode_set[1];
+              new_team->intranode_barflags[1] =
+                comm_get_sharedptr(new_team->intranode_barflags[0], leader);
+              /*
+              printf("*** %p %p\n",
+                  new_team->intranode_barflags[0], new_team->intranode_barflags[1]);
+                  */
+            }
+        } else {
+            /* barrier is not node aware, so everyone participates in
+             * dissemination barrier */
+            int nums = new_team->current_num_images;
+            int num_flags = new_team->current_log2_images;
+            if (new_team->current_rem_images != 0) num_flags += 1;
+            for (i = 0; i < num_flags; i++) {
+                int target =
+                    (new_team->codimension_mapping)[(rank+ofst) % nums];
+                int source =
+                    (new_team->codimension_mapping)[(rank-ofst+nums) % nums];
+                new_team->barrier.bstep[i].target = target;
+                new_team->barrier.bstep[i].source = source;
+                new_team->barrier.bstep[i].remote = (barrier_flags_t *)
+                   get_remote_address(&new_team->barrier.bstep[i].local, target);
+                ofst = ofst * 2;
+            }
+        }
+    }
     new_team->symm_mem_slot.start_addr = NULL;
     new_team->symm_mem_slot.end_addr = NULL;
 
-    /*
-     ** Maybe need a comm_sync_all?
-     */
+    comm_sync_all(NULL, 0, NULL, 0);
 }
 
 void change_team_(team_type * new_team_p)
@@ -227,6 +360,9 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
         const team_type current_team)
 {
     int retval;
+    long num_images = current_team->current_num_images;
+
+    memset(exchange_info_buffer, 0, sizeof(team_info_t)*num_images);
     switch (alltoall_exchange_algorithm) {
         case ALLTOALL_PRIMI:
             retval =
@@ -296,6 +432,8 @@ int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
     /*Flag_coarray indicate if recv_peer have sent data to me */
     flag_coarray=(int*)coarray_allocatable_allocate_(sizeof(int)*max_round,NULL);
     memset(flag_coarray, 0, sizeof(int)*max_round);
+    comm_sync_all(NULL, 0, NULL, 0);
+
     /*step 1, initial data */
     team_info_list[0].team_id = my_tinfo->team_id;
     team_info_list[0].index = my_tinfo->index;
@@ -306,6 +444,7 @@ int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
     for(round=0,offset=0;round < max_round;round++){
         //in each round, image i send team_info of number min{rem_slots, offset}
         // to (i-offset) and waiting for the (i+offset)
+	if(rem_slots == 0) break;
         offset = pow(2, round);
         num_data = offset<=rem_slots?offset:rem_slots;
         send_peer = (this_rank - offset + numimages)%numimages;
@@ -317,11 +456,12 @@ int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
                 team_info_list, sizeof(team_info_t)*num_data,
                 1,NULL);
         comm_write((current_team->codimension_mapping[send_peer]),
-                &(flag_coarray[round]), &num_data,
+                &(flag_coarray[round]), &(num_data),
                 sizeof(int), 1, NULL);
+
         /*Wait on my recv_peer*/
         rem_slots -= num_data;
-        while(flag_coarray[round] != num_data);
+        while(!SYNC_SWAP(&flag_coarray[round], 0));
     }
 
     /*step 3, local reorder*/
@@ -396,6 +536,7 @@ void __setup_subteams(team_type new_team, team_info_t * team_info_t,
                     (hashed_cdmapping_t *)
                     malloc(sizeof(hashed_cdmapping_t));
                 sibling_mp_node->team_id = current_node->id;
+                sibling_mp_node->num_images = count;
                 sibling_mp_node->codimension_mapping =
                     (long *) malloc(sizeof(long) * count);
                 memset((sibling_mp_node->codimension_mapping), -1,
@@ -415,6 +556,7 @@ void __setup_subteams(team_type new_team, team_info_t * team_info_t,
         }
 
     }
+
     //clean up the metadata list
     hashed_metadata_node *current_md_node, *temp_node;
     HASH_ITER(hh, hashed_md_list, current_md_node, temp_node) {
@@ -433,7 +575,7 @@ void __place_codimension_mapping(team_info_t * team_info_list,
      **  2. insert the rest in order
      */
     int my_rank, numimages;
-    int i;
+    int i,j;
     long *p_mapping;
 
     hashed_cdmapping_t *sibling_team_node;
@@ -502,7 +644,7 @@ void __place_codimension_mapping(team_info_t * team_info_list,
                     k++;
                 p_mapping[k] = *(current_team->codimension_mapping + i);
             }
-        }
+         }
         /* code */
     }
 
@@ -513,6 +655,60 @@ void __place_codimension_mapping(team_info_t * team_info_list,
             break;
         }
     }
+
+    /* Form new supernode team */
+    {
+	    long * tmp_intranode_set= (long *) malloc(sizeof(long) *
+			    (1+current_team->intranode_set[0]));
+	    long count = 0;
+	    long current_proc;
+	    for(i=0; i < new_team_p->current_num_images; i++){
+		    current_proc = new_team_p->codimension_mapping[i];
+		    for(j=1; j<=current_team->intranode_set[0]; j++){
+			    if(current_proc == current_team->intranode_set[j]){
+				    tmp_intranode_set[++count] = current_proc;
+				    break;
+			    }
+		    }
+	    }
+	    tmp_intranode_set[0] = count;
+	    new_team_p->intranode_set= (long *) malloc(sizeof(long) *
+			    (count + 1 ));
+	    memcpy(new_team_p->intranode_set, tmp_intranode_set, sizeof(long)*(count+1));
+	    free(tmp_intranode_set);
+     }
+    /*Form new leader set*/
+	{
+		long * tmp_leader_set = (long *)malloc(sizeof(long) *
+				total_num_supernodes);
+		int k = 0;
+		for(i = 0;i< total_num_supernodes;i++)
+			tmp_leader_set[i] = LONG_MAX;
+		int count = 0;
+		int spnode_id = 0;
+		long tmp_proc_id = 0;
+		for(i = 0;i<new_team_p->current_num_images; i++){
+			tmp_proc_id = new_team_p->codimension_mapping[i];
+			spnode_id = comm_get_node_id(tmp_proc_id);
+			if(tmp_leader_set[spnode_id] > i){
+				tmp_leader_set[spnode_id] = i;
+				count++;
+			}
+		}
+
+		new_team_p->leader_set = malloc(sizeof(long)*(count));
+		new_team_p->leaders_count = count;
+		for(i=0;i<total_num_supernodes;i++){
+			if(tmp_leader_set[i] < LONG_MAX){//has leader for this node
+				new_team_p->leader_set[k++] =
+                    new_team_p->codimension_mapping[tmp_leader_set[i]];
+				if(k > count)
+					Warning("Mismatch leader count");
+			}
+		}
+
+        free(tmp_leader_set);
+	}
 }
 
 int team_id_()

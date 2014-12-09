@@ -11,21 +11,43 @@ typedef struct team_info {
 
 typedef struct {
     int team_id;
+    int num_images;
     long *codimension_mapping;
     UT_hash_handle hh;
 } hashed_cdmapping_t;
 
+typedef char barrier_flags_t;
+
+typedef struct barrier_round {
+    barrier_flags_t local[2];
+    int target;
+    int source;
+    barrier_flags_t *remote;
+} barrier_round_t;
+
+typedef struct barrier_data {
+    short parity;
+    short sense;
+    barrier_round_t *bstep;
+} barrier_data_t;
+
 typedef struct team {
-    long *codimension_mapping;
+    long current_this_image;
+    long current_num_images;
+    long * codimension_mapping;
+    barrier_flags_t **intranode_barflags;
+    barrier_data_t barrier;
+    struct team *parent;
+    long * intranode_set;
+    long * leader_set;
+    /* end of first cache line */
+    int team_id;
+    int leaders_count;
     int defined;
     int activated;
-    int team_id;
-    unsigned long current_this_image;
-    unsigned long current_num_images;
+    int depth;
     unsigned long current_log2_images;  //log2_procs
     unsigned long current_rem_images;   //rem_procs
-    int depth;
-    struct team *parent;
     hashed_cdmapping_t *sibling_list;
     /*heap address for this team */
     mem_block_t symm_mem_slot;
