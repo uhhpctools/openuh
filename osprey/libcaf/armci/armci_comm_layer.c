@@ -80,6 +80,8 @@ extern shared_memory_slot_t *init_common_slot;
 extern shared_memory_slot_t * child_common_slot;
 
 extern int enable_collectives_2level;
+extern int enable_reduction_2level;
+extern int enable_broadcast_2level;
 extern int enable_collectives_1sided;
 extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
@@ -654,7 +656,7 @@ void comm_init()
     team_barrier_algorithm = TEAM_BAR_DEFAULT;
 
     if(team_barrier_alg != NULL){
-        if (strncasecmp(team_barrier_alg, "dissemination", 16) == 0) {
+        if (strncasecmp(team_barrier_alg, "dissemination", 13) == 0) {
             team_barrier_algorithm = BAR_DISSEM;
         } else {
             if(my_proc == 0) {
@@ -962,6 +964,12 @@ void comm_init()
 
     enable_collectives_2level = get_env_flag(ENV_COLLECTIVES_2LEVEL,
             DEFAULT_ENABLE_COLLECTIVES_2LEVEL);
+
+    enable_reduction_2level = get_env_flag(ENV_REDUCTION_2LEVEL,
+            DEFAULT_ENABLE_REDUCTION_2LEVEL);
+
+    enable_broadcast_2level = get_env_flag(ENV_BROADCAST_2LEVEL,
+            DEFAULT_ENABLE_BROADCAST_2LEVEL);
 
     mpi_collectives_available = 1;
 

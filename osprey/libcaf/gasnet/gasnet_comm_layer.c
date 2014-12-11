@@ -130,6 +130,8 @@ extern shared_memory_slot_t * child_common_slot;
 extern int out_of_segment_rma_enabled;
 
 extern int enable_collectives_2level;
+extern int enable_reduction_2level;
+extern int enable_broadcast_2level;
 extern int enable_collectives_1sided;
 extern int mpi_collectives_available;
 extern int enable_collectives_use_canary;
@@ -2489,12 +2491,12 @@ void comm_init()
     team_barrier_algorithm = TEAM_BAR_DEFAULT;
 
     if(team_barrier_alg != NULL){
-        if (strncasecmp(team_barrier_alg, "dissemination", 16) == 0){
+        if (strncasecmp(team_barrier_alg, "dissemination", 13) == 0){
             team_barrier_algorithm = BAR_DISSEM;
 #if GASNET_PSHM
-        } else if (strncasecmp(team_barrier_alg, "2level_multiflag_dissem", 20) == 0) {
+        } else if (strncasecmp(team_barrier_alg, "2level_multiflag_dissem", 23) == 0) {
             team_barrier_algorithm = BAR_2LEVEL_MULTIFLAG;
-        } else if (strncasecmp(team_barrier_alg, "2level_sharedounter_dissem", 20) == 0) {
+        } else if (strncasecmp(team_barrier_alg, "2level_sharedcounter_dissem", 27) == 0) {
             team_barrier_algorithm = BAR_2LEVEL_SHAREDCOUNTER;
 #endif
         } else {
@@ -2903,6 +2905,12 @@ void comm_init()
 
     enable_collectives_2level = get_env_flag(ENV_COLLECTIVES_2LEVEL,
                                              DEFAULT_ENABLE_COLLECTIVES_2LEVEL);
+
+    enable_reduction_2level = get_env_flag(ENV_REDUCTION_2LEVEL,
+                                             DEFAULT_ENABLE_REDUCTION_2LEVEL);
+
+    enable_broadcast_2level = get_env_flag(ENV_BROADCAST_2LEVEL,
+                                             DEFAULT_ENABLE_BROADCAST_2LEVEL);
 
     /* enable 1-sided collectives MPI isn't already initialized */
     mpi_collectives_available = mpi_initialized_by_gasnet;

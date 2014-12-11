@@ -47,7 +47,7 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
                          team_info_t * team_info_list,
                          const team_type current_team);
 
-int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
+int __alltoall_exchange_naive(team_info_t * my_tinfo, ssize_t len_t_info,
                               team_info_t * team_info_list,
                               const team_type current_team);
 
@@ -396,9 +396,9 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
 
     memset(exchange_info_buffer, 0, sizeof(team_info_t) * num_images);
     switch (alltoall_exchange_algorithm) {
-    case ALLTOALL_PRIMI:
+    case ALLTOALL_NAIVE:
         retval =
-            __alltoall_exchange_primi(my_tinfo, len_t_info,
+            __alltoall_exchange_naive(my_tinfo, len_t_info,
                                       exchange_teaminfo_buf, current_team);
         break;
     case ALLTOALL_LOG2POLLING:
@@ -420,7 +420,7 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
     /*error handling */
 }
 
-int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
+int __alltoall_exchange_naive(team_info_t * my_tinfo, ssize_t len_t_info,
                               team_info_t * team_info_list,
                               const team_type current_team)
 {
@@ -431,11 +431,13 @@ int __alltoall_exchange_primi(team_info_t * my_tinfo, ssize_t len_t_info,
     this_rank = current_team->current_this_image - 1;
     numimages = current_team->current_num_images;
 
+    comm_sync_all(NULL, 0, NULL, 0);
+
     for (i = 1; i <= numimages; i++) {
         __coarray_write(i, &(team_info_list[this_rank]), my_tinfo,
                         sizeof(team_info_t), 1, NULL);
     }
-    comm_sync_all(&(errstatus), sizeof(int), errmsg, 128);
+    comm_sync_all(NULL, 0, NULL, 0);
 }
 
 int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
@@ -497,7 +499,8 @@ int __alltoall_exchange_bruck(team_info_t * my_tinfo, ssize_t len_t_info,
 
         /*Wait on my recv_peer */
         rem_slots -= num_data;
-        while (!SYNC_SWAP(&flag_coarray[round], 0));
+
+        comm_poll_char_while_zero((char *)&flag_coarray[round]);
     }
 
     /*step 3, local reorder */
