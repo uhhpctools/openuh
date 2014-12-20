@@ -47,6 +47,8 @@ struct shared_memory_slot {
     unsigned short feb;         //full empty bit. 1=full
     struct shared_memory_slot *next;
     struct shared_memory_slot *prev;
+    struct shared_memory_slot *next_empty;
+    struct shared_memory_slot *prev_empty;
 };
 typedef struct shared_memory_slot shared_memory_slot_t;
 
@@ -83,4 +85,9 @@ void deallocate_within(void *start_addr, void *end_addr);
 unsigned long largest_allocatable_slot_avail(unsigned long size);
 
 void deallocate_team_all();
+
+#if defined(CAFRT_DEBUG)
+extern void uhcaf_print_alloc_max_size();
+extern void uhcaf_print_alloc_slots();
+#endif
 #endif
