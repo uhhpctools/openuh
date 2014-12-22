@@ -211,10 +211,6 @@ typedef union {
 static sync_flag_t *sync_flags = NULL;
 static char *sync_senses = NULL;
 
-/* for used by comm_sync_all_* */
-static sync_flag_t *bar_flags[2] = {NULL, NULL};
-static char *bar_senses = NULL;
-
 /*non-blocking put*/
 static struct nb_handle_manager nb_mgr[2];
 
@@ -2804,6 +2800,7 @@ void comm_init()
 	    }
     }
 
+
     initial_team->current_this_image    = my_proc + 1;
     initial_team->current_num_images    = num_procs;
     initial_team->current_log2_images   = log2_procs;
@@ -2883,16 +2880,53 @@ void comm_init()
         num_procs * sizeof(sync_flag_t), NULL, NULL);
     memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
 
-    /* allocate flags for synchronization via sync all */
-    bar_flags[0] = (sync_flag_t *) coarray_allocatable_allocate_(
-        num_procs * sizeof(sync_flag_t),NULL,  NULL);
-    memset(bar_flags[0], 0, num_procs*sizeof(sync_flag_t));
-    bar_flags[1] = (sync_flag_t *) coarray_allocatable_allocate_(
-        num_procs * sizeof(sync_flag_t),NULL,  NULL);
-    memset(bar_flags[1], 0, num_procs*sizeof(sync_flag_t));
+    /* Creating intranode barrier flags */
+    {
+        initial_team->intranode_barflags = malloc(initial_team->intranode_set[0] *
+                                        sizeof(*initial_team->intranode_barflags));
 
-    bar_senses = malloc(num_procs * sizeof *bar_senses);
-    memset(bar_senses, 0, num_procs * sizeof *bar_senses);
+        initial_team->intranode_barflags[0] =
+            (barrier_flags_t *)
+            coarray_allocatable_allocate_(sizeof(*initial_team-> intranode_barflags[0]),
+                                          NULL, NULL);
+        *(initial_team->intranode_barflags[0]) = 0;
+
+        initial_team->intranode_collflags = malloc(initial_team->intranode_set[0] *
+                                        sizeof(*initial_team->intranode_collflags));
+
+        initial_team->intranode_collflags[0] =
+            (barrier_flags_t *)
+            coarray_allocatable_allocate_(sizeof(*initial_team-> intranode_collflags[0]),
+                                          NULL, NULL);
+        *(initial_team->intranode_collflags[0]) = 0;
+
+        int num_nonleaders = initial_team->intranode_set[0] - 1;
+        memset(&initial_team->intranode_barflags[1], 0,
+                num_nonleaders * sizeof(*initial_team->intranode_barflags));
+        memset(&initial_team->intranode_collflags[1], 0,
+                num_nonleaders * sizeof(*initial_team->intranode_collflags));
+
+        long leader = initial_team->intranode_set[1];
+        int intranode_count = initial_team->intranode_set[0];
+        /* set intranode flags for synchronization */
+        if (my_proc == leader) {
+          int i;
+          for (i = 1; i < intranode_count; i++) {
+            int target = initial_team->intranode_set[i + 1];
+            initial_team->intranode_barflags[i] =
+              comm_get_sharedptr(initial_team->intranode_barflags[0],
+                  target);
+            initial_team->intranode_collflags[i] =
+              comm_get_sharedptr(initial_team->intranode_collflags[0],
+                  target);
+          }
+        } else {
+          int leader = initial_team->intranode_set[1];
+          initial_team->intranode_collflags[1] =
+            comm_get_sharedptr(initial_team->intranode_collflags[0],
+                leader);
+        }
+    }
 
     /* check whether to use 1-sided collectives implementation */
     enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
@@ -4195,7 +4229,6 @@ static void sync_all_2level_multiflag(int *status, int stat_len,
 
     leader = get_leader(team);
 
-#if GASNET_PSHM
     if (my_proc != leader) {
         barrier_flags_t *my_sync = team->intranode_barflags[0];
 
@@ -4318,7 +4351,6 @@ static void sync_all_2level_multiflag(int *status, int stat_len,
       *(team->intranode_barflags[1+i]) = 0;
     }
 
-#endif
 
 	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -4340,7 +4372,6 @@ static void sync_all_2level_sharedcounter(int *status, int stat_len,
 
     leader = get_leader(team);
 
-#if GASNET_PSHM
     if (my_proc != leader) {
         barrier_flags_t *my_sync = team->intranode_barflags[0];
         barrier_flags_t *leader_sync = team->intranode_barflags[1];
@@ -4463,8 +4494,6 @@ static void sync_all_2level_sharedcounter(int *status, int stat_len,
         barrier_flags_t *nonleader_sync = team->intranode_barflags[1+i];
         *nonleader_sync = 1;
     }
-
-#endif
 
 	LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -4805,11 +4834,11 @@ static void sync_images_sense_rev(int *image_list,
 #endif
 
 		if (my_proc != q) {
-			short sense;
+			char sense;
 			sense = sync_senses[q] % 2 + 1;
 			sync_senses[q] = sense;
 			comm_nbi_write(q, &sync_flags[my_proc].value, &sense,
-					sizeof sense);
+                           sizeof sense);
 		}
 	}
 
@@ -4920,7 +4949,7 @@ static void sync_images_csr(int *image_list,
 			} else
 #endif
 			{
-				short sense;
+				char sense;
 				sense = sync_senses[q] % 2 + 1;
 				sync_senses[q] = sense;
 				comm_nbi_write(q, &sync_flags[my_proc].value, &sense,
@@ -5906,58 +5935,62 @@ void comm_write(size_t proc, void *dest, void *src,
  */
 void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
 {
-	void *remote_dest;
-	const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    void *remote_dest;
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
 
-	LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    comm_write_x(proc, dest, src, nbytes);
 
-	remote_dest = get_remote_address(dest, proc);
+    return;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    remote_dest = get_remote_address(dest, proc);
 
 #if GASNET_PSHM
 	if (shared_mem_rma_bypass &&
-			node_info->supernode == nodeinfo_table[my_proc].supernode) {
-		PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-		ssize_t ofst = node_info->offset;
-		remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
-		memcpy(remote_dest, src, nbytes);
-		PROFILE_RMA_STORE_END(proc);
+        node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        ssize_t ofst = node_info->offset;
+        remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
+        memcpy(remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
 	} else
 #endif
-	{
-		PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-		gasnet_put_nbi(proc, remote_dest, src, nbytes);
-		PROFILE_RMA_STORE_END(proc);
-	}
+    {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        gasnet_put_nbi(proc, remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    }
 
-	LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes)
 {
-	void *remote_dest;
-	const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+    void *remote_dest;
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
 
-	LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
-	remote_dest = get_remote_address(dest, proc);
+    remote_dest = get_remote_address(dest, proc);
 
 #if GASNET_PSHM
-	if (shared_mem_rma_bypass &&
-			node_info->supernode == nodeinfo_table[my_proc].supernode) {
-		PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-		ssize_t ofst = node_info->offset;
-		remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
-		memcpy(remote_dest, src, nbytes);
-		PROFILE_RMA_STORE_END(proc);
-	} else
+    if (shared_mem_rma_bypass &&
+            node_info->supernode == nodeinfo_table[my_proc].supernode) {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        ssize_t ofst = node_info->offset;
+        remote_dest = (void *) ((uintptr_t) remote_dest + ofst);
+        memcpy(remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    } else
 #endif
-	{
-		PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-		gasnet_put_bulk(proc, remote_dest, src, nbytes);
-		PROFILE_RMA_STORE_END(proc);
-	}
+    {
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+        gasnet_put_bulk(proc, remote_dest, src, nbytes);
+        PROFILE_RMA_STORE_END(proc);
+    }
 
-	LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 

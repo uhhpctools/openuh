@@ -8,6 +8,7 @@
 #include "caf_rtl.h"
 #include "comm.h"
 #include "alloc.h"
+#include "collectives.h"
 #include "uthash.h"
 #include "utlist.h"
 #include "profile.h"
@@ -32,7 +33,7 @@ extern void *get_remote_address(void *src, size_t proc);
 
 /* allocated in comm_init*/
 team_info_t *exchange_teaminfo_buf;
-enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_BRUCK;
+enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_NAIVE;
 
 static void push_stack(team_type_t * team);
 static team_type_t *pop_stack();
@@ -101,6 +102,9 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
         if ((*new_team_p)->intranode_barflags != NULL) {
             free((*new_team_p)->intranode_barflags);
         }
+        if ((*new_team_p)->intranode_collflags != NULL) {
+            free((*new_team_p)->intranode_collflags);
+        }
 
         /* there is a potential memory leak here. we do not know if this has
          * been implicitly deallocated or not ... so we assume it was or will
@@ -120,8 +124,13 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     my_tinfo.team_id = *team_id;
     my_tinfo.index = (new_index != NULL) ? *new_index : 0;
 
+#if 0
     __alltoall_exchange(&(my_tinfo), sizeof(my_tinfo),
                         exchange_teaminfo_buf, current_team);
+#else
+    co_gather_to_all__(&my_tinfo, exchange_teaminfo_buf, 1,
+                       sizeof(my_tinfo));
+#endif
 
     __setup_subteams(new_team, exchange_teaminfo_buf, numimages, *team_id);
 
@@ -134,6 +143,9 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     new_team->intranode_barflags = malloc(new_team->intranode_set[0] *
                                           sizeof(*new_team->
                                                  intranode_barflags));
+    new_team->intranode_collflags = malloc(new_team->intranode_set[0] *
+                                          sizeof(*new_team->
+                                                 intranode_collflags));
     new_team->barrier.parity = 0;
     new_team->barrier.sense = 0;
     new_team->barrier.bstep = NULL;
@@ -171,9 +183,19 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
         (barrier_flags_t *)
         coarray_allocatable_allocate_(sizeof(*new_team-> intranode_barflags[0]),
                                       NULL, NULL);
+    *(new_team->intranode_barflags[0]) = 0;
+
+    new_team->intranode_collflags[0] =
+        (barrier_flags_t *)
+        coarray_allocatable_allocate_(sizeof(*new_team-> intranode_collflags[0]),
+                                      NULL, NULL);
+    *(new_team->intranode_collflags[0]) = 0;
+
     int num_nonleaders = new_team->intranode_set[0] - 1;
     memset(&new_team->intranode_barflags[1], 0,
            num_nonleaders * sizeof(*new_team->intranode_barflags));
+    memset(&new_team->intranode_collflags[1], 0,
+           num_nonleaders * sizeof(*new_team->intranode_collflags));
 
     int num_steps = (int) ceil(log2((double) sz));
     new_team->barrier.bstep =
@@ -184,7 +206,7 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
            sizeof(barrier_round_t) * num_steps);
 
 
-    /* precompute barrier information */
+    /* precompute synchronization information */
     {
         int i;
         int ofst = 1;
@@ -194,6 +216,27 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
         long *leader_set = new_team->leader_set;
         int leaders_count = new_team->leaders_count;
         int intranode_count = new_team->intranode_set[0];
+
+        /* set intranode flags for synchronization */
+        if (my_proc == leader) {
+          for (i = 1; i < intranode_count; i++) {
+            int target = new_team->intranode_set[i + 1];
+            new_team->intranode_barflags[i] =
+              comm_get_sharedptr(new_team->intranode_barflags[0],
+                  target);
+            new_team->intranode_collflags[i] =
+              comm_get_sharedptr(new_team->intranode_collflags[0],
+                  target);
+          }
+        } else {
+          int leader = new_team->intranode_set[1];
+          new_team->intranode_barflags[1] =
+            comm_get_sharedptr(new_team->intranode_barflags[0],
+                leader);
+          new_team->intranode_collflags[1] =
+            comm_get_sharedptr(new_team->intranode_collflags[0],
+                leader);
+        }
 
         if (team_barrier_algorithm == BAR_2LEVEL_MULTIFLAG ||
             team_barrier_algorithm == BAR_2LEVEL_SHAREDCOUNTER) {
@@ -205,13 +248,6 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
                 int num_flags =
                     1 + (int) ceil(log2((double) leaders_count));
                 int leader_rank = 0;
-
-                for (i = 1; i < intranode_count; i++) {
-                    int target = new_team->intranode_set[i + 1];
-                    new_team->intranode_barflags[i] =
-                        comm_get_sharedptr(new_team->intranode_barflags[0],
-                                           target);
-                }
 
                 for (i = 0; i < leaders_count; i++) {
                     if (leader_set[i] == my_proc) {
@@ -234,11 +270,6 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
                     ofst = ofst * 2;
                 }
 
-            } else {
-                int leader = new_team->intranode_set[1];
-                new_team->intranode_barflags[1] =
-                    comm_get_sharedptr(new_team->intranode_barflags[0],
-                                       leader);
             }
         } else {
             /* barrier is not node aware, so everyone participates in

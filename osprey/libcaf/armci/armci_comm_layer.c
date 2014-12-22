@@ -2655,7 +2655,7 @@ static void sync_images_sense_rev(int *image_list,
 #endif
 
         if (my_proc != q) {
-            short sense = sync_flags[q].t.sense % 2 + 1;
+            char sense = sync_flags[q].t.sense % 2 + 1;
             sync_flags[q].t.sense = sense;
             comm_nbi_write(q, &sync_flags[my_proc].t.val, &sense,
                            sizeof(sense));
@@ -2708,8 +2708,8 @@ static void sync_images_sense_rev(int *image_list,
             }
         }
 
-        short x;
-        x = (short) SYNC_SWAP((short *)&sync_flags[q].t.val, 0);
+        char x;
+        x = (char) SYNC_SWAP((char *)&sync_flags[q].t.val, 0);
         if (x != sync_flags[q].t.sense) {
             /* already received the next notification */
             sync_flags[q].t.val = x;

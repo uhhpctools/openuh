@@ -127,6 +127,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                                caf_reduction_type_t *elem_type,
                                caf_reduction_op_t *op);
 
+void co_gather_to_all__(void *source, void *dest, int size, int elem_size_p);
 
 void CO_BROADCAST__(void *source, INTEGER4 * source_image,
                     INTEGER4 * stat, char * errmsg, DopeVectorType *source_dv,

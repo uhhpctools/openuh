@@ -1986,10 +1986,10 @@ void co_broadcast_from_root_2level(void *source, size_t sz, int source_image)
         log2_p = log2_p + 1;
     }
 
-    if (me == source_image) {
+    if (_this_image == source_image) {
         memcpy(base_buffer, source, sz);
 
-        if (me != 1) {
+        if (_this_image != 1) {
             /* copy from source image to image 1 */
             int root = 1;
             proc_id = get_proc_id(current_team, root);
@@ -2003,7 +2003,7 @@ void co_broadcast_from_root_2level(void *source, size_t sz, int source_image)
         }
 
     } else {
-        if (me == 1) {
+        if (_this_image == 1) {
             _SYNC_IMAGES(&source_image, 1, NULL, 0, NULL, 0);
 
             /* received from source image */
@@ -2043,22 +2043,46 @@ void co_broadcast_from_root_2level(void *source, size_t sz, int source_image)
 
     /* Phase 2: Leaders broadcast to their non-leaders */
 
+#if defined(GASNET)
+    if (is_leader) {
+        int i;
+        *(current_team->intranode_collflags[0]) = intranode_count-1;
+        for (i = 1; i < intranode_count; i++) {
+            *(current_team->intranode_collflags[i]) = 1;
+        }
+
+        /* wait for non-leaders to finish reading buffer */
+        comm_poll_char_while_nonzero(current_team->intranode_collflags[0]);
+    } else {
+        int my_leader_image = current_team->intranode_set[1] + 1;
+
+        /* poll on flag */
+        comm_poll_char_while_zero(current_team->intranode_collflags[0]);
+        comm_read(my_leader_image-1, &((char*)base_buffer)[0],
+                  &((char*)base_buffer)[0], sz);
+        *(current_team->intranode_collflags[0]) = 0;
+        SYNC_FETCH_AND_ADD(
+            (barrier_flags_t *)current_team->intranode_collflags[1],
+            -1);
+    }
+#else
     if (is_leader) {
         int i;
         for (i = 1; i < intranode_count; i++) {
             comm_write_x(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                      &((char*)base_buffer)[0], sz);
-             /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
-            comm_sync_images(&local_images[i-1], 1, NULL, 0, NULL, 0);
+                    &((char*)base_buffer)[0], sz);
         }
+        /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
+        comm_sync_images(local_images, intranode_count-1, NULL, 0, NULL, 0);
     } else {
         int my_leader_image = current_team->intranode_set[1] + 1;
         comm_sync_images(&my_leader_image, 1, NULL, 0, NULL, 0);
     }
+#endif
 
     /* all images except for source image needs to copy from base_buffer to
      * source */
-    if (me != source_image) {
+    if (_this_image != source_image) {
         memcpy(source, base_buffer, sz);
     }
 
@@ -2998,6 +3022,132 @@ void CO_REDUCE__(void *source, void *opr, INTEGER4 *result_image,
     } else {
         co_reduce_to_image__(source, result_image, &nelems, &elem_size, &charlen,
                              type, opr);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
+    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
+}
+
+/* assuming here that dest is remotely accessible */
+void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
+{
+    int p, q, me, proc_id;
+    int i, j, step, log2_p, val;
+    size_t block_size;
+#ifdef MPI_AVAIL
+    MPI_Datatype dtype;
+#endif
+
+    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+    me = _this_image;
+    p = _num_images;
+
+    /* find log2_p, ceil(log2(p)) */
+    q = 1;
+    log2_p = 0;
+    while ( q < p) {
+        q = 2*q;
+        log2_p++;
+    }
+
+    block_size = elem_size * size;
+
+#ifdef MPI_AVAIL
+    if (!mpi_collectives_available && !enable_collectives_1sided) {
+        /* check if MPI was initialized */
+        if (MPI_Initialized &&
+            MPI_Initialized(&mpi_collectives_available) != MPI_SUCCESS) {
+            Error("MPI_Initialized check failed");
+        }
+    }
+
+    if (mpi_collectives_available && !enable_collectives_1sided &&
+        (current_team == NULL || current_team->depth == 0)) {
+
+        /* adding barrier here to ensure communication progress before
+         * entering MPI reduce routine */
+
+        MPI_Type_contiguous(block_size, MPI_BYTE, &dtype);
+        MPI_Type_commit(&dtype);
+
+        comm_sync_all(NULL, 0, NULL, 0);
+
+        MPI_Allgather(source,  1, dtype, dest, 1, dtype, MPI_COMM_WORLD);
+
+        MPI_Type_free(&dtype);
+        return;
+
+        /* does not reach */
+    }
+#endif
+
+    /* copy source into first block of dest */
+    memcpy(dest, source, block_size);
+
+    /* p processes perform bruck algorithm, 1st stage
+     *
+     * round i:
+     *    write to: me - 2^(i-1), &dest[2^(i-1) * BLK_SIZE]
+     *    nbytes = MIN(2^(i-1), p-2^(i-1)) * BLK_SIZE
+     */
+    step = 1;
+    for (i = 1; i <= log2_p; i += 1) {
+        int k;
+        int partners[2];
+        partners[0] = 1 + (((me-1) + p) - step) % p;
+        partners[1] = 1 + (((me-1) + p) + step) % p;
+
+        k = MIN(step, p-step);
+
+        /*
+        if (partners[0] != partners[1])
+            _SYNC_IMAGES(partners, 2, NULL, 0, NULL, 0);
+        else
+            _SYNC_IMAGES(partners, 1, NULL, 0, NULL, 0);
+            */
+
+        proc_id = get_proc_id(current_team, partners[0]);
+
+        comm_write_x( proc_id,
+                      &((char*)dest)[step*block_size],
+                      dest, k * block_size );
+
+        if (partners[0] != partners[1])
+            _SYNC_IMAGES(partners, 2, NULL, 0, NULL, 0);
+        else
+            _SYNC_IMAGES(partners, 1, NULL, 0, NULL, 0);
+
+        step = step * 2;
+    }
+
+    /* now, each image should do a local circular shift in its dest buffer
+     */
+
+    char *b;
+    if (collectives_bufsize >= (p*block_size)) {
+        b = (char *)collectives_buffer;
+    } else {
+        b = malloc(p*block_size);
+    }
+
+    /* create copy of dest */
+    memcpy(b, dest, p*block_size);
+
+    /* copy first p-(me-1) blocks from b into end of dest */
+    memcpy(&((char *)dest)[(me-1)*block_size],
+           b,
+           (p-(me-1))*block_size);
+
+    /* copy last me-1 blocks from b into dest */
+    memcpy(dest,
+           &b[(p-(me-1))*block_size],
+           (me-1)*block_size);
+
+
+    if (collectives_bufsize < (p*block_size)) {
+        free(b);
     }
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
