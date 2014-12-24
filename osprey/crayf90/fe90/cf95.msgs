@@ -22045,19 +22045,19 @@ This argument to the %s statements must be a scalar of type TEAM_TYPE
 .ME
 $
 $ Error : 1727
-$msg  1727 The NEW_INDEX= variable must be a scalar integer variable
+$msg  1727 The NEW_INDEX= argument must be a scalar integer expression
 $nexp 1727
-Error : The NEW_INDEX= variable must be a scalar integer variable
+Error : The NEW_INDEX= argument must be a scalar integer expression
 .PP
-The NEW_INDEX= variable must be a scalar integer variable
+The NEW_INDEX= argument must be a scalar integer expression
 .ME
 $
 $ Error : 1728
-$msg  1728 The first argument for FORM TEAM must be a scalar integer variable
+$msg  1728 The first argument for FORM TEAM must be a scalar integer expression
 $nexp 1728
-Error : The first argument for FORM TEAM must be a scalar integer variable
+Error : The first argument for FORM TEAM must be a scalar integer expression
 .PP
-The FORM TEAM statement takes an scalar integer variable indicating team id as
+The FORM TEAM statement takes an scalar integer expression indicating team id as
 the first argument.
 .ME
 $

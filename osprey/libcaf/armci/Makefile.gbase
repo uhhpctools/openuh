@@ -81,6 +81,7 @@ CFILES = \
    alloc.c \
    lock.c \
    collectives.c \
+   collectives_old.c \
    team.c \
    env.c \
    util.c
