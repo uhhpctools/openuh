@@ -631,7 +631,7 @@ void comm_init()
     /* which sync images to use */
     char *si_alg;
     si_alg = getenv(ENV_SYNC_IMAGES_ALGORITHM);
-    sync_images_algorithm = SYNC_IMAGES_DEFAULT;
+    sync_images_algorithm = SYNC_SENSE_REV;
 
     if (si_alg != NULL) {
         if (strncasecmp(si_alg, "counter", 7) == 0) {
@@ -641,7 +641,7 @@ void comm_init()
         } else if (strncasecmp(si_alg, "sense_reversing", 15 ) == 0) {
             sync_images_algorithm = SYNC_SENSE_REV;
         } else if (strncasecmp(si_alg, "default", 7 ) == 0) {
-            sync_images_algorithm = SYNC_IMAGES_DEFAULT;
+            sync_images_algorithm = SYNC_SENSE_REV;
         } else {
             if (my_proc == 0) {
                 Warning("SYNC_IMAGES_ALGORITHM %s is not supported. "
@@ -653,7 +653,7 @@ void comm_init()
     /* which team barrier algorithm is used */
     char *team_barrier_alg;
     team_barrier_alg = getenv(ENV_TEAM_BARRIER_ALGORITHM);
-    team_barrier_algorithm = TEAM_BAR_DEFAULT;
+    team_barrier_algorithm = BAR_DISSEM;
 
     if(team_barrier_alg != NULL){
         if (strncasecmp(team_barrier_alg, "dissemination", 13) == 0) {

@@ -5938,9 +5938,8 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
     void *remote_dest;
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
 
-    comm_write_x(proc, dest, src, nbytes);
-
-    return;
+    //comm_write_x(proc, dest, src, nbytes);
+    //return;
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
