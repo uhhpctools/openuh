@@ -56,7 +56,7 @@ size_t collectives_bufsize;
 
 int collectives_max_workbufs = 0;
 
-int enable_collectives_1sided;
+int enable_collectives_mpi;
 int enable_collectives_use_canary = 0;
 
 int enable_collectives_2level = 0;
@@ -641,7 +641,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     sz = *size;
 
 #ifdef MPI_AVAIL
-    if (!mpi_collectives_available && !enable_collectives_1sided) {
+    if (!mpi_collectives_available && enable_collectives_mpi) {
         /* check if MPI was initialized */
         if (MPI_Initialized &&
             MPI_Initialized(&mpi_collectives_available) != MPI_SUCCESS) {
@@ -649,7 +649,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         }
     }
 
-    if (mpi_collectives_available && !enable_collectives_1sided &&
+    if (mpi_collectives_available && enable_collectives_mpi &&
         (current_team == NULL || current_team->depth == 0)) {
         switch (*elem_type) {
             case CAF_LOGICAL1:
@@ -1318,7 +1318,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     sz = *size;
 
 #ifdef MPI_AVAIL
-    if (!mpi_collectives_available && !enable_collectives_1sided) {
+    if (!mpi_collectives_available && enable_collectives_mpi) {
         /* check if MPI was initialized */
         if (MPI_Initialized &&
             MPI_Initialized(&mpi_collectives_available) != MPI_SUCCESS) {
@@ -1326,7 +1326,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         }
     }
 
-    if (mpi_collectives_available && !enable_collectives_1sided &&
+    if (mpi_collectives_available && enable_collectives_mpi &&
         (current_team == NULL || current_team->depth == 0)) {
         switch (*elem_type) {
             case CAF_LOGICAL1:
@@ -2724,7 +2724,7 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
     PROFILE_FUNC_ENTRY(CAFPROF_BCAST);
 
 #ifdef MPI_AVAIL
-    if (!mpi_collectives_available && !enable_collectives_1sided) {
+    if (!mpi_collectives_available && enable_collectives_mpi) {
         /* check if MPI was initialized */
         if (MPI_Initialized &&
             MPI_Initialized(&mpi_collectives_available) != MPI_SUCCESS) {
@@ -2737,7 +2737,7 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
     source_size = _SIZEOF_8(source_dv);
 
 #ifdef MPI_AVAIL
-    if (mpi_collectives_available && !enable_collectives_1sided &&
+    if (mpi_collectives_available && enable_collectives_mpi &&
         (current_team == NULL || current_team->depth == 0)) {
         /* adding barrier here to ensure communication progress before
          * entering MPI Bcast routine */
@@ -4461,7 +4461,7 @@ void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
     block_size = elem_size * size;
 
 #ifdef MPI_AVAIL
-    if (!mpi_collectives_available && !enable_collectives_1sided) {
+    if (!mpi_collectives_available && enable_collectives_mpi) {
         /* check if MPI was initialized */
         if (MPI_Initialized &&
             MPI_Initialized(&mpi_collectives_available) != MPI_SUCCESS) {
@@ -4469,7 +4469,7 @@ void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
         }
     }
 
-    if (mpi_collectives_available && !enable_collectives_1sided &&
+    if (mpi_collectives_available && enable_collectives_mpi &&
         (current_team == NULL || current_team->depth == 0)) {
 
         /* adding barrier here to ensure communication progress before

@@ -138,11 +138,11 @@ Environment Variables:
                       for remote completion. The overhead of the packing may
                       be greater than the gains, so by default it is 0.
 
-   UHCAF_COLLECTIVES_1SIDED
-                      Enables the 1-sided implementation for collectives in the
-                      CAF runtime library, even if MPI is available. If not set,
-                      the implementation will decide whether to use 1-sided or
-                      2-sided messaging for collectives. By default it is 0.
+   UHCAF_COLLECTIVES_MPI
+                      Enables the MPI implementation for collectives in the
+                      CAF runtime library if MPI is available. If set,
+                      the implementation will attempt to use MPI collectives
+                      rather than 1-sided communication. By default it is 0.
 
    UHCAF_COLLECTIVES_BUFSIZE
                       Specifies the size of the collectives buffer for use by
@@ -246,8 +246,8 @@ Environment Variables:
                       collectives implemented using 1-sided operations. Will
                       only work correctly for networks where the last byte of
                       transferred to a remote memory is the last byte in the
-                      buffer. This is very experimental, and it is unlikely to
-                      work correctly in many cases. By default, it is set to 0.
+                      buffer. This is very experimental, and it may work
+                      incorrectly in some cases. By default, it is set to 0.
 
 
    -------------
@@ -374,8 +374,8 @@ add_uhcaf_envs_to_list()
     if [ -n "$UHCAF_NB_XFER_LIMIT" ]; then
         add_to_env_list UHCAF_NB_XFER_LIMIT
     fi
-    if [ -n "$UHCAF_COLLECTIVES_1SIDED" ]; then
-        add_to_env_list UHCAF_COLLECTIVES_1SIDED
+    if [ -n "$UHCAF_COLLECTIVES_MPI" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_MPI
     fi
     if [ -n "$UHCAF_COLLECTIVES_BUFSIZE" ]; then
         add_to_env_list UHCAF_COLLECTIVES_BUFSIZE

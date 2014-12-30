@@ -82,7 +82,7 @@ extern shared_memory_slot_t * child_common_slot;
 extern int enable_collectives_2level;
 extern int enable_reduction_2level;
 extern int enable_broadcast_2level;
-extern int enable_collectives_1sided;
+extern int enable_collectives_mpi;
 extern int enable_collectives_use_canary;
 extern int mpi_collectives_available;
 extern void *collectives_buffer;
@@ -964,8 +964,8 @@ void comm_init()
     memset(sync_flags, 0, num_procs*sizeof(sync_flag_t));
 
     /* check whether to use 1-sided collectives implementation */
-    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
-                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+    enable_collectives_mpi = get_env_flag(ENV_COLLECTIVES_MPI,
+                                    DEFAULT_ENABLE_COLLECTIVES_MPI);
 
     /* check whether to enable use of canary protocol for some collectives */
     enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
