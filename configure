@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os uh_config_arguments BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE DEFAULT_CAF_INIT_TEAM_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION ENABLE_OSA LIBLIST subdirs LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os uh_config_arguments BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE DEFAULT_CAF_TEAMS_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION ENABLE_OSA LIBLIST subdirs LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -824,11 +824,12 @@ Optional Packages:
                           fortran programs. Can use suffixes K,M,G for
                           kilobytes,megabytes,gigabytes respectively. Will be
                           30M if unspecified.
-  --with-default-caf-initial-team-heap-size=<heap size>
+  --with-default-caf-teams-heap-size=<heap size>
                           Default per-image heap size to use for coarray
-                          fortran programs for initial team. Can use suffixes
-                          K,M,G for kilobytes,megabytes,gigabytes
-                          respectively. Will be 20M if unspecified.
+                          fortran programs for coarray allocations within
+                          team. Can use suffixes K,M,G for
+                          kilobytes,megabytes,gigabytes respectively. Will be
+                          10M if unspecified.
   --with-build-optimize=DEFAULT|DEBUG	Use DEFAULT or DEBUG flags in compiler build
   --with-build-ffe-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in FFE build
   --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
@@ -1552,14 +1553,14 @@ else
   DEFAULT_CAF_HEAP_SIZE="30M"
 fi;
 
-# default CAF initial team heap size
+# default CAF teams heap size
 
-# Check whether --with-default-caf-initial-team-heap-size or --without-default-caf-initial-team-heap-size was given.
-if test "${with_default_caf_initial_team_heap_size+set}" = set; then
-  withval="$with_default_caf_initial_team_heap_size"
-  DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_initial_team_heap_size"
+# Check whether --with-default-caf-teams-heap-size or --without-default-caf-teams-heap-size was given.
+if test "${with_default_caf_teams_heap_size+set}" = set; then
+  withval="$with_default_caf_teams_heap_size"
+  DEFAULT_CAF_TEAMS_HEAP_SIZE="$with_default_caf_teams_heap_size"
 else
-  DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="20M"
+  DEFAULT_CAF_TEAMS_HEAP_SIZE="10M"
 fi;
 
 # set bash path
@@ -1777,17 +1778,17 @@ echo "$as_me: error: Invalid value for --with-default-caf-heap-size. Should be
    { (exit 1); exit 1; }; }
 fi
 
-if test -z "${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE}"; then
-    { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-initial-team-heap-size. Should be an
+if test -z "${DEFAULT_CAF_TEAMS_HEAP_SIZE}"; then
+    { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-teams-heap-size. Should be an
                  integer, optionally followed by k, K, m, M, g, or G." >&5
-echo "$as_me: error: Invalid value for --with-default-caf-initial-team-heap-size. Should be an
+echo "$as_me: error: Invalid value for --with-default-caf-teams-heap-size. Should be an
                  integer, optionally followed by k, K, m, M, g, or G." >&2;}
    { (exit 1); exit 1; }; }
-elif test `echo ${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE} | grep ^[0-9][0-9]*$ | wc -l` = 0  -a \
-       `echo ${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE} | grep ^[0-9][0-9]*[kKmMgG]$ | wc -l` = 0; then
-      { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-initial-team-heap-size. Should be
+elif test `echo ${DEFAULT_CAF_TEAMS_HEAP_SIZE} | grep ^[0-9][0-9]*$ | wc -l` = 0  -a \
+       `echo ${DEFAULT_CAF_TEAMS_HEAP_SIZE} | grep ^[0-9][0-9]*[kKmMgG]$ | wc -l` = 0; then
+      { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-teams-heap-size. Should be
                    an integer, optionally followed by k, K, m, M, g, or G." >&5
-echo "$as_me: error: Invalid value for --with-default-caf-initial-team-heap-size. Should be
+echo "$as_me: error: Invalid value for --with-default-caf-teams-heap-size. Should be
                    an integer, optionally followed by k, K, m, M, g, or G." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -3244,7 +3245,7 @@ s,@BUILD_GNU4@,$BUILD_GNU4,;t t
 s,@ENABLE_COARRAYS@,$ENABLE_COARRAYS,;t t
 s,@BUILD_CAF_RUNTIME@,$BUILD_CAF_RUNTIME,;t t
 s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
-s,@DEFAULT_CAF_INIT_TEAM_HEAP_SIZE@,$DEFAULT_CAF_INIT_TEAM_HEAP_SIZE,;t t
+s,@DEFAULT_CAF_TEAMS_HEAP_SIZE@,$DEFAULT_CAF_TEAMS_HEAP_SIZE,;t t
 s,@GASNET_HOME@,$GASNET_HOME,;t t
 s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
 s,@ARMCI_HOME@,$ARMCI_HOME,;t t
@@ -3766,8 +3767,8 @@ fi
 
 { echo "$as_me:$LINENO:    DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE" >&5
 echo "$as_me:    DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE" >&6;}
-{ echo "$as_me:$LINENO:    DEFAULT_CAF_INIT_TEAM_HEAP_SIZE= $DEFAULT_CAF_INIT_TEAM_HEAP_SIZE" >&5
-echo "$as_me:    DEFAULT_CAF_INIT_TEAM_HEAP_SIZE= $DEFAULT_CAF_INIT_TEAM_HEAP_SIZE" >&6;}
+{ echo "$as_me:$LINENO:    DEFAULT_CAF_TEAMS_HEAP_SIZE    = $DEFAULT_CAF_TEAMS_HEAP_SIZE" >&5
+echo "$as_me:    DEFAULT_CAF_TEAMS_HEAP_SIZE    = $DEFAULT_CAF_TEAMS_HEAP_SIZE" >&6;}
 { echo "$as_me:$LINENO:    DEFAULT_COMM                   = $DEFAULT_COMM" >&5
 echo "$as_me:    DEFAULT_COMM                   = $DEFAULT_COMM" >&6;}
 { echo "$as_me:$LINENO:    GASNET_HOME                    = $GASNET_HOME" >&5

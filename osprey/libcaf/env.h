@@ -41,7 +41,7 @@
 #define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
 #define ENV_GETCACHE_BLOCK_SIZE       "UHCAF_GETCACHE_BLOCK_SIZE"
 #define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
-#define ENV_INIT_TEAM_HEAP_SIZE       "UHCAF_INIT_TEAM_HEAP_SIZE"
+#define ENV_TEAMS_HEAP_SIZE           "UHCAF_TEAMS_HEAP_SIZE"
 #define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
 #define ENV_CO_REDUCE_ALGORITHM       "UHCAF_CO_REDUCE_ALGORITHM"
 #define ENV_SYNC_IMAGES_ALGORITHM     "UHCAF_SYNC_IMAGES_ALGORITHM"
@@ -81,7 +81,7 @@
 
 /* these should be overridden by the defaults in cafrun script */
 #define DEFAULT_IMAGE_HEAP_SIZE                 31457280L
-#define DEFAULT_INIT_TEAM_HEAP_SIZE             20971520L
+#define DEFAULT_TEAMS_HEAP_SIZE                 10485760L
 
 int get_env_flag(const char *var_name, int default_val);
 size_t get_env_size(const char *var_name, size_t default_size);

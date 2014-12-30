@@ -1195,7 +1195,7 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
 
             for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
                 if (j == 1 && k > 0) {
-                    _SYNC_IMAGES(partners, k, NULL, 0, NULL, 0);
+                    comm_sync_images(partners, k, NULL, 0, NULL, 0);
                 }
                 partner = pot_partners[j-1];
                 if (partner < 1 || partner > p) continue;
@@ -2741,7 +2741,7 @@ void CO_BROADCAST__(void *source, INTEGER4 * source_image,
         (current_team == NULL || current_team->depth == 0)) {
         /* adding barrier here to ensure communication progress before
          * entering MPI Bcast routine */
-        comm_barrier_all();
+        comm_sync_all(NULL, 0, NULL, 0);
         MPI_Bcast(source, source_size, MPI_BYTE,
                   *source_image-1, MPI_COMM_WORLD);
     } else
@@ -3237,7 +3237,7 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
 
             for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
                 if (j == 1 && k > 0) {
-                    _SYNC_IMAGES(partners, k, NULL, 0, NULL, 0);
+                    comm_sync_images(partners, k, NULL, 0, NULL, 0);
                 }
                 partner = pot_partners[j-1];
                 if (partner < 1 || partner > p) continue;

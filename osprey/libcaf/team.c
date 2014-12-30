@@ -319,7 +319,7 @@ void _CHANGE_TEAM(team_type * new_team_p,
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "changing team not specified");
     }
 
-    /*If change to new child team, get the addr of child_common_slot as start addr
+    /* If change to new child team, get the addr of child_common_slot as start addr
      * and the end addr = start_addr+size
      * for the current_team, if it is not initial team, put the end addr =
      * child_common_slot->addr.

@@ -58,8 +58,8 @@ extern unsigned long _num_images;
 extern unsigned long _log2_images;
 extern unsigned long _rem_images;
 extern team_type     initial_team;
-extern mem_usage_info_t * init_mem_info;
-extern mem_usage_info_t * child_mem_info;
+extern mem_usage_info_t * mem_info;
+extern mem_usage_info_t * teams_mem_info;
 extern size_t alloc_byte_alignment;
 
 extern int rma_prof_rid;
@@ -368,7 +368,7 @@ inline void *comm_end_symmetric_mem(size_t proc)
     /* we can't directly use common_slot->addr as the argument, because the
      * translation algorithm will treat it as part of the asymmetric memory
      * space */
-    return get_remote_address(child_common_slot->addr - 1, proc) + 1;
+    return get_remote_address(init_common_slot->addr - 1, proc) + 1;
 }
 
 inline void *comm_start_asymmetric_heap(size_t proc)
@@ -376,7 +376,7 @@ inline void *comm_start_asymmetric_heap(size_t proc)
     if (proc != my_proc) {
         return comm_end_symmetric_mem(proc);
     } else {
-        return (char *) child_common_slot->addr + child_common_slot->size;
+        return (char *) init_common_slot->addr + init_common_slot->size;
     }
 }
 
@@ -396,7 +396,7 @@ static inline int address_in_symmetric_mem(void *addr)
     void *end_symm_mem;
 
     start_symm_mem = coarray_start_all_images[my_proc];
-    end_symm_mem = child_common_slot->addr;
+    end_symm_mem = init_common_slot->addr;
 
     return (addr >= start_symm_mem && addr < end_symm_mem);
 }
@@ -505,20 +505,14 @@ void comm_init()
     unsigned long caf_shared_memory_size;
     unsigned long image_heap_size;
     size_t collectives_offset;
-    unsigned long  init_heap_size;
+    unsigned long  teams_heap_size;
     armci_handle_x_t *p;
 
-    extern mem_usage_info_t * init_mem_info;
-    extern mem_usage_info_t * child_mem_info;
+    extern mem_usage_info_t * mem_info;
+    extern mem_usage_info_t * teams_mem_info;
 
     size_t static_align;
 
-    if (init_common_slot != NULL) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "init_common_slot has already been initialized");
-    }
-
-    init_common_slot = malloc(sizeof(shared_memory_slot_t));
 
     alloc_byte_alignment = get_env_size(ENV_ALLOC_BYTE_ALIGNMENT,
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
@@ -556,8 +550,8 @@ void comm_init()
     caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size_with_unit(ENV_IMAGE_HEAP_SIZE,
                                              DEFAULT_IMAGE_HEAP_SIZE);
-    init_heap_size = get_env_size_with_unit(ENV_INIT_TEAM_HEAP_SIZE,
-                                            DEFAULT_INIT_TEAM_HEAP_SIZE);
+    teams_heap_size = get_env_size_with_unit(ENV_TEAMS_HEAP_SIZE,
+                                            DEFAULT_TEAMS_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
 
     argc = ARGC;
@@ -741,6 +735,20 @@ void comm_init()
               caf_shared_memory_size);
     }
 
+    /* adjust teams_heap_size */
+    if ( (teams_heap_size + MIN_HEAP_SIZE + static_symm_data_total_size) >
+          caf_shared_memory_size) {
+        /* let the first process issue a warning to the user */
+        teams_heap_size = caf_shared_memory_size -
+                (MIN_HEAP_SIZE + static_symm_data_total_size);
+        if (teams_heap_size < 0) teams_heap_size = 0;
+
+        if (my_proc == 0) {
+            Warning("teams_heap_size is too big. Reducing to %lu bytes.",
+                    teams_heap_size);
+        }
+    }
+
 
     start_shared_mem_address[my_proc] = coarray_start_all_images[my_proc];
 
@@ -830,16 +838,21 @@ void comm_init()
         }
     }
 
-    /* initialize common shared memory slot */
-    init_common_slot->addr = coarray_start_all_images[my_proc]
+    /* initialize the child common shared memory slot */
+    if (child_common_slot != NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "child_common_slot has already been initialized");
+    }
+
+    child_common_slot = malloc(sizeof(shared_memory_slot_t));
+    child_common_slot->addr = coarray_start_all_images[my_proc]
         + static_symm_data_total_size;
-    init_common_slot->size = caf_shared_memory_size
-        - static_symm_data_total_size;
-    init_common_slot->feb = 0;
-    init_common_slot->next = 0;
-    init_common_slot->prev = 0;
-    init_common_slot->next_empty = 0;
-    init_common_slot->prev_empty = 0;
+    child_common_slot->size = teams_heap_size;
+    child_common_slot->feb = 0;
+    child_common_slot->next = 0;
+    child_common_slot->prev = 0;
+    child_common_slot->next_empty = 0;
+    child_common_slot->prev_empty = 0;
 
     shared_memory_size = caf_shared_memory_size;
 
@@ -893,47 +906,44 @@ void comm_init()
     initial_team->barrier.sense         = 0;
     initial_team->barrier.bstep         = NULL;
 
-    shared_memory_slot_t * tmp_slot;
-    tmp_slot = init_common_slot;
-
-    while(tmp_slot->prev != NULL)
-        tmp_slot = tmp_slot->prev;
-
-    initial_team->symm_mem_slot.start_addr = tmp_slot->addr;
-    initial_team->symm_mem_slot.end_addr =
-        init_common_slot->addr + init_heap_size;
-
     initial_team->allocated_list = NULL;
 
     /*Init the child_common_slot*/
-    if (child_common_slot == NULL) {
-        child_common_slot       = (shared_memory_slot_t *)
+    if (init_common_slot == NULL) {
+        init_common_slot       = (shared_memory_slot_t *)
                                    malloc(sizeof(shared_memory_slot_t));
-        child_common_slot->addr = init_common_slot->addr + init_heap_size;
-        child_common_slot->size = init_common_slot->size - init_heap_size;
-        child_common_slot->feb  = 0;
-        child_common_slot->next = NULL;
-        child_common_slot->prev = NULL;
-        child_common_slot->next_empty = NULL;
-        child_common_slot->prev_empty = NULL;
+        init_common_slot->addr = child_common_slot->addr + teams_heap_size;
+        init_common_slot->size = image_heap_size - teams_heap_size;
+        init_common_slot->feb  = 0;
+        init_common_slot->next = NULL;
+        init_common_slot->prev = NULL;
+        init_common_slot->next_empty = NULL;
+        init_common_slot->prev_empty = NULL;
      }
 
-    init_common_slot->size = init_heap_size;
+
+    shared_memory_slot_t * tmp_slot;
+    tmp_slot = init_common_slot;
+    while(tmp_slot->prev != NULL)
+        tmp_slot = tmp_slot->prev;
+    initial_team->symm_mem_slot.start_addr = tmp_slot->addr;
+    initial_team->symm_mem_slot.end_addr = init_common_slot->addr;
+
     current_team = initial_team;
 
     /* update the init_mem_info*/
-    init_mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(*init_mem_info), NULL, NULL);
+    mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_(sizeof(*mem_info), NULL, NULL);
 
     /* allocate space in symmetric heap for memory usage info */
-    init_mem_info->current_heap_usage = sizeof(*init_mem_info);
-    init_mem_info->max_heap_usage = sizeof(*init_mem_info);
-    init_mem_info->reserved_heap_usage = init_heap_size;
-    child_mem_info = (mem_usage_info_t *)
-        coarray_allocatable_allocate_(sizeof(*child_mem_info), NULL, NULL);
-    child_mem_info->current_heap_usage = 0;
-    child_mem_info->max_heap_usage = 0;
-    child_mem_info->reserved_heap_usage = child_common_slot->size;
+    mem_info->current_heap_usage = teams_heap_size + sizeof(*mem_info);
+    mem_info->max_heap_usage = mem_info->current_heap_usage;
+    mem_info->reserved_heap_usage = image_heap_size;
+    teams_mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_(sizeof(*teams_mem_info), NULL, NULL);
+    teams_mem_info->current_heap_usage = 0;
+    teams_mem_info->max_heap_usage = 0;
+    teams_mem_info->reserved_heap_usage = teams_heap_size;
 
     /* allocate space for recording image termination */
     error_stopped_image_exists =
