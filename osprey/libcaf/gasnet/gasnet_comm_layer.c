@@ -110,6 +110,8 @@ extern mem_usage_info_t *teams_mem_info;
 extern co_reduce_t co_reduce_algorithm;
 extern size_t alloc_byte_alignment;
 
+extern exchange_algorithm_t alltoall_exchange_algorithm;
+
 extern int rma_prof_rid;
 
 /* init_common_slot and child_common_slot is a node in the shared memory
@@ -2445,6 +2447,26 @@ void comm_init()
             if (my_proc == 0) {
                 Warning("CO_REDUCE_ALGORITHM %s is not supported. "
                         "Using default", alg);
+            }
+        }
+    }
+
+    /* which form team algorithm to use */
+    char *ft_alg;
+    ft_alg = getenv(ENV_FORM_TEAM_ALGORITHM);
+    alltoall_exchange_algorithm = ALLTOALL_BRUCK2;;
+
+    if (ft_alg != NULL) {
+        if (strncasecmp(ft_alg, "naive", 5) == 0) {
+            alltoall_exchange_algorithm = ALLTOALL_NAIVE;
+        } else if (strncasecmp(ft_alg, "bruck2", 6) == 0) {
+            alltoall_exchange_algorithm = ALLTOALL_BRUCK2;
+        } else if (strncasecmp(ft_alg, "bruck", 5) == 0) {
+            alltoall_exchange_algorithm = ALLTOALL_BRUCK;
+        } else {
+            if (my_proc == 0) {
+                Warning("FORM_TEAM_ALGORITHM %s is not supported. "
+                        "Using default", ft_alg);
             }
         }
     }

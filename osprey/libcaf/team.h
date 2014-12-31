@@ -69,11 +69,12 @@ typedef struct team_stack_t {
     int count;
 } team_stack_t;
 
-enum exchange_algorithm {
+typedef enum exchange_algorithm {
     ALLTOALL_NAIVE,
     ALLTOALL_LOG2POLLING,
-    ALLTOALL_BRUCK
-};
+    ALLTOALL_BRUCK,
+    ALLTOALL_BRUCK2
+} exchange_algorithm_t;
 
 //global pointer to current team
 extern team_type_t *current_team;
