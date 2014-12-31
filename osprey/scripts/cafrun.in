@@ -113,12 +113,12 @@ Environment Variables:
                       when executing in a team block, or for sync team:
                       dissemination, 2level_multiflag_dissem, or
                       2level_sharedcounter_dissem.  By default it is
-                      dissemination.
+                      2level_multiflag_dissem.
 
    UHCAF_SYNC_IMAGES_ALGORITHM
                       Specifies the algorithm to use for sync images
                       operation: counter, ping_pong, sense_reversing, or csr.
-                      By default it is sense_reversing.
+                      By default it is csr.
 
    UHCAF_ALLOC_BYTE_ALIGNMENT
                       Specifies the byte alignment for allocations out of the
@@ -164,17 +164,19 @@ Environment Variables:
                       using a recursive doubling algorithm. For broadcast, results
                       from root image are first broadcast to other "leader" images,
                       and then each leader will write to its non-leader images.
-                      By default, it is set to 0.
+                      By default, it is set to 1.
 
    UHCAF_REDUCTION_2LEVEL
-                      Enables a 2-level reduction algorithm. For reduce-to-all,
+                      Enables a 2-level reduction algorithm, when the variable
+                      UHCAF_COLLECTIVES_2LEVEL is unset. For reduce-to-all,
                       the results are collected on the "leader" image within each
                       node, and then the reduction follows among the leaders
                       using a recursive doubling algorithm. By default, it is
                       set to 0.
 
    UHCAF_BROADCAST_2LEVEL
-                      Enables a 2-level broadcast algorithm. For broadcast,
+                      Enables a 2-level broadcast algorithm, when the variable
+                      UHCAF_COLLECTIVES_2LEVEL is unset. For broadcast,
                       results from root image are first broadcast to other
                       "leader" images, and then each leader will write to its
                       non-leader images.  By default, it is set to 0.
@@ -435,6 +437,9 @@ add_uhcaf_envs_to_list()
     fi
     if [ -n "$UHCAF_RMA_ORDERING" ]; then
         add_to_env_list UHCAF_RMA_ORDERING
+    fi
+    if [ -n "$UHCAF_COLLECTIVES_USE_CANARY" ]; then
+        add_to_env_list UHCAF_COLLECTIVES_USE_CANARY
     fi
 }
 
