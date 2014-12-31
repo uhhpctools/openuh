@@ -25,6 +25,7 @@ typedef struct {
 } hashed_cdmapping_t;
 
 typedef char barrier_flags_t;
+typedef char coll_flags_t;
 
 typedef struct barrier_round {
     barrier_flags_t local[2];
@@ -44,6 +45,7 @@ typedef struct team {
     long current_num_images;
     long *codimension_mapping;
     barrier_flags_t **intranode_barflags;
+    coll_flags_t **intranode_collflags;
     barrier_data_t barrier;
     struct team *parent;
     long *intranode_set;
