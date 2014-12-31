@@ -47,8 +47,8 @@ extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern shared_memory_slot_t *init_common_slot;
 extern shared_memory_slot_t * child_common_slot;
-extern mem_usage_info_t *init_mem_info;
-extern mem_usage_info_t * child_mem_info;
+extern mem_usage_info_t *mem_info;
+extern mem_usage_info_t *teams_mem_info;
 
 typedef enum {
     OFF = 0,
@@ -221,27 +221,29 @@ void __libcaf_tracers_init(void)
 
 static void __print_memory_summary(char *mem_usg_str, int flag)
 {
-    if (init_mem_info && flag == 0) {
+    if (mem_info && flag == 0) {
         snprintf(mem_usg_str, BUF_SIZE,
-                 "\n current usage: %lu bytes (%.2lf%%), "
+                 "\n Total Image Heap:\n"
+                 "\t current usage: %lu bytes (%.2lf%%), "
                  " max usage: %lu bytes (%.2lf%%)\n",
-                 (unsigned long) init_mem_info->current_heap_usage,
-                 100 * init_mem_info->current_heap_usage /
-                 ((double) init_mem_info->reserved_heap_usage),
-                 (unsigned long) init_mem_info->max_heap_usage,
-                 100 * init_mem_info->max_heap_usage /
-                 ((double) init_mem_info->reserved_heap_usage));
+                 (unsigned long) mem_info->current_heap_usage,
+                 100 * mem_info->current_heap_usage /
+                 ((double) mem_info->reserved_heap_usage),
+                 (unsigned long) mem_info->max_heap_usage,
+                 100 * mem_info->max_heap_usage /
+                 ((double) mem_info->reserved_heap_usage));
     }
-    if(child_mem_info && flag == 1) {
+    if (teams_mem_info && flag == 1) {
         snprintf(mem_usg_str, BUF_SIZE,
-                "\n subteam usage: %lu bytes(%.2lf%%), "
-                " max usage: %lu bytes (%.2lf%%)\n",
-                (unsigned long) child_mem_info->current_heap_usage,
-                100 * child_mem_info->current_heap_usage/
-                ((double) child_mem_info->reserved_heap_usage),
-                (unsigned long) child_mem_info->max_heap_usage,
-                100 * child_mem_info->max_heap_usage /
-                ((double) child_mem_info->reserved_heap_usage));
+                 "\n Teams Heap Section:\n"
+                 "\t current usage: %lu bytes (%.2lf%%), "
+                 " max usage: %lu bytes (%.2lf%%)\n",
+                (unsigned long) teams_mem_info->current_heap_usage,
+                100 * teams_mem_info->current_heap_usage/
+                ((double) teams_mem_info->reserved_heap_usage),
+                (unsigned long) teams_mem_info->max_heap_usage,
+                100 * teams_mem_info->max_heap_usage /
+                ((double) teams_mem_info->reserved_heap_usage));
     }
 }
 
@@ -323,10 +325,10 @@ void __print_shared_memory_slots()
     struct shared_memory_slot *temp_slot;
     fprintf(trace_log_stream,
             "Printing the shared memory slot info of image%lu:\n"
-            "Above init-common-slot: ", _this_image);
+            "Above teams-common-slot: ", _this_image);
     fflush(trace_log_stream);
 
-    temp_slot = init_common_slot->prev;
+    temp_slot = child_common_slot->prev;
     while (temp_slot) {
         fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
                 temp_slot->addr, temp_slot->size, temp_slot->feb);
@@ -335,8 +337,8 @@ void __print_shared_memory_slots()
     fprintf(trace_log_stream, "\n");
     fflush(trace_log_stream);
 
-    fprintf(trace_log_stream, "Initial Common-slot & below: ");
-    temp_slot = init_common_slot;
+    fprintf(trace_log_stream, "Teams Common-slot & below: ");
+    temp_slot = child_common_slot;
     while (temp_slot) {
         fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
                 temp_slot->addr, temp_slot->size, temp_slot->feb);
@@ -348,13 +350,13 @@ void __print_shared_memory_slots()
     /*Print subteam(child-common-slot) memory slots*/
 
 
-    if (child_common_slot) {
+    if (init_common_slot) {
         fprintf(trace_log_stream,
                 "Printing the shared memory subteam slots info of image%lu:\n"
                 "Above the common-slot: ", _this_image);
         fflush(trace_log_stream);
 
-        temp_slot = child_common_slot->prev;
+        temp_slot = init_common_slot->prev;
 
         while(temp_slot){
             fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
@@ -364,8 +366,8 @@ void __print_shared_memory_slots()
         fprintf(trace_log_stream, "\n");
         fflush(trace_log_stream);
 
-        fprintf(trace_log_stream, "Subteam Common-slot & below: ");
-        temp_slot = child_common_slot;
+        fprintf(trace_log_stream, "Common-slot & below: ");
+        temp_slot = init_common_slot;
         while (temp_slot) {
             fprintf(trace_log_stream, "addr=%p-size=%lu-feb=%u, ",
                     temp_slot->addr, temp_slot->size, temp_slot->feb);

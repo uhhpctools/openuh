@@ -172,14 +172,14 @@ AS_HELP_STRING([--with-default-caf-heap-size=<heap size>],
 DEFAULT_CAF_HEAP_SIZE="$with_default_caf_heap_size",
 DEFAULT_CAF_HEAP_SIZE="30M")
 
-# default CAF initial team heap size
-AC_ARG_WITH(default-caf-initial-team-heap-size,
-AS_HELP_STRING([--with-default-caf-initial-team-heap-size=<heap size>],
-[Default per-image heap size to use for coarray fortran programs for initial
- team. Can use suffixes K,M,G for kilobytes,megabytes,gigabytes respectively.
- Will be 20M if unspecified.]),
-DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="$with_default_caf_initial_team_heap_size",
-DEFAULT_CAF_INIT_TEAM_HEAP_SIZE="20M")
+# default CAF teams heap size
+AC_ARG_WITH(default-caf-teams-heap-size,
+AS_HELP_STRING([--with-default-caf-teams-heap-size=<heap size>],
+[Default per-image heap size to use for coarray fortran programs for
+ coarray allocations within team. Can use suffixes K,M,G for kilobytes,megabytes,gigabytes respectively.
+ Will be 10M if unspecified.]),
+DEFAULT_CAF_TEAMS_HEAP_SIZE="$with_default_caf_teams_heap_size",
+DEFAULT_CAF_TEAMS_HEAP_SIZE="10M")
 
 # set bash path
 AC_PATH_PROG([BASH_PATH], [bash])
@@ -281,12 +281,12 @@ elif test `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*$ | wc -
                    an integer, optionally followed by k, K, m, M, g, or G.])
 fi
 
-if test -z "${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE}"; then
-    AC_MSG_ERROR([Invalid value for --with-default-caf-initial-team-heap-size. Should be an
+if test -z "${DEFAULT_CAF_TEAMS_HEAP_SIZE}"; then
+    AC_MSG_ERROR([Invalid value for --with-default-caf-teams-heap-size. Should be an
                  integer, optionally followed by k, K, m, M, g, or G.])
-elif test `echo ${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*$ | wc -l` = 0  -a \
-       `echo ${DEFAULT_CAF_INIT_TEAM_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*@<:@kKmMgG@:>@$ | wc -l` = 0; then
-      AC_MSG_ERROR([Invalid value for --with-default-caf-initial-team-heap-size. Should be
+elif test `echo ${DEFAULT_CAF_TEAMS_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*$ | wc -l` = 0  -a \
+       `echo ${DEFAULT_CAF_TEAMS_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*@<:@kKmMgG@:>@$ | wc -l` = 0; then
+      AC_MSG_ERROR([Invalid value for --with-default-caf-teams-heap-size. Should be
                    an integer, optionally followed by k, K, m, M, g, or G.])
 fi
 
@@ -726,7 +726,7 @@ AC_SUBST([GCC_DIR])
 AC_SUBST([ENABLE_COARRAYS])
 AC_SUBST([BUILD_CAF_RUNTIME])
 AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
-AC_SUBST([DEFAULT_CAF_INIT_TEAM_HEAP_SIZE])
+AC_SUBST([DEFAULT_CAF_TEAMS_HEAP_SIZE])
 AC_SUBST([GASNET_HOME])
 AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([ARMCI_HOME])
@@ -989,7 +989,7 @@ AS_IF([test "${CAFRT_ENABLE_PROFILES}" = "YES"], [
 AC_MSG_NOTICE([   EPIK_ROOT                      = $EPIK_ROOT])
 ])
 AC_MSG_NOTICE([   DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE])
-AC_MSG_NOTICE([   DEFAULT_CAF_INIT_TEAM_HEAP_SIZE= $DEFAULT_CAF_INIT_TEAM_HEAP_SIZE])
+AC_MSG_NOTICE([   DEFAULT_CAF_TEAMS_HEAP_SIZE    = $DEFAULT_CAF_TEAMS_HEAP_SIZE])
 AC_MSG_NOTICE([   DEFAULT_COMM                   = $DEFAULT_COMM])
 AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])
 AC_MSG_NOTICE([   GASNET_CONDUITS                = $GASNET_CONDUITS])

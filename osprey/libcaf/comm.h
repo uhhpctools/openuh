@@ -43,6 +43,7 @@
 
 #define MAX_NUM_IMAGES                    0x100000
 #define MAX_SHARED_MEMORY_SIZE            0x1000000000
+#define MIN_HEAP_SIZE                     0x400000
 
 
 /* status codes for synchronization statements */

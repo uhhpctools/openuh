@@ -112,7 +112,7 @@ void __caf_finalize(int exit_code)
     PROFILE_FUNC_ENTRY(CAFPROF_STOPPED);
 
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "");
 
     PROFILE_STATS_DUMP();
 
@@ -615,7 +615,7 @@ void __caf_exit(int status)
     PROFILE_FUNC_ENTRY(CAFPROF_STOPPED);
 
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time: ");
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "");
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Exiting with error code %d", status);
 
     CALLSITE_TRACE(EXIT, comm_exit, status);
