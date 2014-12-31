@@ -6780,6 +6780,17 @@ void form_team_stmt_semantics (void)
 
            act_arg_type arg_type;
            opnd_type op = IL_OPND(next_idx);
+
+           /* do semantics for argument and get the actual arg type */
+           exp_desc = init_exp_desc;
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (arg_type > Scalar_Constant || exp_desc.type != Integer) {
+               PRINTMSG(line, 1728 , Error, col);
+           }
+
+#if 0
            int attr_idx = find_base_attr(&IL_OPND(next_idx),
                    &line, &col);
 
@@ -6798,6 +6809,7 @@ void form_team_stmt_semantics (void)
                    TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Integer) {
                PRINTMSG(line, 1727 , Error, col);
            }
+#endif
 
 		   COPY_OPND(IL_OPND(list_idx), IL_OPND(next_idx));
            next_idx = IL_NEXT_LIST_IDX(next_idx);

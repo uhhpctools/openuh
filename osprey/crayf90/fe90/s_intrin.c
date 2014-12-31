@@ -3195,12 +3195,10 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
    int            opnd_col;
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
-   enum intrinsic_values first_intrin = Co_all_Intrinsic;
-   char*          intrin_names[16] = {
-     "CO_ALL", "CO_ANY", "CO_BCAST", "CO_BROADCAST",
-     "CO_COUNT", "CO_FINDLOC",
-     "CO_MAX", "CO_MAXLOC", "CO_MAXVAL", "CO_MIN", "CO_MINLOC", "CO_MINVAL",
-     "CO_PRODUCT", "CO_PRODUCT_OLD", "CO_SUM", "CO_SUM_OLD" };
+   enum intrinsic_values first_intrin = Co_allany_Intrinsic;
+   char*          intrin_names[9] = {
+     "CO_ALL(ANY)", "CO_BCAST", "" "CO_COUNT", "CO_FINDLOC",
+     "CO_MAX(MIN)LOC", "", "", "CO_OP_OLD"};
 
 
    TRACE (Func_Entry, "co_sum_intrinsic", NULL);
@@ -3217,11 +3215,7 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
 
 
    if (ATP_INTRIN_ENUM(*spec_idx) == Co_bcast_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_maxloc_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_minloc_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
-       ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_maxminloc_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_reduce_old_Intrinsic) {
       if (IR_LIST_CNT_R(ir_idx) >= 2) {
          int rank = 0;
@@ -3334,8 +3328,6 @@ void    co_reduce_intrinsic(opnd_type     *result_opnd,
 
    IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx));
    ATP_EXTERNAL_INTRIN(*spec_idx) = TRUE;
-
-   /* TODO: check that SOURCE and RESULT are same shape ... */
 
    IR_RANK(ir_idx) = res_exp_desc->rank;
    intrin = ATP_INTRIN_ENUM(*spec_idx);
@@ -3518,11 +3510,10 @@ void    atomic_intrinsic(opnd_type     *result_opnd,
    int            sn_idx;
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
-   const enum intrinsic_values first_intrin = Atomic_Add_Intrinsic;
-   char*          intrin_names[7] = {"ATOMIC_ADD", "ATOMIC_AND",
-                                     "ATOMIC_CAS", "ATOMIC_DEFINE",
-                                     "ATOMIC_OR",
-                                     "ATOMIC_REF", "ATOMIC_XOR"};
+   const enum intrinsic_values first_intrin = Atomic_Op_Intrinsic;
+   char*          intrin_names[11] = {"ATOMIC_CAS", "ATOMIC_DEFINE",
+                                     "ATOMIC_FETCH_OP", "ATOMIC_OP",
+                                     "ATOMIC_REF"};
 
    enum intrinsic_values intrin;
 
@@ -3538,8 +3529,7 @@ void    atomic_intrinsic(opnd_type     *result_opnd,
    IR_RANK(ir_idx) = res_exp_desc->rank;
 
    intrin = ATP_INTRIN_ENUM(*spec_idx);
-   if (intrin == Atomic_Add_Intrinsic || intrin == Atomic_And_Intrinsic ||
-       intrin == Atomic_Or_Intrinsic || intrin == Atomic_Xor_Intrinsic) {
+   if (intrin == Atomic_Fetch_Op_Intrinsic) {
 
       if (IR_LIST_CNT_R(ir_idx) == 4) {
          int atom_info_idx;
@@ -3678,6 +3668,141 @@ void    atomic_intrinsic(opnd_type     *result_opnd,
           /* not enough arguments -- should not reach */
       }
 
+   } else if (intrin == Atomic_Op_Intrinsic) {
+
+      if (IR_LIST_CNT_R(ir_idx) == 3) {
+         int atom_info_idx;
+         int atom_list_idx;
+         int rank = 0;
+
+         list_idx1 = IR_IDX_R(ir_idx);
+         info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+         list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+         info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+
+         list_idx3 = IL_NEXT_LIST_IDX(list_idx2);
+         info_idx3 = IL_ARG_DESC_IDX(list_idx3);
+
+         if (IL_IDX(list_idx3) != NULL_IDX) {
+             PRINTMSG(line, 1713, Error, column,
+                     intrin_names[intrin-first_intrin]);
+         }
+
+         atom_info_idx = info_idx1;
+         atom_list_idx = list_idx1;
+
+         if (arg_info_list[atom_info_idx].ed.reference) {
+            attr_idx = find_base_attr(&IL_OPND(atom_list_idx),
+                                      &opnd_line, &opnd_col);
+
+            if (AT_DCL_ERR(attr_idx)) {
+               goto EXIT;
+            }
+
+         }
+
+         if (! arg_info_list[atom_info_idx].ed.reference) {
+            find_opnd_line_and_column(&IL_OPND(atom_list_idx),
+                                      &opnd_line, &opnd_col);
+            PRINTMSG(opnd_line, 1708, Error, opnd_col,
+             intrin_names[intrin-first_intrin]);
+         }
+         else {
+            int pe_bd_idx = 0;
+            int num_dims = 0;
+            act_arg_type arg_type;
+            expr_arg_type exp_desc;
+            opnd_type op = IL_OPND(atom_list_idx);
+            int pe_dim_list_idx = NULL_IDX;
+
+            attr_idx = find_base_attr(&IL_OPND(atom_list_idx),
+                                      &opnd_line, &opnd_col);
+
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
+
+            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+                PRINTMSG(opnd_line, 1708, Error, opnd_col,
+                 intrin_names[intrin-first_intrin]);
+            }
+
+            exp_desc = init_exp_desc;
+            expr_semantics(&op, &exp_desc);
+            arg_type = get_act_arg_type(&exp_desc);
+
+            if (arg_type == Coindexed_Array_Elt) {
+                int dim_list_idx = IR_IDX_R(IL_IDX(atom_list_idx));
+                while (dim_list_idx != NULL_IDX) {
+                    if (IL_PE_SUBSCRIPT(dim_list_idx)) {
+                        int prev_list_idx = IL_PREV_LIST_IDX(dim_list_idx);
+                        pe_dim_list_idx = dim_list_idx;
+                        if (prev_list_idx != NULL_IDX)
+                            IL_NEXT_LIST_IDX(prev_list_idx) = NULL_IDX;
+                        break;
+                    }
+                    dim_list_idx = IL_NEXT_LIST_IDX(dim_list_idx);
+                    num_dims++;
+                }
+                if (num_dims == 0) {
+                    IL_FLD(atom_list_idx) = AT_Tbl_Idx;
+                    IL_IDX(atom_list_idx) = attr_idx;
+                } else {
+                    IR_LIST_CNT_R(IL_IDX(atom_list_idx)) = num_dims;
+                }
+                pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+                linearize_pe_dims(pe_dim_list_idx, pe_bd_idx,
+                        opnd_line, opnd_col,
+                        &pe_opnd, attr_idx, &exp_desc);
+
+                /* fix up argument descriptor for ATOM argument */
+                arg_info_list[atom_info_idx] = init_arg_info;
+                arg_info_list[atom_info_idx].ed.foldable = TRUE;
+                arg_info_list[atom_info_idx].ed.type     = exp_desc.type;
+                arg_info_list[atom_info_idx].ed.type_idx = exp_desc.type_idx;
+                arg_info_list[atom_info_idx].ed.linear_type =
+                                            exp_desc.linear_type;
+                arg_info_list[atom_info_idx].line = opnd_line;
+                arg_info_list[atom_info_idx].col = opnd_col;
+
+            } else {
+                OPND_FLD(pe_opnd) = CN_Tbl_Idx;
+                OPND_IDX(pe_opnd) = CN_INTEGER_ZERO_IDX;
+                OPND_LINE_NUM(pe_opnd) = opnd_line;
+                OPND_COL_NUM(pe_opnd) = opnd_col;
+            }
+         }
+
+         IL_FLD(list_idx3) = OPND_FLD(pe_opnd);
+         IL_IDX(list_idx3) = OPND_IDX(pe_opnd);
+         IL_LINE_NUM(list_idx3) = line;
+         IL_COL_NUM(list_idx3) = column;
+         IL_ARG_DESC_VARIANT(list_idx3) = TRUE;
+         arg_info_list_base = arg_info_list_top;
+         arg_info_list_top = arg_info_list_base + 1;
+
+         if (arg_info_list_top >= arg_info_list_size) {
+             enlarge_info_list_table();
+         }
+
+         IL_ARG_DESC_IDX(list_idx3) = arg_info_list_top;
+         arg_info_list[arg_info_list_top] = init_arg_info;
+         arg_info_list[arg_info_list_top].ed.constant = TRUE;
+         arg_info_list[arg_info_list_top].ed.foldable = TRUE;
+         arg_info_list[arg_info_list_top].ed.type     = Integer;
+         arg_info_list[arg_info_list_top].ed.type_idx =
+             CG_INTEGER_DEFAULT_TYPE;
+         arg_info_list[arg_info_list_top].ed.linear_type =
+             CG_INTEGER_DEFAULT_TYPE;
+         arg_info_list[arg_info_list_top].line = line;
+         arg_info_list[arg_info_list_top].col = column;
+
+      } else {
+          /* not enough arguments -- should not reach */
+      }
 
    } else if (intrin == Atomic_Cas_Intrinsic) {
 

@@ -1169,7 +1169,7 @@ void _ATOMIC_REF_8_8(INT8 * value, atomic8_t * atom, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+void _ATOMIC_FADD_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1201,7 +1201,7 @@ void _ATOMIC_ADD_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+void _ATOMIC_FADD_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1233,40 +1233,7 @@ void _ATOMIC_ADD_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
-{
-    INT4 val;
-    int img;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
-    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
-
-    if (*image == 0) {
-        img = _this_image;
-        if(current_team != NULL || current_team->codimension_mapping != NULL) {
-            img = 1+get_proc_id(current_team, _this_image);
-        }
-    } else {
-        img = *image;
-        if(current_team != NULL || current_team->codimension_mapping != NULL) {
-            img = 1+get_proc_id(current_team, *image);
-        }
-    }
-
-    val = (INT4) *value;
-
-    if (old == NULL) {
-        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
-                             &val, sizeof *atom, img-1);
-    } else {
-        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
-                             &val, sizeof *atom, img-1, old);
-    }
-
-    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-}
-
-void _ATOMIC_ADD_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+void _ATOMIC_FADD_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1299,7 +1266,40 @@ void _ATOMIC_ADD_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
+void _ATOMIC_FADD_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_FADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1331,7 +1331,7 @@ void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
+void _ATOMIC_FADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1363,40 +1363,7 @@ void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_ADD_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
-{
-    INT8 val;
-    int img;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
-    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
-
-    if (*image == 0) {
-        img = _this_image;
-        if(current_team != NULL || current_team->codimension_mapping != NULL) {
-            img = 1+get_proc_id(current_team, _this_image);
-        }
-    } else {
-        img = *image;
-        if(current_team != NULL || current_team->codimension_mapping != NULL) {
-            img = 1+get_proc_id(current_team, *image);
-        }
-    }
-
-    val = (INT8) *value;
-
-    if (old == NULL) {
-        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
-                             &val, sizeof *atom, img-1);
-    } else {
-        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
-                             &val, sizeof *atom, img-1, old);
-    }
-
-    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-}
-
-void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
+void _ATOMIC_FADD_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1429,7 +1396,40 @@ void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+void _ATOMIC_FADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    if (old == NULL) {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                             &val, sizeof *atom, img-1);
+    } else {
+        CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fadd_request, atom,
+                             &val, sizeof *atom, img-1, old);
+    }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_FAND_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1462,7 +1462,7 @@ void _ATOMIC_AND_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+void _ATOMIC_FAND_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1495,7 +1495,7 @@ void _ATOMIC_AND_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+void _ATOMIC_FAND_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1528,7 +1528,7 @@ void _ATOMIC_AND_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+void _ATOMIC_FAND_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1561,7 +1561,7 @@ void _ATOMIC_AND_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
+void _ATOMIC_FAND_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1594,7 +1594,7 @@ void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
+void _ATOMIC_FAND_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1627,7 +1627,7 @@ void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
+void _ATOMIC_FAND_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1660,7 +1660,7 @@ void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
+void _ATOMIC_FAND_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1693,7 +1693,7 @@ void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+void _ATOMIC_FOR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1726,7 +1726,7 @@ void _ATOMIC_OR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+void _ATOMIC_FOR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1759,7 +1759,7 @@ void _ATOMIC_OR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+void _ATOMIC_FOR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1792,7 +1792,7 @@ void _ATOMIC_OR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+void _ATOMIC_FOR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1825,7 +1825,7 @@ void _ATOMIC_OR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
+void _ATOMIC_FOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1858,7 +1858,7 @@ void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
+void _ATOMIC_FOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1891,7 +1891,7 @@ void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
+void _ATOMIC_FOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1924,7 +1924,7 @@ void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
+void _ATOMIC_FOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -1957,7 +1957,7 @@ void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
+void _ATOMIC_FXOR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -1990,7 +1990,7 @@ void _ATOMIC_XOR_4_1(atomic_t * atom, INT1 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
+void _ATOMIC_FXOR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -2023,7 +2023,7 @@ void _ATOMIC_XOR_4_2(atomic_t * atom, INT2 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
+void _ATOMIC_FXOR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -2056,7 +2056,7 @@ void _ATOMIC_XOR_4_4(atomic_t * atom, INT4 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
+void _ATOMIC_FXOR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
 {
     INT4 val;
     int img;
@@ -2089,7 +2089,7 @@ void _ATOMIC_XOR_4_8(atomic_t * atom, INT8 * value, atomic_t * old, int *image)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
+void _ATOMIC_FXOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -2122,7 +2122,7 @@ void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
+void _ATOMIC_FXOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -2155,7 +2155,7 @@ void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
+void _ATOMIC_FXOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -2188,7 +2188,7 @@ void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t * old, int *image
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
+void _ATOMIC_FXOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image)
 {
     INT8 val;
     int img;
@@ -2216,6 +2216,898 @@ void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t * old, int *image
         CALLSITE_TIMED_TRACE(COMM, SYNC, comm_fxor_request, atom,
                              &val, sizeof *atom, img-1, old);
     }
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_4_1(atomic_t * atom, INT1 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_4_2(atomic_t * atom, INT2 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_4_4(atomic_t * atom, INT4 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_4_8(atomic_t * atom, INT8 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_8_4(atomic8_t * atom, INT4 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_add_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_4_1(atomic_t * atom, INT1 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_4_2(atomic_t * atom, INT2 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_4_4(atomic_t * atom, INT4 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_4_8(atomic_t * atom, INT8 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_and_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_4_1(atomic_t * atom, INT1 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_4_2(atomic_t * atom, INT2 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_4_4(atomic_t * atom, INT4 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_4_8(atomic_t * atom, INT8 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_or_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_4_1(atomic_t * atom, INT1 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_4_2(atomic_t * atom, INT2 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_4_4(atomic_t * atom, INT4 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_4_8(atomic_t * atom, INT8 * value, int *image)
+{
+    INT4 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT4) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
+
+    PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, int *image)
+{
+    INT8 val;
+    int img;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(CAFPROF_ATOMICS);
+
+    if (*image == 0) {
+        img = _this_image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, _this_image);
+        }
+    } else {
+        img = *image;
+        if(current_team != NULL || current_team->codimension_mapping != NULL) {
+            img = 1+get_proc_id(current_team, *image);
+        }
+    }
+
+    val = (INT8) *value;
+
+    CALLSITE_TIMED_TRACE(COMM, SYNC, comm_xor_request, atom,
+                         &val, sizeof *atom, img-1);
 
     PROFILE_FUNC_EXIT(CAFPROF_ATOMICS);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");

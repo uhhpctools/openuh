@@ -180,41 +180,77 @@ void _ATOMIC_REF_8_2(INT2 * value, atomic8_t * atom, int *image);
 void _ATOMIC_REF_8_4(INT4 * value, atomic8_t * atom, int *image);
 void _ATOMIC_REF_8_8(INT8 * value, atomic8_t * atom, int *image);
 
-void _ATOMIC_ADD_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
-void _ATOMIC_ADD_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
-void _ATOMIC_ADD_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
-void _ATOMIC_ADD_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
-void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
-void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
-void _ATOMIC_ADD_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
-void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+void _ATOMIC_ADD_4_1(atomic4_t * atom, INT1 * value, int *image);
+void _ATOMIC_ADD_4_2(atomic4_t * atom, INT2 * value, int *image);
+void _ATOMIC_ADD_4_4(atomic4_t * atom, INT4 * value, int *image);
+void _ATOMIC_ADD_4_8(atomic4_t * atom, INT8 * value, int *image);
+void _ATOMIC_ADD_8_1(atomic8_t * atom, INT1 * value, int *image);
+void _ATOMIC_ADD_8_2(atomic8_t * atom, INT2 * value, int *image);
+void _ATOMIC_ADD_8_4(atomic8_t * atom, INT4 * value, int *image);
+void _ATOMIC_ADD_8_8(atomic8_t * atom, INT8 * value, int *image);
 
-void _ATOMIC_AND_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
-void _ATOMIC_AND_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
-void _ATOMIC_AND_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
-void _ATOMIC_AND_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
-void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
-void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
-void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
-void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+void _ATOMIC_AND_4_1(atomic4_t * atom, INT1 * value, int *image);
+void _ATOMIC_AND_4_2(atomic4_t * atom, INT2 * value, int *image);
+void _ATOMIC_AND_4_4(atomic4_t * atom, INT4 * value, int *image);
+void _ATOMIC_AND_4_8(atomic4_t * atom, INT8 * value, int *image);
+void _ATOMIC_AND_8_1(atomic8_t * atom, INT1 * value, int *image);
+void _ATOMIC_AND_8_2(atomic8_t * atom, INT2 * value, int *image);
+void _ATOMIC_AND_8_4(atomic8_t * atom, INT4 * value, int *image);
+void _ATOMIC_AND_8_8(atomic8_t * atom, INT8 * value, int *image);
 
-void _ATOMIC_OR_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
-void _ATOMIC_OR_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
-void _ATOMIC_OR_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
-void _ATOMIC_OR_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
-void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
-void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
-void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
-void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+void _ATOMIC_OR_4_1(atomic4_t * atom, INT1 * value, int *image);
+void _ATOMIC_OR_4_2(atomic4_t * atom, INT2 * value, int *image);
+void _ATOMIC_OR_4_4(atomic4_t * atom, INT4 * value, int *image);
+void _ATOMIC_OR_4_8(atomic4_t * atom, INT8 * value, int *image);
+void _ATOMIC_OR_8_1(atomic8_t * atom, INT1 * value, int *image);
+void _ATOMIC_OR_8_2(atomic8_t * atom, INT2 * value, int *image);
+void _ATOMIC_OR_8_4(atomic8_t * atom, INT4 * value, int *image);
+void _ATOMIC_OR_8_8(atomic8_t * atom, INT8 * value, int *image);
 
-void _ATOMIC_XOR_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
-void _ATOMIC_XOR_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
-void _ATOMIC_XOR_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
-void _ATOMIC_XOR_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
-void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
-void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
-void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
-void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+void _ATOMIC_XOR_4_1(atomic4_t * atom, INT1 * value, int *image);
+void _ATOMIC_XOR_4_2(atomic4_t * atom, INT2 * value, int *image);
+void _ATOMIC_XOR_4_4(atomic4_t * atom, INT4 * value, int *image);
+void _ATOMIC_XOR_4_8(atomic4_t * atom, INT8 * value, int *image);
+void _ATOMIC_XOR_8_1(atomic8_t * atom, INT1 * value, int *image);
+void _ATOMIC_XOR_8_2(atomic8_t * atom, INT2 * value, int *image);
+void _ATOMIC_XOR_8_4(atomic8_t * atom, INT4 * value, int *image);
+void _ATOMIC_XOR_8_8(atomic8_t * atom, INT8 * value, int *image);
+
+void _ATOMIC_FADD_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
+void _ATOMIC_FADD_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
+void _ATOMIC_FADD_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
+void _ATOMIC_FADD_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
+void _ATOMIC_FADD_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
+void _ATOMIC_FADD_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
+void _ATOMIC_FADD_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
+void _ATOMIC_FADD_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+
+void _ATOMIC_FAND_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
+void _ATOMIC_FAND_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
+void _ATOMIC_FAND_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
+void _ATOMIC_FAND_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
+void _ATOMIC_FAND_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
+void _ATOMIC_FAND_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
+void _ATOMIC_FAND_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
+void _ATOMIC_FAND_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+
+void _ATOMIC_FOR_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
+void _ATOMIC_FOR_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
+void _ATOMIC_FOR_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
+void _ATOMIC_FOR_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
+void _ATOMIC_FOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
+void _ATOMIC_FOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
+void _ATOMIC_FOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
+void _ATOMIC_FOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
+
+void _ATOMIC_FXOR_4_1(atomic4_t * atom, INT1 * value, atomic4_t *old, int *image);
+void _ATOMIC_FXOR_4_2(atomic4_t * atom, INT2 * value, atomic4_t *old, int *image);
+void _ATOMIC_FXOR_4_4(atomic4_t * atom, INT4 * value, atomic4_t *old, int *image);
+void _ATOMIC_FXOR_4_8(atomic4_t * atom, INT8 * value, atomic4_t *old, int *image);
+void _ATOMIC_FXOR_8_1(atomic8_t * atom, INT1 * value, atomic8_t *old, int *image);
+void _ATOMIC_FXOR_8_2(atomic8_t * atom, INT2 * value, atomic8_t *old, int *image);
+void _ATOMIC_FXOR_8_4(atomic8_t * atom, INT4 * value, atomic8_t *old, int *image);
+void _ATOMIC_FXOR_8_8(atomic8_t * atom, INT8 * value, atomic8_t *old, int *image);
 
 
 void _ATOMIC_CAS(atomic_t * atom, atomic_t * oldval, atomic_t *compare,
