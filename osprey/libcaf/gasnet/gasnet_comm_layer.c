@@ -132,7 +132,7 @@ extern int out_of_segment_rma_enabled;
 extern int enable_collectives_2level;
 extern int enable_reduction_2level;
 extern int enable_broadcast_2level;
-extern int enable_collectives_1sided;
+extern int enable_collectives_mpi;
 extern int mpi_collectives_available;
 extern int enable_collectives_use_canary;
 extern void *collectives_buffer;
@@ -2937,8 +2937,8 @@ void comm_init()
     }
 
     /* check whether to use 1-sided collectives implementation */
-    enable_collectives_1sided = get_env_flag(ENV_COLLECTIVES_1SIDED,
-                                    DEFAULT_ENABLE_COLLECTIVES_1SIDED);
+    enable_collectives_mpi = get_env_flag(ENV_COLLECTIVES_MPI,
+                                    DEFAULT_ENABLE_COLLECTIVES_MPI);
 
     /* check whether to enable use of canary protocol for some collectives */
     enable_collectives_use_canary = get_env_flag(ENV_COLLECTIVES_USE_CANARY,
@@ -4061,7 +4061,7 @@ void comm_sync_all(int * status, int stat_len, char * errmsg, int errmsg_len)
 
 	LOAD_STORE_FENCE();
 
-	if(current_team == NULL || current_team == initial_team ||
+	if (current_team == NULL || current_team == initial_team ||
        current_team->codimension_mapping == NULL) {
 	    if (stopped_image_exists != NULL && stopped_image_exists[num_procs]) {
             if (status != NULL) {
