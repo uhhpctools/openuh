@@ -67,7 +67,9 @@ typedef struct team_stack_t {
     int count;
 } team_stack_t;
 
-enum exchange_algorithm { ALLTOALL_PRIMI, ALLTOALL_LOG2POLLING,
+enum exchange_algorithm {
+    ALLTOALL_NAIVE,
+    ALLTOALL_LOG2POLLING,
     ALLTOALL_BRUCK
 };
 

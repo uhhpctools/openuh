@@ -65,6 +65,8 @@ int enable_collectives_1sided;
 int enable_collectives_use_canary = 0;
 
 int enable_collectives_2level = 0;
+int enable_reduction_2level = 0;
+int enable_broadcast_2level = 0;
 int mpi_collectives_available = 0;
 
 extern team_type current_team;
@@ -1221,9 +1223,9 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     }
 #endif
 
-    if (enable_collectives_2level && current_team &&
-        (current_team->leaders_count > 1  &&
-         current_team->leaders_count < _num_images) ) {
+    if ((enable_collectives_2level || enable_reduction_2level) &&
+        current_team && (current_team->leaders_count > 1  &&
+          current_team->leaders_count < _num_images)) {
         co_reduce_predef_to_all_2level__(source, size, charlen, elem_type, op);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
         LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -1831,8 +1833,8 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
     void *base_buffer;
     int base_buffer_alloc = 0;
 
-    if (enable_collectives_2level && current_team &&
-        (current_team->leaders_count > 1  &&
+    if ((enable_collectives_2level || enable_broadcast_2level) &&
+        current_team && (current_team->leaders_count > 1  &&
           current_team->leaders_count < _num_images)) {
         co_broadcast_from_root_2level(source, sz, source_image);
         LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -2010,28 +2012,34 @@ void co_broadcast_from_root_2level(void *source, size_t sz, int source_image)
 
     /* Phase 1: Broadcast to other leaders */
 
-    step = q;
-    while (step > 0) {
+    if (is_leader) {
+      step = q;
+      while (step > 0) {
         if ((me-1)%step == 0) {
-            if (((me-1)%(2*step)) == 0) {
-                if ((me+step) <= p) {
-                    int p = me+step;
-                    proc_id = get_proc_id(current_team, p);
-                    comm_nbi_write( proc_id,
-                                    &((char*)base_buffer)[0],
-                                    &((char*)base_buffer)[0],
-                                    sz );
-                    _SYNC_IMAGES(&p, 1, NULL, 0, NULL, 0);
-                }
-            } else {
-                if ((me-step) >= 1) {
-                    int p = me-step;
-                    _SYNC_IMAGES(&p, 1, NULL, 0, NULL, 0);
-                }
+          if (((me-1)%(2*step)) == 0) {
+            if ((me+step) <= p) {
+              int p = me+step;
+              proc_id = leader_set[p-1];
+              comm_nbi_write( proc_id,
+                  &((char*)base_buffer)[0],
+                  &((char*)base_buffer)[0],
+                  sz );
+              int image_id = proc_id+1;
+              comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
             }
+          } else {
+            if ((me-step) >= 1) {
+              int p = me-step;
+              proc_id = leader_set[p-1];
+              int image_id = proc_id+1;
+              comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            }
+          }
         }
         step = step / 2;
+      }
     }
+
 
     /* Phase 2: Leaders broadcast to their non-leaders */
 
@@ -2364,8 +2372,8 @@ void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
 
     sz = *size;
 
-    if (enable_collectives_2level && current_team &&
-        (current_team->leaders_count > 1  &&
+    if ((enable_collectives_2level || enable_reduction_2level) &&
+        current_team && (current_team->leaders_count > 1  &&
           current_team->leaders_count < _num_images) ) {
         co_reduce_to_all_2level__(source, size, elem_size_p, charlen, type, opr);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
