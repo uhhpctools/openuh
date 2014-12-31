@@ -83,7 +83,7 @@ static lang_info_t language_info[] = {
 	{'C',	0x00000004,	{"CC", OPEN64_NAME_PREFIX "CC", OPEN64_NAME_PREFIX "++","g++"}},	/* c++ */
 #endif
 	{'f',	0x00000008,	{"f77", OPEN64_NAME_PREFIX "f77","gf77","fort77"}}, /* f77 */
-	{'F',	0x00000010,	{"f90", OPEN64_NAME_PREFIX "f95"}},		/* f90/95 */
+	{'F',	0x00000010,	{"f90", OPEN64_NAME_PREFIX "f95", OPENUH_NAME_PREFIX "f95", "orf95"}},	/* f90/95 */
 	{'a',	0x00000020,	{"as", OPEN64_NAME_PREFIX "as","gas"}},		/* as */
 	{'l',	0x00000040,	{"ld", OPEN64_NAME_PREFIX "ld"}},		/* ld */
 	#endif
