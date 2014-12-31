@@ -33,7 +33,7 @@ extern void *get_remote_address(void *src, size_t proc);
 
 /* allocated in comm_init*/
 team_info_t *exchange_teaminfo_buf;
-enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_NAIVE;
+enum exchange_algorithm alltoall_exchange_algorithm = ALLTOALL_BRUCK2;
 
 static void push_stack(team_type_t * team);
 static team_type_t *pop_stack();
@@ -124,13 +124,8 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     my_tinfo.team_id = *team_id;
     my_tinfo.index = (new_index != NULL) ? *new_index : 0;
 
-#if 0
     __alltoall_exchange(&(my_tinfo), sizeof(my_tinfo),
                         exchange_teaminfo_buf, current_team);
-#else
-    co_gather_to_all__(&my_tinfo, exchange_teaminfo_buf, 1,
-                       sizeof(my_tinfo));
-#endif
 
     __setup_subteams(new_team, exchange_teaminfo_buf, numimages, *team_id);
 
@@ -425,28 +420,33 @@ void __alltoall_exchange(team_info_t * my_tinfo, ssize_t len_t_info,
     int retval;
     long num_images = current_team->current_num_images;
 
-    memset(exchange_info_buffer, 0, sizeof(team_info_t) * num_images);
     switch (alltoall_exchange_algorithm) {
     case ALLTOALL_NAIVE:
+        memset(exchange_info_buffer, 0, sizeof(team_info_t) * num_images);
         retval =
             __alltoall_exchange_naive(my_tinfo, len_t_info,
                                       exchange_teaminfo_buf, current_team);
         break;
     case ALLTOALL_LOG2POLLING:
+        memset(exchange_info_buffer, 0, sizeof(team_info_t) * num_images);
         retval =
             __alltoall_exchange_log2polling(my_tinfo, len_t_info,
                                             exchange_teaminfo_buf,
                                             current_team);
         break;
     case ALLTOALL_BRUCK:
+        memset(exchange_info_buffer, 0, sizeof(team_info_t) * num_images);
         retval =
             __alltoall_exchange_bruck(my_tinfo, len_t_info,
                                       exchange_teaminfo_buf, current_team);
         break;
+    case ALLTOALL_BRUCK2:
+        co_gather_to_all__(my_tinfo, exchange_teaminfo_buf, 1,
+                           sizeof(my_tinfo));
+        break;
     default:
-        retval =
-            __alltoall_exchange_bruck(my_tinfo, len_t_info,
-                                      exchange_teaminfo_buf, current_team);
+        co_gather_to_all__(my_tinfo, exchange_teaminfo_buf, 1,
+                           sizeof(my_tinfo));
     }
     /*error handling */
 }
