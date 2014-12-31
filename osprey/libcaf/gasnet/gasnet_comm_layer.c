@@ -2541,7 +2541,7 @@ void comm_init()
     get_cache_sync_refetch = get_env_flag(ENV_GETCACHE_SYNC_REFETCH,
                                       DEFAULT_ENABLE_GETCACHE_SYNC_REFETCH);
 
-    out_of_segment_rma_enabled = get_env_flag(ENV_OUT_OF_SEGMENT_RMA,
+    out_of_segment_rma_enabled = (int)get_env_size(ENV_OUT_OF_SEGMENT_RMA,
                                        DEFAULT_ENABLE_OUT_OF_SEGMENT_RMA);
 
     nb_xfer_limit = get_env_size(ENV_NB_XFER_LIMIT, DEFAULT_NB_XFER_LIMIT);
@@ -2729,6 +2729,8 @@ void comm_init()
     init_common_slot->feb = 0;
     init_common_slot->next = 0;
     init_common_slot->prev = 0;
+    init_common_slot->next_empty = 0;
+    init_common_slot->prev_empty = 0;
 
     shared_memory_size = caf_shared_memory_size;
     /*Put the team initialize here, right before any allocatable_allcoate*/
@@ -2835,6 +2837,8 @@ void comm_init()
         child_common_slot->feb  = 0;
         child_common_slot->next = NULL;
         child_common_slot->prev = NULL;
+        child_common_slot->next_empty = NULL;
+        child_common_slot->prev_empty = NULL;
      }
     init_common_slot->size=init_heap_size;
     current_team =  initial_team;
@@ -5047,6 +5051,14 @@ void *comm_lcb_malloc(size_t size)
 		ptr = malloc(size);
 		gasnet_resume_interrupts();
 	}
+#if defined (CAFRT_DEBUG)
+    else if (ptr < comm_start_asymmetric_heap(my_proc) ||
+             ptr > comm_end_asymmetric_heap(my_proc)) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "bad ptr value (%p) returned!", ptr);
+    }
+#endif
+
 
 	LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 	return ptr;

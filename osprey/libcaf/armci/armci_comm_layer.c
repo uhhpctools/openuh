@@ -838,6 +838,8 @@ void comm_init()
     init_common_slot->feb = 0;
     init_common_slot->next = 0;
     init_common_slot->prev = 0;
+    init_common_slot->next_empty = 0;
+    init_common_slot->prev_empty = 0;
 
     shared_memory_size = caf_shared_memory_size;
 
@@ -912,6 +914,8 @@ void comm_init()
         child_common_slot->feb  = 0;
         child_common_slot->next = NULL;
         child_common_slot->prev = NULL;
+        child_common_slot->next_empty = NULL;
+        child_common_slot->prev_empty = NULL;
      }
 
     init_common_slot->size = init_heap_size;

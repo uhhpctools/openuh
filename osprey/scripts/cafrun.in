@@ -219,10 +219,15 @@ Environment Variables:
                       refetched on demand. By default, it is set to 1.
 
    UHCAF_OUT_OF_SEGMENT_RMA
-                      Set to 1 to enable out-of-segment remote memory access
-                      support. Note: This is only available when using GASNet
-                      layer, and may not work if performing strided
-                      out-of-segment accesses.
+                      Set to non-zero value to allow out-of-segment remote
+                      memory access. If set to 1, then non-coarray data that
+                      needs to be remotely accessible will be allocated out
+                      of segment if it can not be allocated in segment. If set
+                      to 2, then non-coarray data that needs to be remotely
+                      accessible will always be allocated out of segment.
+                      Note: This is only available when using GASNet layer, and
+                      may not work if performing strided out-of-segment
+                      accesses. By default, it is set to 0.
 
    UHCAF_RMA_ORDERING
                       Specifies an ordering policy for remote memory access
