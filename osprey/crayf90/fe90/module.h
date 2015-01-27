@@ -89,7 +89,7 @@ struct	mit_inside_entry	{pdt_tbl_hdr_type       hdr;
                         	 Uint           	default64	:  1;
                         	 Uint           	pointer8        :  1;
                         	 Uint           	new_cn_tbl      :  1;
-                        	 char                   name_char[32];
+                        	 char                   name_char[64];
                         	};
 
 struct	old_mit_inside_entry	{pdt_tbl_hdr_type       hdr;
@@ -109,7 +109,7 @@ struct	old_mit_inside_entry	{pdt_tbl_hdr_type       hdr;
                         	 Uint           	default64	:  1;
                         	 Uint           	pointer8        :  1;
                         	 Uint           	unused3         :  1;
-                        	 char                   name_char[32];
+                        	 char                   name_char[64];
                         	};
 
 union	mit_header_entry        {mit_inside_type	tbl;

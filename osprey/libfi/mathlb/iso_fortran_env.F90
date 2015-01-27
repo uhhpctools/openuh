@@ -104,4 +104,36 @@ module iso_fortran_env
 
   end interface
 
+  !Add interface and function for comparison of TEAMTYPE variable
+  !!TODO: move them to another place
+  interface operator (==)
+      module procedure TEAM_EQUAL
+  end interface operator (==)
+
+  interface operator (.ne.)
+      module procedure TEAM_NOTEQUAL
+  end interface operator (.ne.)
+
+  contains
+  logical function TEAM_EQUAL(team1, team2)
+    implicit none
+    type(TEAM_TYPE), intent(in):: team1, team2
+    
+    if(team1%t .eq. team2%t) then
+        TEAM_EQUAL = .true. 
+    else
+        TEAM_EQUAL = .false.
+    end if
+  end function TEAM_EQUAL
+
+  logical function TEAM_NOTEQUAL(team1, team2)
+  implicit none
+  type(TEAM_TYPE), intent(in) :: team1, team2
+
+  if(team1%t .ne. team2%t) then
+      TEAM_NOTEQUAL = .true.
+  else
+      TEAM_NOTEQUAL = .false. 
+  endif
+  end function TEAM_NOTEQUAL
 end module iso_fortran_env

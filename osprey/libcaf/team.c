@@ -102,9 +102,11 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
         if ((*new_team_p)->intranode_barflags != NULL) {
             free((*new_team_p)->intranode_barflags);
         }
+        /*
         if ((*new_team_p)->intranode_collflags != NULL) {
             free((*new_team_p)->intranode_collflags);
         }
+        */
 
         /* there is a potential memory leak here. we do not know if this has
          * been implicitly deallocated or not ... so we assume it was or will
@@ -131,6 +133,9 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
 
     __place_codimension_mapping(exchange_teaminfo_buf, new_team);
 
+    new_team->allreduce_bufid = 0;
+    new_team->reduce_bufid = 0;
+    new_team->bcast_bufid = 0;
     new_team->defined = 1;
     new_team->activated = 0;
     new_team->depth = current_team->depth + 1;
@@ -138,9 +143,11 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
     new_team->intranode_barflags = malloc(new_team->intranode_set[0] *
                                           sizeof(*new_team->
                                                  intranode_barflags));
+    /*
     new_team->intranode_collflags = malloc(new_team->intranode_set[0] *
                                           sizeof(*new_team->
                                                  intranode_collflags));
+                                                 */
     new_team->barrier.parity = 0;
     new_team->barrier.sense = 0;
     new_team->barrier.bstep = NULL;
@@ -174,23 +181,68 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
             sz = subteam->num_images;
     }
 
-    new_team->intranode_barflags[0] =
-        (barrier_flags_t *)
-        coarray_allocatable_allocate_(sizeof(*new_team-> intranode_barflags[0]),
-                                      NULL, NULL);
-    *(new_team->intranode_barflags[0]) = 0;
+    int log2_leaders = 0;
+    {
+        int p = 1;
+        while ( (2*p) <= new_team->leaders_count) {
+            p = p*2;
+            log2_leaders += 1;
+        }
+        if (p < new_team->leaders_count) {
+            log2_leaders += 1;
+        }
+    }
 
-    new_team->intranode_collflags[0] =
-        (barrier_flags_t *)
-        coarray_allocatable_allocate_(sizeof(*new_team-> intranode_collflags[0]),
-                                      NULL, NULL);
-    *(new_team->intranode_collflags[0]) = 0;
+    /* allocate a bunch of flags for supporting synchronization in barriers
+     * and collectives.
+     *
+     * TODO: needs to be done more efficiently. A single allocatable, and
+     * internode_syncflags should probably be proportional to
+     * log2(leaders_count) rather than leaders_count.
+     * */
+
+    int log2_procs = new_team->current_log2_images;
+    new_team->coll_syncflags =
+        coarray_allocatable_allocate_(
+            sizeof(*new_team->intranode_barflags[0]) +
+            sizeof(*new_team->bcast_flag) +
+            sizeof(*new_team->reduce_flag) +
+            sizeof(*new_team->allreduce_flag) +
+            2 * sizeof(*new_team->reduce_go) +
+            2 * log2_procs * sizeof(*new_team->bcast_go) +
+            2 * log2_procs * sizeof(*new_team->allreduce_sync),
+            NULL, NULL);
+
+    size_t flags_offset = 0;
+
+    new_team->intranode_barflags[0] = &new_team->coll_syncflags[flags_offset];
+    flags_offset += sizeof(*new_team->intranode_barflags[0]);
+
+    new_team->bcast_flag = &new_team->coll_syncflags[flags_offset];
+    flags_offset += sizeof(*new_team->bcast_flag);
+
+    new_team->reduce_flag = &new_team->coll_syncflags[flags_offset];
+    flags_offset += sizeof(*new_team->reduce_flag);
+
+    new_team->allreduce_flag = &new_team->coll_syncflags[flags_offset];
+    flags_offset += sizeof(*new_team->allreduce_flag);
+
+    new_team->reduce_go = &new_team->coll_syncflags[flags_offset];
+    flags_offset += 2 * sizeof(*new_team->reduce_go);
+    new_team->reduce_go[0] = 1;
+    new_team->reduce_go[1] = 1;
+
+    new_team->bcast_go = &new_team->coll_syncflags[flags_offset];
+    flags_offset += 2 * log2_procs * sizeof(*new_team->bcast_go);
+    for (i = 0; i < 2*log2_procs; i++) {
+        new_team->bcast_go[i] = 1;
+    }
+
+    new_team->allreduce_sync = &new_team->coll_syncflags[flags_offset];
 
     int num_nonleaders = new_team->intranode_set[0] - 1;
     memset(&new_team->intranode_barflags[1], 0,
            num_nonleaders * sizeof(*new_team->intranode_barflags));
-    memset(&new_team->intranode_collflags[1], 0,
-           num_nonleaders * sizeof(*new_team->intranode_collflags));
 
     int num_steps = (int) ceil(log2((double) sz));
     new_team->barrier.bstep =
@@ -219,17 +271,11 @@ void _FORM_TEAM(int *team_id, team_type * new_team_p, int *new_index,
             new_team->intranode_barflags[i] =
               comm_get_sharedptr(new_team->intranode_barflags[0],
                   target);
-            new_team->intranode_collflags[i] =
-              comm_get_sharedptr(new_team->intranode_collflags[0],
-                  target);
           }
         } else {
           int leader = new_team->intranode_set[1];
           new_team->intranode_barflags[1] =
             comm_get_sharedptr(new_team->intranode_barflags[0],
-                leader);
-          new_team->intranode_collflags[1] =
-            comm_get_sharedptr(new_team->intranode_collflags[0],
                 leader);
         }
 
@@ -360,13 +406,17 @@ void _END_TEAM(int *status, int stat_len, char *errmsg, int errmsg_len)
     deallocate_team_all();
     tmp_team = stack_top();
 
-    comm_sync_all(status, stat_len, errmsg, errmsg_len);
     if (current_team->depth == 0)       //if current_team is initial team,restore the hash table
     {
         current_team->allocated_list = tmp_allocated_list;
     }
 
     __change_to(tmp_team);      //move out
+
+    /* Synchronization required for all images in "current team".
+     * Does that mean the team it returns to, or the team that just completed
+     * execution? */
+    comm_sync_all(status, stat_len, errmsg, errmsg_len);
 
     PROFILE_FUNC_EXIT(CAFPROF_TEAM);
     LIBCAF_TRACE(LIBCAF_LOG_TEAM, "exit");

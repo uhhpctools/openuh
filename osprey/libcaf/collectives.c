@@ -1,4 +1,5 @@
 /*
+
  Runtime library for supporting Coarray Fortran
 
  Copyright (C) 2009-2014 University of Houston.
@@ -54,8 +55,17 @@
 
 
 /* global variables */
-void *collectives_buffer;
+void *collectives_buffer[2];
 size_t collectives_bufsize;
+
+void *allreduce_buffer[2];
+size_t allreduce_bufsize;
+
+void *reduce_buffer[2];
+size_t reduce_bufsize;
+
+void *broadcast_buffer[2];
+size_t broadcast_bufsize;
 
 int collectives_max_workbufs = 0;
 
@@ -160,6 +170,10 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
 #define MIN(x,y) ( (x<y) ? (x) : (y) )
 #define MAX(x,y) ( (x>y) ? (x) : (y) )
 
+#define NEW_ALLREDUCE
+#define NEW_REDUCE
+#define NEW_BCAST
+#define BINOMIAL_INTRANODE_BCAST
 
 
 /* translating from image id in 'team' to proc ID */
@@ -637,6 +651,10 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     MPI_Datatype dtype;
     MPI_Op mpi_op;
 #endif
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
+    int pindex = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
@@ -730,9 +748,7 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     }
 #endif
 
-    if ((enable_collectives_2level || enable_reduction_2level) &&
-        current_team && (current_team->leaders_count > 1  &&
-          current_team->leaders_count < _num_images)) {
+    if ((enable_collectives_2level || enable_reduction_2level) && current_team) {
         co_reduce_predef_to_image_2level__(source, result_image, size, charlen,
                                            elem_type, op);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
@@ -740,6 +756,14 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         return;
 
         /* does not reach */
+    }
+
+    if (current_team != NULL) {
+        bufid = current_team->reduce_bufid;
+        collectives_buf = reduce_buffer[bufid];
+        collectives_bufsz = reduce_bufsize;
+    } else {
+        Error("current_team is not set!");
     }
 
     me = _this_image;
@@ -759,67 +783,80 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     elem_size = get_reduction_type_size(*elem_type, *charlen);
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        const int num_steps = log2_p;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_p+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_p) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size,NULL, NULL);
+                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
+        const int num_steps = log2_p;
+
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_p*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_p) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_p);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
     }
 
-
-    pot_partners = malloc(log2_p*sizeof(int));
-    partners = malloc(log2_p*sizeof(int));
-
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
+
+#ifndef NEW_REDUCE
+    pot_partners = malloc(log2_p*sizeof(int));
+    partners = malloc(log2_p*sizeof(int));
 
     step = 1;
     for (i = 1; i <= log2_p; i += num_bufs) {
@@ -891,6 +928,169 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
         }
     }
 
+#else
+
+    if (!base_buffer_alloc)
+        partners = malloc(log2_p*sizeof(int));
+
+    if (num_bufs > 1) {
+        step = 1;
+        for (i = 1; i <= log2_p; i += num_bufs) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= p) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > p) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t val = 1;
+
+                        proc_id = get_proc_id(current_team, partner);
+
+                        comm_nbi_write(proc_id, current_team->reduce_flag, 
+                                       &val, sizeof(val));
+                    }
+                }
+            }
+
+            for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= p) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > p) continue;
+
+                k1 = (j-1)*(sz+1)+1;
+                k2 = (j)*(sz+1);
+
+                proc_id = get_proc_id(current_team, partner);
+
+                if (me > partner) {
+
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                        current_team->reduce_go[bufid] = 0;
+                    }
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    comm_write_x( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k2-1)*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_reduce(*op, *elem_type, base_buffer,
+                                   &((char*)work_buffers)[(k1-1)*elem_size],
+                                   sz, *charlen);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_p; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= p) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
+            if (partner < 1 || partner > p) continue;
+
+            int image_id = get_proc_id(current_team, partner) + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            k1 = 1;
+            k2 = sz+1;
+            proc_id = get_proc_id(current_team, partner);
+
+            if (me > partner) {
+
+                comm_write_x( proc_id,
+                              &((char*)work_buffers)[(k1-1)*elem_size],
+                              &((char*)base_buffer)[0],
+                              sz*elem_size );
+
+                comm_nbi_write( proc_id,
+                                &((char*)work_buffers)[(k2-1)*elem_size],
+                                &((char*)base_buffer)[sz*elem_size],
+                                1 );
+            } else {
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_reduce(*op, *elem_type, base_buffer,
+                               &((char*)work_buffers)[(k1-1)*elem_size],
+                               sz, *charlen);
+            }
+        }
+    }
+
+#endif
+
     /* TODO: can be a bit more clever here and avoid this extra copy, by
      * temporarily treating the result image as the "leader" this reduction.
      * */
@@ -934,11 +1134,31 @@ void co_reduce_predef_to_image__( void *source, int *result_image, int *size,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+#ifdef NEW_REDUCE
+    if (!base_buffer_alloc) {
+        /* notify partners that wrote to me for reduce that my collectives
+         * buffers are free for next time */
+        for (i = 0; i < pindex; i++) {
+            coll_flags_t val = 1;
+            comm_nbi_write(partners[i], &current_team->reduce_go[bufid],
+                           &val, sizeof(val));
+        }
+
+        free(partners);
+    }
+#else
 
     free(pot_partners);
     free(partners);
+#endif
+
+    current_team->reduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -954,8 +1174,7 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
     int p, pp, q, qq, r, me, partner, proc_id;
     int i, j, step, log2_q, log2_qq, val;
     int k1, k2;
-    int num_bufs;
-    int *partners, *pot_partners;
+    int num_bufs, nbufs1, nbufs2;
     size_t elem_size;
     int sz;
     void *base_buffer;
@@ -964,9 +1183,22 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
     int work_buffers_alloc = 0;
     int do_mpi;
     int ierr;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
+    int *partners;
+    int pindex = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+    if (current_team != NULL) {
+        bufid = current_team->reduce_bufid;
+        collectives_buf = reduce_buffer[bufid];
+        collectives_bufsz = reduce_bufsize;
+    } else {
+        Error("current_team is not set!");
+    }
 
     sz = *size;
 
@@ -1038,21 +1270,33 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
     elem_size = get_reduction_type_size(*elem_type, *charlen);
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        /* find largest number of work buffers that can be accomodated.
+         *
+         * Goal is to get log2_q + log2_qq buffers. If nb is the number of
+         * buffers that can be allocated from the symmetric heap, it must be
+         * at least 2 (otherwise we do not have space for both the base buffer
+         * and one work buffer).
+         */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((num_bufs+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -1060,88 +1304,242 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+        /*
+         * Now that we have the number of work buffers, we need to determine
+         * how many of them are reserved for inter-node communication (nbufs1)
+         * and how many for intra-node communication (nbufs2).
+         * Since inter-node communication is more costly, we try to use as
+         * many for this as we can. 
+         *
+         * */
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(num_bufs*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q + log2_qq);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
     }
 
-    pot_partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
-    partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
+    if (!base_buffer_alloc)
+        partners = malloc((log2_q+log2_qq)*sizeof(int));
 
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
 
-
     /* Phase 1: Reduce to Leader */
 
     me = intranode_index;
-    step = 1;
-    for (i = 1; i <= log2_qq; i += num_bufs) {
-        k = 0;
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            k2 = j*(sz+1);
-            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-            if (((me-1)%(2*step)) < step) {
-                pot_partners[j-1] = me+step;
-                if ((me+step) <= pp) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me+step]+1;
-                }
-            } else {
-                pot_partners[j-1] = me-step;
-                if ((me-step) >= 1) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me-step]+1;
+
+    if (nbufs2 > 0) {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += nbufs2) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= pp) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > pp) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t *flag;
+
+                        proc_id = current_team->intranode_set[partner];
+
+                        flag = comm_get_sharedptr(current_team->reduce_flag,
+                                                  proc_id);
+
+                        *flag = 1;
+                    }
                 }
             }
-            step = step * 2;
-        }
 
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            if (j == 1 && k > 0) {
-                comm_sync_images(partners, k, NULL, 0, NULL, 0);
-            }
-            partner = pot_partners[j-1];
-            if (partner < 1 || partner > pp) continue;
+            for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
 
-            k1 = (j-1)*(sz+1)+1;
-            k2 = j*(sz+1);
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= pp) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
 
-            if (me > partner) {
+                step = step * 2;
+
+                if (partner < 1 || partner > pp) continue;
+
+                k1 = (nbufs1+j-1)*(sz+1)+1;
+                k2 = (nbufs1+j)*(sz+1);
+
                 proc_id = current_team->intranode_set[partner];
 
+                if (me > partner) {
+
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                        current_team->reduce_go[bufid] = 0;
+                    }
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    comm_write_x( proc_id,
+                                  &((char*)work_buffers)[(k1-1)*elem_size],
+                                  &((char*)base_buffer)[0],
+                                  sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_reduce(*op, *elem_type, base_buffer,
+                                   &((char*)work_buffers)[(k1-1)*elem_size],
+                                   sz, *charlen);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= pp) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
+            if (partner < 1 || partner > pp) continue;
+
+            int image_id = current_team->intranode_set[partner] + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+            k1 = (nbufs1)*(sz+1)+1;
+            k2 = (nbufs1+1)*(sz+1);
+
+            proc_id = current_team->intranode_set[partner];
+
+            if (me > partner) {
                 comm_write_x( proc_id,
                               &((char*)work_buffers)[(k1-1)*elem_size],
                               &((char*)base_buffer)[0],
@@ -1151,12 +1549,14 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-
             } else {
 
                 /* poll on flag */
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                if (!base_buffer_alloc) partners[pindex++] = proc_id;
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -1169,53 +1569,149 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
         }
     }
 
+
     /* Phase 2: Leaders reduce to the first leader */
 
     if (is_leader) {
         me = leader_index+1;
 
-        step = 1;
-        for (i = 1; i <= log2_q; i += num_bufs) {
-            k = 0;
-            for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
-                k2 = j*(sz+1);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                if (((me-1)%(2*step)) < step) {
-                    pot_partners[j-1] = me+step;
-                    if ((me+step) <= p) {
-                        k = k + 1;
-                        partners[k-1] = leader_set[me+step-1] + 1;
-                    }
-                } else {
-                    pot_partners[j-1] = me-step;
-                    if ((me-step) >= 1) {
-                        k = k + 1;
-                        partners[k-1] = leader_set[me-step-1] + 1;
+        if (nbufs1 > 0) {
+            step = 1;
+            for (i = 1; i <= log2_q; i += nbufs1) {
+                /* send sync notifications prior to each round except the first
+                 * one */
+                if (i > 1) {
+                    int s = step;
+                    for (j = 1; j <= MIN(nbufs1,log2_q-i+1); j++) {
+                        partner = 0;
+                        if (((me-1)%(2*s)) == 0) {
+                            if ((me+s) <= p) {
+                                partner = me+s;
+                            }
+                        } else if (((me-1)%(2*s)) == s) {
+                            if ((me-s) >= 1) {
+                                partner = me-s;
+                            }
+                        }
+
+                        s = s * 2;
+                        if (partner < 1 || partner > p) continue;
+
+                        if (me < partner) {
+                            /* notify partner I'm ready to receive data */
+                            coll_flags_t val = 1;
+
+                            proc_id = leader_set[partner-1];
+
+                            comm_nbi_write(proc_id, current_team->reduce_flag, 
+                                           &val, sizeof(val));
+                        }
                     }
                 }
-                step = step * 2;
-            }
 
-            for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
-                if (j == 1 && k > 0) {
-                    comm_sync_images(partners, k, NULL, 0, NULL, 0);
-                }
-                partner = pot_partners[j-1];
-                if (partner < 1 || partner > p) continue;
+                for (j = 1; j <= MIN(nbufs1,log2_q-i+1); j++) {
 
-                k1 = (j-1)*(sz+1)+1;
-                k2 = j*(sz+1);
+                    partner = 0;
+                    if (((me-1)%(2*step)) == 0) {
+                        if ((me+step) <= p) {
+                            partner = me+step;
+                        }
+                    } else if (((me-1)%(2*step)) == step) {
+                        if ((me-step) >= 1) {
+                            partner = me-step;
+                        }
+                    }
 
-                if (me > partner) {
+                    step = step * 2;
+
+                    if (partner < 1 || partner > p) continue;
+
+                    k1 = (j-1)*(sz+1)+1;
+                    k2 = (j)*(sz+1);
+
                     proc_id = leader_set[partner-1];
 
-                    if (enable_collectives_use_canary) {
+                    if (me > partner) {
 
-                    comm_nbi_write( proc_id,
+                        if (!base_buffer_alloc) {
+                            /* wait for reduce-go to be set */
+                            comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                            current_team->reduce_go[bufid] = 0;
+                        }
+
+                        if (i > 1) {
+                            /* subsequent rounds, wait for notification signal
+                             * from partner */
+                            comm_poll_char_while_zero(current_team->reduce_flag);
+                            *current_team->reduce_flag = 0;
+                        }
+
+                        if (enable_collectives_use_canary) {
+
+                            comm_nbi_write( proc_id,
                                     &((char*)work_buffers)[(k1-1)*elem_size],
                                     &((char*)base_buffer)[0],
                                     sz*elem_size+1 );
+
+                        } else {
+
+                            comm_write_x( proc_id,
+                                    &((char*)work_buffers)[(k1-1)*elem_size],
+                                    &((char*)base_buffer)[0],
+                                    sz*elem_size );
+
+                            comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+
+                        }
+
                     } else {
+                        /* poll on flag */
+                        comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                        ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                        if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                        /* reduce:
+                         *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                         */
+
+                        perform_reduce(*op, *elem_type, base_buffer,
+                                       &((char*)work_buffers)[(k1-1)*elem_size],
+                                       sz, *charlen);
+                    }
+                }
+            }
+        } else {
+            step = 1;
+            for (i = 1; i <= log2_q; i += 1) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= p) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > p) continue;
+
+                int image_id = leader_set[partner-1] + 1;
+                comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+                k1 = 1;
+                k2 = sz+1;
+                proc_id = leader_set[partner-1];
+
+                if (me > partner) {
 
                     comm_write_x( proc_id,
                                   &((char*)work_buffers)[(k1-1)*elem_size],
@@ -1226,12 +1722,14 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
                                     &((char*)work_buffers)[(k2-1)*elem_size],
                                     &((char*)base_buffer)[sz*elem_size],
                                     1 );
-                    }
-
                 } else {
 
                     /* poll on flag */
                     comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
 
                     /* reduce:
                      *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -1243,6 +1741,7 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
                 }
             }
         }
+
     }
 
     /* TODO: can be a bit more clever here and avoid this extra copy, by
@@ -1273,9 +1772,6 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
                 1 );
     }
 
-    free(partners);
-    free(pot_partners);
-
     if (is_leader) {
       free(local_images);
     }
@@ -1283,8 +1779,24 @@ static void co_reduce_predef_to_image_2level__(void *source, int *result_image,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+    if (!base_buffer_alloc) {
+        /* notify partners that wrote to me for reduce that my collectives
+         * buffers are free for next time */
+        for (i = 0; i < pindex; i++) {
+            coll_flags_t val = 1;
+            comm_nbi_write(partners[i], &current_team->reduce_go[bufid],
+                           &val, sizeof(val));
+        }
+        free(partners);
+    }
+
+    current_team->reduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -1314,6 +1826,9 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     MPI_Datatype dtype;
     MPI_Op mpi_op;
 #endif
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
@@ -1405,14 +1920,21 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 #endif
 
     if ((enable_collectives_2level || enable_reduction_2level) &&
-        current_team && (current_team->leaders_count > 1  &&
-          current_team->leaders_count < _num_images)) {
+        current_team) {
         co_reduce_predef_to_all_2level__(source, size, charlen, elem_type, op);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
         LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
         return;
 
         /* does not reach */
+    }
+
+    if (current_team != NULL) {
+      bufid = current_team->allreduce_bufid;
+      collectives_buf = allreduce_buffer[bufid];
+      collectives_bufsz = allreduce_bufsize;
+    } else {
+      Error("current_team is not set!");
     }
 
     me = _this_image;
@@ -1429,19 +1951,26 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     elem_size = get_reduction_type_size(*elem_type, *charlen);
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        const int num_steps = log2_q;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_q+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -1449,40 +1978,47 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
+        const int num_steps = log2_q;
+
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_q*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
     }
+
 
     partners = malloc(log2_q*sizeof(int));
 
@@ -1539,6 +2075,7 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
                        sz, *charlen);
     }
 
+#ifndef NEW_ALLREDUCE
 
     /* first q processes do recursive doubling algorithm */
     if (me <= q) {
@@ -1601,6 +2138,130 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
         }
     }
 
+#else
+
+    /* first q processes do recursive doubling algorithm */
+    if (me <= q && num_bufs > 1) {
+        step = 1;
+        for (i = 1; i <= log2_q; i += num_bufs) {
+
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+                    coll_flags_t val = 1;
+                    if (((me-1)%(2*s)) < s) {
+                        proc_id = get_proc_id(current_team, me+s);
+                    } else {
+                        proc_id = get_proc_id(current_team, me-s);
+                    }
+
+                    comm_nbi_write(proc_id,
+                        &current_team->allreduce_sync[2*(i+j-2)+bufid],
+                        &val, sizeof(val));
+
+                    s = s * 2;
+                }
+            }
+
+            for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+                int partner;
+                k1 = (j-1)*(sz+1)+1;
+                k2 = j*(sz+1);
+
+                if (((me-1)%(2*step)) < step) {
+                    partner = me+step;
+                } else {
+                    partner = me-step;
+                }
+
+                proc_id = get_proc_id(current_team, partner);
+
+                if (i > 1) {
+                    /* subsequent rounds, wait for notification signal
+                     * from partner */
+
+                    comm_poll_char_while_zero(
+                        &current_team->allreduce_sync[2*(i+j-2)+bufid]);
+                    current_team->allreduce_sync[2*(i+j-2)+bufid] = 0;
+                }
+
+
+                comm_write_x( proc_id,
+                        &((char*)work_buffers)[(k1-1)*elem_size],
+                        &((char*)base_buffer)[0],
+                        sz*elem_size );
+
+                comm_nbi_write( proc_id,
+                        &((char*)work_buffers)[(k2-1)*elem_size],
+                        &((char*)base_buffer)[sz*elem_size],
+                        1 );
+
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_reduce(*op, *elem_type, base_buffer,
+                               &((char*)work_buffers)[(k1-1)*elem_size],
+                               sz, *charlen);
+
+                step = step * 2;
+            }
+
+        }
+    } else if (me <= q && num_bufs == 1) {
+        step = 1;
+        for (i = 1; i <= log2_q; i += 1) {
+            k1 = 1;
+            k2 = sz+1;
+
+            if (((me-1)%(2*step)) < step) {
+                proc_id = get_proc_id(current_team, me+step);
+            } else {
+                proc_id = get_proc_id(current_team, me-step);
+            }
+
+            int image_id = proc_id + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+            comm_write_x( proc_id,
+                    &((char*)work_buffers)[(k1-1)*elem_size],
+                    &((char*)base_buffer)[0],
+                    sz*elem_size );
+
+            comm_nbi_write( proc_id,
+                    &((char*)work_buffers)[(k2-1)*elem_size],
+                    &((char*)base_buffer)[sz*elem_size],
+                    1 );
+
+
+            /* poll on flag */
+            comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+            ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+            /* reduce:
+             *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+             */
+
+            perform_reduce(*op, *elem_type, base_buffer,
+                           &((char*)work_buffers)[(k1-1)*elem_size],
+                           sz, *charlen);
+
+            step = step * 2;
+        }
+    }
+
+#endif
+
 
     /* first r processes put values to last r processes */
     if (me <= r) {
@@ -1646,361 +2307,18 @@ void co_reduce_predef_to_all__( void *source, int *size, int *charlen,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+    current_team->allreduce_bufid = 1 - bufid;
+
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
-
-#if 0
-
-/* old version -- keeping it around for now */
-
-static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charlen,
-                               caf_reduction_type_t *elem_type,
-                               caf_reduction_op_t *op)
-{
-    int k;
-    int p, q, r, me, partner, proc_id;
-    int i, j, step, log2_q, val;
-    int k1, k2;
-    int num_bufs;
-    int *partners;
-    size_t elem_size;
-    int sz;
-    void *base_buffer;
-    void *work_buffers;
-    int base_buffer_alloc = 0;
-    int work_buffers_alloc = 0;
-    int do_mpi;
-    int ierr;
-
-    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
-    PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
-
-    sz = *size;
-
-    const int my_proc = current_team->codimension_mapping[_this_image - 1];
-    const int is_leader = (current_team->intranode_set[1] == my_proc);
-    const long int *leader_set = current_team->leader_set;
-    const int leaders_count = current_team->leaders_count;
-    const int intranode_count = current_team->intranode_set[0];
-
-    /* find leader index into leaders_set */
-    int leader_index = -1;
-    if (is_leader) {
-        int i;
-        for (i = 0; i < leaders_count; i++) {
-            if (leader_set[i] == my_proc) {
-                leader_index = i;
-                break;
-            }
-        }
-    }
-
-    /* compute image indices for other images on same node */
-    int *local_images;
-    if (is_leader) {
-        local_images = malloc((intranode_count-1) * sizeof(*local_images));
-        int i;
-        for (i = 0; i < intranode_count-1; i++) {
-            /* non-leaders start at intranode_set[2] ... */
-            local_images[i] = current_team->intranode_set[i+2]+1;
-        }
-    }
-
-    me = leader_index+1;
-    p = leaders_count;
-
-    /* find greatest power of 2 less than p */
-    q = 1;
-    log2_q = 0;
-    while ( (2*q) <= p) {
-        q = 2*q;
-        log2_q = log2_q + 1;
-    }
-
-    elem_size = get_reduction_type_size(*elem_type, *charlen);
-
-    k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
-        /* not enough room in collectives buffer for the base or work
-         * buffer(s) */
-
-        /* find largest number of work buffers that can be accomodated */
-
-        const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_q+1)*(sz+1)*elem_size);
-
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
-
-        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
-        base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
-        /* not enough room in collectives buffer for the work buffer(s) */
-
-        /* find largest number of work buffers that can be accomodated */
-
-        const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_q*(sz+1)*elem_size);
-
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        work_buffers = coarray_allocatable_allocate_(
-                num_bufs*(sz+1)*elem_size, NULL, NULL);
-
-        work_buffers_alloc = 1;
-    } else {
-        /* collectives buffer is large enough to accomodate at least one work
-         * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-    }
-
-    if (is_leader) {
-      partners = malloc(log2_q*sizeof(int));
-    }
-
-    /* r is the number of remaining processes, after q */
-    r = p - q;
-
-    memcpy(base_buffer, source, sz*elem_size);
-    ((char *)base_buffer)[sz*elem_size] = 1;
-
-
-    /* Phase 1: Reduce to Leader */
-
-    if (is_leader) {
-        /* leader reads and performs reduction operation for each non-leader
-         * */
-        int i;
-        for (i = 1; i < intranode_count; i++) {
-             /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
-            comm_sync_images(&local_images[i-1], 1, NULL, 0, NULL, 0);
-            comm_read(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                      &((char*)work_buffers)[0], sz*elem_size);
-            perform_reduce(*op, *elem_type, base_buffer,
-                           &((char*)work_buffers)[0], sz, *charlen);
-        }
-
-    } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
-        comm_sync_images(&my_leader_image, 1, NULL, 0, NULL, 0);
-    }
-
-    /* Phase 2: Leaders perform reduction using recursive-doubling */
-
-    if (is_leader) {
-
-        /* last r processes put values to first r processes */
-        if (me > q) {
-            partner = me - q;
-            //proc_id = get_proc_id(current_team, partner);
-            proc_id = leader_set[partner-1];
-
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            if (enable_collectives_use_canary) {
-
-                comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-
-            } else {
-
-
-                comm_write_x( proc_id,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
-
-                comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-
-            }
-
-        } else if (me <= r) {
-            partner = me + q;
-            proc_id = leader_set[partner-1];
-
-            ((char*)work_buffers)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            /* poll on flag */
-            comm_poll_char_while_zero(&((char*)work_buffers)[sz*elem_size]);
-
-            /* reduce:
-             *   work_buf(1:sz) = work_buf(1:sz) + work_buf(sz+2:2*(sz+1)-1)
-             */
-
-            perform_reduce(*op, *elem_type, base_buffer,
-                    &((char*)work_buffers)[0],
-                    sz, *charlen);
-        }
-
-        /* first q processes do recursive doubling algorithm */
-        if (me <= q) {
-            step = 1;
-            for (i = 1; i <= log2_q; i += num_bufs) {
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-                    k2 = j*(sz+1);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                    if (((me-1)%(2*step)) < step) {
-                        partners[j-1] = leader_set[me+step-1] + 1;
-                    } else {
-                        partners[j-1] = leader_set[me-step-1] + 1;
-                    }
-                    step = step*2;
-                }
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-
-                    if (j == 1) {
-                        comm_sync_images(partners, MIN(num_bufs, log2_q), NULL, 0,
-                                NULL, 0);
-                    }
-                    k1 = (j-1)*(sz+1)+1;
-                    k2 = j*(sz+1);
-                    proc_id = partners[j-1] - 1;
-
-                    if (enable_collectives_use_canary) {
-
-                        comm_nbi_write( proc_id,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size+1 );
-
-                    } else {
-
-                        comm_write_x( proc_id,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size );
-
-                        comm_nbi_write( proc_id,
-                                &((char*)work_buffers)[(k2-1)*elem_size],
-                                &((char*)base_buffer)[sz*elem_size],
-                                1 );
-
-                    }
-
-
-                    /* poll on flag */
-                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-
-                    /* reduce:
-                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
-                     */
-
-                    perform_reduce(*op, *elem_type, base_buffer,
-                            &((char*)work_buffers)[(k1-1)*elem_size],
-                            sz, *charlen);
-                }
-            }
-        }
-
-
-        /* first r processes put values to last r processes */
-        if (me <= r) {
-            partner = me + q;
-            proc_id = leader_set[partner-1];
-
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            if (enable_collectives_use_canary) {
-
-                comm_nbi_write( proc_id,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-
-            } else {
-
-                comm_write_x( proc_id,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
-
-                comm_nbi_write( proc_id,
-                        &((char*)base_buffer)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-
-            }
-
-        } else if (me > q) {
-            partner = me - q;
-            proc_id = leader_set[partner-1];
-            ((char*)base_buffer)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            /* poll on flag */
-            comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
-        }
-
-    }
-
-    /* Phase 3: Leader writes values back to its non-leaders */
-
-    if (is_leader) {
-        int i;
-        for (i = 1; i < intranode_count; i++) {
-            comm_write_x(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                      &((char*)base_buffer)[0], sz*elem_size);
-             /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
-            comm_sync_images(&local_images[i-1], 1, NULL, 0, NULL, 0);
-        }
-    } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
-        comm_sync_images(&my_leader_image, 1, NULL, 0, NULL, 0);
-    }
-
-
-    memcpy(source, base_buffer, sz*elem_size);
-
-    if (is_leader) {
-      free(partners);
-      free(local_images);
-    }
-
-    if (base_buffer_alloc) {
-        coarray_deallocate_(base_buffer, NULL);
-    } else if (work_buffers_alloc) {
-        coarray_deallocate_(work_buffers, NULL);
-    }
-
-    PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
-    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
-}
-#else
 
 static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charlen,
                                caf_reduction_type_t *elem_type,
@@ -2010,8 +2328,7 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
     int p, pp, q, qq, r, me, partner, proc_id;
     int i, j, step, log2_q, log2_qq, val;
     int k1, k2;
-    int num_bufs;
-    int *partners, *pot_partners;
+    int num_bufs, nbufs1, nbufs2;
     size_t elem_size;
     int sz;
     void *base_buffer;
@@ -2020,9 +2337,20 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
     int work_buffers_alloc = 0;
     int do_mpi;
     int ierr;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+    if (current_team != NULL) {
+      bufid = current_team->allreduce_bufid;
+      collectives_buf = allreduce_buffer[bufid];
+      collectives_bufsz = allreduce_bufsize;
+    } else {
+      Error("current_team is not set!");
+    }
 
     sz = *size;
 
@@ -2096,21 +2424,33 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
     elem_size = get_reduction_type_size(*elem_type, *charlen);
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        /* find largest number of work buffers that can be accomodated.
+         *
+         * Goal is to get log2_q + log2_qq buffers. If nb is the number of
+         * buffers that can be allocated from the symmetric heap, it must be
+         * at least 2 (otherwise we do not have space for both the base buffer
+         * and one work buffer).
+         */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((num_bufs+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb - 1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("1. not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -2118,84 +2458,240 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+        /*
+         * Now that we have the number of work buffers, we need to determine
+         * how many of them are reserved for inter-node communication (nbufs1)
+         * and how many for intra-node communication (nbufs2).
+         * Since inter-node communication is more costly, we try to use as
+         * many for this as we can. 
+         *
+         * */
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(num_bufs*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("2. not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q + log2_qq);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
-    }
 
-    pot_partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
-    partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
+        nbufs1 = 0;
+        nbufs2 = 0;
+
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+
+    }
 
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
 
-
     /* Phase 1: Reduce to Leader */
 
     me = intranode_index;
-    step = 1;
-    for (i = 1; i <= log2_qq; i += num_bufs) {
-        k = 0;
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            k2 = j*(sz+1);
-            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-            if (((me-1)%(2*step)) < step) {
-                pot_partners[j-1] = me+step;
-                if ((me+step) <= pp) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me+step]+1;
-                }
-            } else {
-                pot_partners[j-1] = me-step;
-                if ((me-step) >= 1) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me-step]+1;
-                }
-            }
-            step = step * 2;
-        }
 
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            if (j == 1 && k > 0) {
-                comm_sync_images(partners, k, NULL, 0, NULL, 0);
+    if (nbufs2 > 0) {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += nbufs2) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= pp) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > pp) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t *flag;
+
+                        proc_id = current_team->intranode_set[partner];
+
+                        flag = comm_get_sharedptr(current_team->reduce_flag,
+                                                  proc_id);
+
+                        *flag = 1;
+                    }
+                }
             }
-            partner = pot_partners[j-1];
+
+            for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= pp) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > pp) continue;
+
+                k1 = (nbufs1+j-1)*(sz+1)+1;
+                k2 = (nbufs1+j)*(sz+1);
+
+                if (me > partner) {
+
+#if 0
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+
+                        /* no need for reset since we'll be doing a broadcast
+                         * in the last phase of the all-reduce */
+                    }
+#endif
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    proc_id = current_team->intranode_set[partner];
+
+                    comm_write_x( proc_id,
+                                  &((char*)work_buffers)[(k1-1)*elem_size],
+                                  &((char*)base_buffer)[0],
+                                  sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_reduce(*op, *elem_type, base_buffer,
+                                   &((char*)work_buffers)[(k1-1)*elem_size],
+                                   sz, *charlen);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= pp) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
             if (partner < 1 || partner > pp) continue;
 
-            k1 = (j-1)*(sz+1)+1;
-            k2 = j*(sz+1);
+            int image_id = current_team->intranode_set[partner] + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+            k1 = (nbufs1)*(sz+1)+1;
+            k2 = (nbufs1+1)*(sz+1);
 
             if (me > partner) {
                 proc_id = current_team->intranode_set[partner];
@@ -2209,12 +2705,12 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-
             } else {
 
                 /* poll on flag */
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -2227,6 +2723,7 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
         }
     }
 
+
     /* Phase 2: Leaders perform reduction using recursive-doubling */
 
     if (is_leader) {
@@ -2235,78 +2732,105 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
         /* last r processes put values to first r processes */
         if (me > q) {
             partner = me - q;
-            //proc_id = get_proc_id(current_team, partner);
             proc_id = leader_set[partner-1];
 
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            comm_poll_char_while_zero(current_team->reduce_flag);
+            *(current_team->reduce_flag) = 0;
 
             if (enable_collectives_use_canary) {
+                int k1 = nbufs1*(sz+1)+1;
 
                 comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[0],
+                        &((char*)work_buffers)[(k1-1)*elem_size],
                         &((char*)base_buffer)[0],
                         sz*elem_size+1 );
 
             } else {
-
+                int k1 = nbufs1*(sz+1)+1;
+                int k2 = (nbufs1+1)*(sz+1);
 
                 comm_write_x( proc_id,
-                        &((char*)work_buffers)[0],
+                        &((char*)work_buffers)[(k1-1)*elem_size],
                         &((char*)base_buffer)[0],
                         sz*elem_size );
 
                 comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[sz*elem_size],
+                        &((char*)work_buffers)[(k2-1)*elem_size],
                         &((char*)base_buffer)[sz*elem_size],
                         1 );
 
             }
 
         } else if (me <= r) {
+            int val = 1;
             partner = me + q;
             proc_id = leader_set[partner-1];
+            int k1 = nbufs1*(sz+1)+1;
+            int k2 = (nbufs1+1)*(sz+1);
 
-            ((char*)work_buffers)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            /* notify sender that I'm ready */
+            comm_nbi_write(proc_id, current_team->reduce_flag, &val,
+                           sizeof(val));
 
             /* poll on flag */
-            comm_poll_char_while_zero(&((char*)work_buffers)[sz*elem_size]);
-            ((char *)work_buffers)[sz*elem_size] = 0;
+            comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
 
             /* reduce:
              *   work_buf(1:sz) = work_buf(1:sz) + work_buf(sz+2:2*(sz+1)-1)
              */
 
             perform_reduce(*op, *elem_type, base_buffer,
-                    &((char*)work_buffers)[0],
+                    &((char*)work_buffers)[(k1-1)*elem_size],
                     sz, *charlen);
         }
 
         /* first q processes do recursive doubling algorithm */
-        if (me <= q) {
+        if (me <= q && nbufs1 > 0) {
             step = 1;
-            for (i = 1; i <= log2_q; i += num_bufs) {
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-                    k2 = j*(sz+1);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                    if (((me-1)%(2*step)) < step) {
-                        partners[j-1] = leader_set[me+step-1] + 1;
-                    } else {
-                        partners[j-1] = leader_set[me-step-1] + 1;
-                    }
-                    step = step*2;
-                }
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+            for (i = 1; i <= log2_q; i += nbufs1) {
 
-                    if (j == 1) {
-                        comm_sync_images(partners, MIN(num_bufs, log2_q), NULL, 0,
-                                NULL, 0);
+                /* send sync notifications prior to each round except the first
+                 * one */
+                if (i > 1) {
+                    int s = step;
+                    for (j = 1; j <= MIN(nbufs1, log2_q-i+1); j++) {
+                        coll_flags_t val = 1;
+                        if (((me-1)%(2*s)) < s) {
+                            proc_id = leader_set[me+s-1];
+                        } else {
+                            proc_id = leader_set[me-s-1];
+                        }
+
+                        comm_nbi_write(proc_id,
+                            &current_team->allreduce_sync[2*(i+j-2)+bufid],
+                            &val, sizeof(val));
+
+                        s = s * 2;
                     }
+                }
+
+                for (j = 1; j <= MIN(nbufs1, log2_q-i+1); j++) {
+                    int partner;
                     k1 = (j-1)*(sz+1)+1;
                     k2 = j*(sz+1);
-                    proc_id = partners[j-1] - 1;
+
+                    if (((me-1)%(2*step)) < step) {
+                        partner = me+step;
+                    } else {
+                        partner = me-step;
+                    }
+
+                    proc_id = leader_set[partner-1];
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+
+                        comm_poll_char_while_zero(
+                            &current_team->allreduce_sync[2*(i+j-2)+bufid]);
+                        current_team->allreduce_sync[2*(i+j-2)+bufid] = 0;
+                    }
 
                     if (enable_collectives_use_canary) {
 
@@ -2329,30 +2853,83 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
 
                     }
 
-
                     /* poll on flag */
                     comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
 
                     /* reduce:
                      *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
                      */
 
                     perform_reduce(*op, *elem_type, base_buffer,
-                            &((char*)work_buffers)[(k1-1)*elem_size],
-                            sz, *charlen);
+                                   &((char*)work_buffers)[(k1-1)*elem_size],
+                                   sz, *charlen);
+
+                    step = step * 2;
                 }
+
+            }
+        } else if (me <= q && nbufs1 == 0) {
+            step = 1;
+            for (i = 1; i <= log2_q; i += 1) {
+                k1 = 1;
+                k2 = sz+1;
+
+                if (((me-1)%(2*step)) < step) {
+                    proc_id = leader_set[me+step-1];
+                } else {
+                    proc_id = leader_set[me-step-1];
+                }
+
+                int image_id = proc_id + 1;
+                comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+                if (enable_collectives_use_canary) {
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size+1 );
+
+                } else {
+
+                    comm_write_x( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k2-1)*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+                }
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_reduce(*op, *elem_type, base_buffer,
+                               &((char*)work_buffers)[(k1-1)*elem_size],
+                               sz, *charlen);
+
+                step = step * 2;
             }
         }
-
 
         /* first r processes put values to last r processes */
         if (me <= r) {
             partner = me + q;
             proc_id = leader_set[partner-1];
 
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            comm_poll_char_while_zero(current_team->reduce_flag);
+            *(current_team->reduce_flag) = 0;
 
             if (enable_collectives_use_canary) {
 
@@ -2376,11 +2953,14 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
             }
 
         } else if (me > q) {
+            int val = 1;
             partner = me - q;
             proc_id = leader_set[partner-1];
             ((char*)base_buffer)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            /* notify sender that I'm ready to receive in base buffer */
+            comm_nbi_write(proc_id, current_team->reduce_flag, &val,
+                           sizeof(val));
 
             /* poll on flag */
             comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
@@ -2388,35 +2968,44 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
 
     }
 
+
     /* Phase 3: Leader writes values back to its non-leaders */
+
 #if defined(GASNET)
     if (is_leader) {
         int i;
-        *(current_team->intranode_collflags[0]) = intranode_count-1;
+        /* NOTE: assuming that intranode_count doesn't exceed 256! */
+        *(current_team->bcast_flag) = intranode_count-1;
         for (i = 1; i < intranode_count; i++) {
-            *(current_team->intranode_collflags[i]) = 1;
+            int proc_id = current_team->intranode_set[i+1];
+            coll_flags_t *flag = comm_get_sharedptr(current_team->bcast_flag,
+                                                    proc_id);
+            *flag = 1;
         }
 
         /* wait for non-leaders to finish reading buffer */
-        comm_poll_char_while_nonzero(current_team->intranode_collflags[0]);
+        comm_poll_char_while_nonzero(current_team->bcast_flag);
     } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
+        int leader_proc_id = current_team->intranode_set[1];
+        coll_flags_t *leader_flag = comm_get_sharedptr(current_team->bcast_flag,
+                                                       leader_proc_id);
 
         /* poll on flag */
-        comm_poll_char_while_zero(current_team->intranode_collflags[0]);
-        comm_read(my_leader_image-1, &((char*)base_buffer)[0],
+        comm_poll_char_while_zero(current_team->bcast_flag);
+
+        comm_read(leader_proc_id, &((char*)base_buffer)[0],
                   &((char*)base_buffer)[0], sz*elem_size);
-        *(current_team->intranode_collflags[0]) = 0;
-        SYNC_FETCH_AND_ADD(
-            (barrier_flags_t *)current_team->intranode_collflags[1],
-            -1);
+
+        *(current_team->bcast_flag) = 0;
+
+        SYNC_FETCH_AND_ADD((coll_flags_t *)leader_flag, -1);
     }
 #else
     if (is_leader) {
         int i;
         for (i = 1; i < intranode_count; i++) {
             comm_write_x(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                    &((char*)base_buffer)[0], sz);
+                    &((char*)base_buffer)[0], sz*elem_size);
         }
         /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
         comm_sync_images(local_images, intranode_count-1, NULL, 0, NULL, 0);
@@ -2428,8 +3017,6 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
 
     memcpy(source, base_buffer, sz*elem_size);
 
-    free(partners);
-    free(pot_partners);
 
     if (is_leader) {
       free(local_images);
@@ -2438,13 +3025,22 @@ static void co_reduce_predef_to_all_2level__(void *source, int *size, int *charl
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
+    }
+
+    /* toggle allreduce_bufid for current team */
+    if (current_team != NULL) {
+      current_team->allreduce_bufid = 1 - bufid;
+    } else {
+      Error("current_team is not set!");
     }
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
-#endif
 
 void co_broadcast_from_root(void *source, size_t sz, int source_image)
 {
@@ -2453,13 +3049,15 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
     int p, q, r, me, partner, proc_id;
     int k1, k2;
     int num_bufs;
-    int *pot_partners, *partners;
+    int *partners;
     void *base_buffer;
     int base_buffer_alloc = 0;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid, pindex = 0;
 
     if ((enable_collectives_2level || enable_broadcast_2level) &&
-        current_team && (current_team->leaders_count > 1  &&
-          current_team->leaders_count < _num_images)) {
+         current_team) {
         co_broadcast_from_root_2level(source, sz, source_image);
         LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
         return;
@@ -2467,15 +3065,23 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
         /* does not reach */
     }
 
+    if (current_team != NULL) {
+        bufid = current_team->bcast_bufid;
+        collectives_buf = broadcast_buffer[bufid];
+        collectives_bufsz = broadcast_bufsize;
+    } else {
+      Error("current_team is not set!");
+    }
+
     me = _this_image;
     p = _num_images;
 
     k = sz;
-    if (collectives_bufsize < k) {
-        base_buffer = coarray_allocatable_allocate_(sz, NULL, NULL);
+    if (collectives_bufsz < k) {
+        base_buffer = coarray_allocatable_allocate_(sz+sizeof(int), NULL, NULL);
         base_buffer_alloc = 1;
     } else {
-        base_buffer = collectives_buffer;
+        base_buffer = collectives_buf;
     }
 
     /* find greatest power of 2 */
@@ -2502,6 +3108,8 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
                     &((char*)base_buffer)[0],
                     sz );
             _SYNC_IMAGES(&root, 1, NULL, 0, NULL, 0);
+        } else {
+            ((char*)base_buffer)[sz] = 1;
         }
 
     } else {
@@ -2509,9 +3117,12 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
             _SYNC_IMAGES(&source_image, 1, NULL, 0, NULL, 0);
 
             /* received from source image */
+
+            ((char*)base_buffer)[sz] = 1;
         }
     }
 
+#ifndef NEW_BCAST
     step = q;
     while (step > 0) {
         if ((me-1)%step == 0) {
@@ -2534,6 +3145,62 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
         }
         step = step / 2;
     }
+#else
+
+        int pi = log2_p;
+        step = q/2;
+        if (!base_buffer_alloc)
+            partners = malloc(sizeof(*partners) * log2_p);
+        while (step > 0) {
+            partner = 0;
+            if ((me-1)%step == 0) {
+                if ((me-1)%(2*step) == 0) {
+                    partner = me+step;
+                } else {
+                    partner = me-step;
+                }
+            }
+
+            step = step / 2;
+            pi = pi - 1;
+
+            if (partner < 1 || partner > p) continue;
+
+            int proc_id = get_proc_id(current_team, partner);
+
+            if (me < partner) {
+                /* writing to partner */
+
+                if (!base_buffer_alloc) {
+                    /* wait for broadcast_go to be set */
+                    if (!current_team->bcast_go[bufid*log2_p+pi]) {
+                        comm_poll_char_while_zero(
+                                &current_team->bcast_go[bufid*log2_p+pi]);
+                    }
+
+                    current_team->bcast_go[bufid*log2_p+pi] = 0;
+                }
+
+                comm_write_x( proc_id,
+                        &((char*)base_buffer)[0],
+                        &((char*)base_buffer)[0],
+                        sz );
+
+                comm_nbi_write( proc_id,
+                        &((char*)base_buffer)[sz],
+                        &((char*)base_buffer)[sz],
+                        1 );
+
+            } else {
+                /* wait to receive in base buffer */
+                comm_poll_char_while_zero(&((char*)base_buffer)[sz]);
+
+                if (!base_buffer_alloc) {
+                    partners[pindex++] = partner;
+                }
+            }
+        }
+#endif
 
     /* all images except for source image needs to copy from base_buffer to
      * source */
@@ -2543,7 +3210,35 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
 
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
+    } else {
+        memset(base_buffer, 0, sz+sizeof(int));
     }
+
+#ifdef NEW_BCAST
+    if (!base_buffer_alloc) {
+        /* notify partner that wrote to me for broadcast that my collectives
+         * buffer is free for next time */
+        for (i = 0; i < pindex; i++) {
+            coll_flags_t val = 1;
+            int proc_id = get_proc_id(current_team, partners[i]);
+            int x,y;
+
+            /* find my bcast_go flag on partner */
+            y = me - partners[i];
+            x = 0;
+            while (y/2 != 0) {
+                y = y / 2;
+                x += 1;
+            }
+
+            comm_nbi_write(proc_id, &current_team->bcast_go[bufid*log2_p+x],
+                    &val, sizeof(val));
+        }
+        free(partners);
+    }
+#endif
+
+    current_team->bcast_bufid = 1 - bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
@@ -2551,13 +3246,14 @@ void co_broadcast_from_root(void *source, size_t sz, int source_image)
 static void co_broadcast_from_root_2level(void *source, size_t sz, int source_image)
 {
     int k;
-    int i,j, step, val, log2_p;
+    int i,j, step, val, log2_p, log2_qq, qq;
     int p, q, r, me, partner, proc_id;
     int k1, k2;
     int num_bufs;
-    int *pot_partners, *partners;
+    int *internode_partners, *intranode_partners;
     void *base_buffer;
     int base_buffer_alloc = 0;
+    int internode_pindex = 0, intranode_pindex = 0;
 
     const int my_proc = current_team->codimension_mapping[_this_image - 1];
     const int is_leader = (current_team->intranode_set[1] == my_proc);
@@ -2565,13 +3261,37 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
     const int leaders_count = current_team->leaders_count;
     const int intranode_count = current_team->intranode_set[0];
 
-    /* find leader index into leaders_set */
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
+
+    if (current_team != NULL) {
+        bufid = current_team->bcast_bufid;
+        collectives_buf = broadcast_buffer[bufid];
+        collectives_bufsz = broadcast_bufsize;
+    } else {
+        Error("current_team is not set!");
+    }
+
+    /* find leader index into leader_set */
     int leader_index = -1;
     if (is_leader) {
         int i;
         for (i = 0; i < leaders_count; i++) {
             if (leader_set[i] == my_proc) {
                 leader_index = i;
+                break;
+            }
+        }
+    }
+
+    /* find intranode index into intranode_set */
+    int intranode_index = -1;
+    {
+        int i;
+        for (i = 1; i <= intranode_count; i++) {
+            if (current_team->intranode_set[i] == my_proc) {
+                intranode_index = i;
                 break;
             }
         }
@@ -2591,12 +3311,12 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
     me = leader_index + 1;
     p = leaders_count;
 
-    k = sz;
-    if (collectives_bufsize < k) {
-        base_buffer = coarray_allocatable_allocate_(sz, NULL, NULL);
+    k = sz + sizeof(int);
+    if (collectives_bufsz < k) {
+        base_buffer = coarray_allocatable_allocate_(sz+sizeof(int), NULL, NULL);
         base_buffer_alloc = 1;
     } else {
-        base_buffer = collectives_buffer;
+        base_buffer = collectives_buf;
     }
 
     /* find greatest power of 2 */
@@ -2608,6 +3328,17 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
     }
     if (q < p) {
         log2_p = log2_p + 1;
+    }
+
+    /* find greatest power of 2 */
+    qq = 1;
+    log2_qq = 0;
+    while ( (2*qq) <= intranode_count) {
+        qq = 2*qq;
+        log2_qq = log2_qq + 1;
+    }
+    if (qq < intranode_count) {
+        log2_qq = log2_qq + 1;
     }
 
     if (_this_image == source_image) {
@@ -2624,70 +3355,122 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
                     sz );
 
             _SYNC_IMAGES(&root, 1, NULL, 0, NULL, 0);
+        } else {
+            ((char*)base_buffer)[sz] = 1;
         }
-
     } else {
         if (_this_image == 1) {
             _SYNC_IMAGES(&source_image, 1, NULL, 0, NULL, 0);
 
             /* received from source image */
+
+            ((char*)base_buffer)[sz] = 1;
         }
     }
 
     /* Phase 1: Broadcast to other leaders */
 
     if (is_leader) {
-      step = q;
-      while (step > 0) {
-        if ((me-1)%step == 0) {
-          if (((me-1)%(2*step)) == 0) {
-            if ((me+step) <= p) {
-              int p = me+step;
-              proc_id = leader_set[p-1];
-              comm_nbi_write( proc_id,
-                  &((char*)base_buffer)[0],
-                  &((char*)base_buffer)[0],
-                  sz );
-              int image_id = proc_id+1;
-              comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+        if (!base_buffer_alloc)
+            internode_partners = malloc(sizeof(*internode_partners) * log2_p);
+        int pi = log2_p;
+        step = q/2;
+        while (step > 0) {
+            partner = 0;
+            if ((me-1)%step == 0) {
+                if ((me-1)%(2*step) == 0) {
+                    partner = me+step;
+                } else {
+                    partner = me-step;
+                }
             }
-          } else {
-            if ((me-step) >= 1) {
-              int p = me-step;
-              proc_id = leader_set[p-1];
-              int image_id = proc_id+1;
-              comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            step = step / 2;
+            pi = pi - 1;
+
+            if (partner < 1 || partner > p) continue;
+
+            int proc_id = leader_set[partner-1];
+
+            if (me < partner) {
+                /* writing to partner */
+
+                if (!base_buffer_alloc) {
+                    /* wait for broadcast_go to be set */
+                    if (!current_team->bcast_go[2*pi+bufid]) {
+                        comm_poll_char_while_zero(
+                                &current_team->bcast_go[2*pi+bufid]);
+                    }
+
+                    current_team->bcast_go[2*pi+bufid] = 0;
+                }
+
+
+                if (enable_collectives_use_canary) {
+
+                    comm_nbi_write( proc_id,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz + sizeof(int) );
+
+                } else {
+
+                    comm_write_x( proc_id,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)base_buffer)[sz],
+                            &((char*)base_buffer)[sz],
+                            1 );
+
+                }
+            } else {
+
+                /* wait to receive in base buffer */
+                comm_poll_char_while_zero(&((char*)base_buffer)[sz]);
+
+                if (!base_buffer_alloc) {
+                    internode_partners[internode_pindex++] = partner;
+                }
             }
-          }
         }
-        step = step / 2;
-      }
     }
 
 
     /* Phase 2: Leaders broadcast to their non-leaders */
 
+#ifndef BINOMIAL_INTRANODE_BCAST
+
 #if defined(GASNET)
     if (is_leader) {
         int i;
-        *(current_team->intranode_collflags[0]) = intranode_count-1;
+        /* NOTE: assuming that intranode_count doesn't exceed 256! */
+        *(current_team->bcast_flag) = intranode_count-1;
         for (i = 1; i < intranode_count; i++) {
-            *(current_team->intranode_collflags[i]) = 1;
+            int proc_id = current_team->intranode_set[i+1];
+            coll_flags_t *flag = comm_get_sharedptr(current_team->bcast_flag,
+                                                    proc_id);
+            *flag = 1;
         }
 
         /* wait for non-leaders to finish reading buffer */
-        comm_poll_char_while_nonzero(current_team->intranode_collflags[0]);
+        comm_poll_char_while_nonzero(current_team->bcast_flag);
     } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
+        int leader_proc_id = current_team->intranode_set[1];
+        coll_flags_t *leader_flag = comm_get_sharedptr(current_team->bcast_flag,
+                                                       leader_proc_id);
 
         /* poll on flag */
-        comm_poll_char_while_zero(current_team->intranode_collflags[0]);
-        comm_read(my_leader_image-1, &((char*)base_buffer)[0],
+        comm_poll_char_while_zero(current_team->bcast_flag);
+
+        comm_read(leader_proc_id, &((char*)base_buffer)[0],
                   &((char*)base_buffer)[0], sz);
-        *(current_team->intranode_collflags[0]) = 0;
-        SYNC_FETCH_AND_ADD(
-            (barrier_flags_t *)current_team->intranode_collflags[1],
-            -1);
+
+        *(current_team->bcast_flag) = 0;
+
+        SYNC_FETCH_AND_ADD((coll_flags_t *)leader_flag, -1);
     }
 #else
     if (is_leader) {
@@ -2704,6 +3487,78 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
     }
 #endif
 
+#else
+
+        if (!base_buffer_alloc) {
+            intranode_partners = malloc(sizeof(*intranode_partners) * log2_qq);
+        }
+
+        int pi = log2_qq;
+        step = qq/2;
+        me = intranode_index;
+        while (step > 0) {
+            partner = 0;
+            if ((me-1)%step == 0) {
+                if ((me-1)%(2*step) == 0) {
+                    partner = me+step;
+                } else {
+                    partner = me-step;
+                }
+            }
+
+            step = step / 2;
+            pi = pi - 1;
+
+            if (partner < 1 || partner > intranode_count) continue;
+
+            int proc_id = current_team->intranode_set[partner];
+
+            if (me < partner) {
+                /* writing to partner */
+
+                if (!base_buffer_alloc) {
+                    /* wait for broadcast_go to be set */
+                    if (!current_team->bcast_go[2*(log2_p+pi)+bufid]) {
+                        comm_poll_char_while_zero(
+                                &current_team->bcast_go[2*(log2_p+pi)+bufid]);
+                    }
+
+                    current_team->bcast_go[2*(log2_p+pi)+bufid] = 0;
+                }
+
+                if (enable_collectives_use_canary) {
+
+                    comm_nbi_write( proc_id,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz + sizeof(int) );
+
+                } else {
+
+                    comm_write_x( proc_id,
+                            &((char*)base_buffer)[0],
+                            &((char*)base_buffer)[0],
+                            sz );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)base_buffer)[sz],
+                            &((char*)base_buffer)[sz],
+                            1 );
+
+                }
+            } else {
+
+                /* wait to receive in base buffer */
+                comm_poll_char_while_zero(&((char*)base_buffer)[sz]);
+
+                if (!base_buffer_alloc) {
+                    intranode_partners[intranode_pindex++] = partner;
+                }
+            }
+        }
+
+#endif
+
     /* all images except for source image needs to copy from base_buffer to
      * source */
     if (_this_image != source_image) {
@@ -2712,7 +3567,58 @@ static void co_broadcast_from_root_2level(void *source, size_t sz, int source_im
 
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
+    } else {
+        memset(base_buffer, 0, sz+sizeof(int));
     }
+
+    if (!base_buffer_alloc && is_leader) {
+        /* notify partner that wrote to me for broadcast that my collectives
+         * buffer is free for next time */
+        me = leader_index+1;
+        for (i = 0; i < internode_pindex; i++) {
+            coll_flags_t val = 1;
+            int proc_id = leader_set[internode_partners[i]-1];
+            int x,y;
+
+            /* find my bcast_go flag on partner */
+            y = me - internode_partners[i];
+            x = 0;
+            while (y/2 != 0) {
+                y = y / 2;
+                x += 1;
+            }
+
+            comm_nbi_write(proc_id, &current_team->bcast_go[2*x+bufid],
+                    &val, sizeof(val));
+        }
+        free(internode_partners);
+    }
+
+#ifdef BINOMIAL_INTRANODE_BCAST
+    if (!base_buffer_alloc) {
+        me = intranode_index;
+        for (i = 0; i < intranode_pindex; i++) {
+            coll_flags_t val = 1;
+            int proc_id = current_team->intranode_set[intranode_partners[i]];
+            int x,y;
+
+            /* find my bcast_go flag on partner */
+            y = me - intranode_partners[i];
+            x = 0;
+            while (y/2 != 0) {
+                y = y / 2;
+                x += 1;
+            }
+
+            comm_nbi_write(proc_id, &current_team->bcast_go[2*(log2_p+x)+bufid],
+                    &val, sizeof(val));
+        }
+
+        free(intranode_partners);
+    }
+#endif
+
+    current_team->bcast_bufid = 1 - bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
@@ -2773,15 +3679,18 @@ static void co_reduce_to_image__(void *source, int *result_image, int *size,
     void *work_buffers;
     int base_buffer_alloc = 0;
     int work_buffers_alloc = 0;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
+    int pindex = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
 
     sz = *size;
 
-    if ((enable_collectives_2level || enable_reduction_2level) &&
-        current_team && (current_team->leaders_count > 1  &&
-          current_team->leaders_count < _num_images)) {
+    if ((enable_collectives_2level || enable_reduction_2level)
+        && current_team) {
         co_reduce_to_image_2level__(source, result_image, size, elem_size_p,
                                    charlen, type, opr);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
@@ -2790,6 +3699,15 @@ static void co_reduce_to_image__(void *source, int *result_image, int *size,
 
         /* does not reach */
     }
+
+    if (current_team != NULL) {
+        bufid = current_team->reduce_bufid;
+        collectives_buf = reduce_buffer[bufid];
+        collectives_bufsz = reduce_bufsize;
+    } else {
+        Error("current_team is not set!");
+    }
+
 
     me = _this_image;
     p = _num_images;
@@ -2808,67 +3726,82 @@ static void co_reduce_to_image__(void *source, int *result_image, int *size,
     elem_size = *elem_size_p;
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        const int num_steps = log2_p;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_p+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_p) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size,NULL, NULL);
+                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
+        const int num_steps = log2_p;
+
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_p*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_p,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_p) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_p);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
     }
 
 
-    pot_partners = malloc(log2_p*sizeof(int));
-    partners = malloc(log2_p*sizeof(int));
-
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
+
+#ifndef NEW_REDUCE
+
+    pot_partners = malloc(log2_p*sizeof(int));
+    partners = malloc(log2_p*sizeof(int));
 
     step = 1;
     for (i = 1; i <= log2_p; i += num_bufs) {
@@ -2940,6 +3873,170 @@ static void co_reduce_to_image__(void *source, int *result_image, int *size,
         }
     }
 
+#else
+
+    if (!base_buffer_alloc)
+        partners = malloc(log2_p*sizeof(int));
+
+    if (num_bufs > 1) {
+        step = 1;
+        for (i = 1; i <= log2_p; i += num_bufs) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= p) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > p) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t val = 1;
+
+                        proc_id = get_proc_id(current_team, partner);
+
+                        comm_nbi_write(proc_id, current_team->reduce_flag, 
+                                       &val, sizeof(val));
+                    }
+                }
+            }
+
+            for (j = 1; j <= MIN(num_bufs,log2_p-i+1); j++) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= p) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > p) continue;
+
+                k1 = (j-1)*(sz+1)+1;
+                k2 = (j)*(sz+1);
+
+                proc_id = get_proc_id(current_team, partner);
+
+                if (me > partner) {
+
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                        current_team->reduce_go[bufid] = 0;
+                    }
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    comm_write_x( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k2-1)*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_udr(opr, base_buffer,
+                                &((char*)work_buffers)[(k1-1)*elem_size],
+                                sz, elem_size, *charlen, type);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_p; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= p) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
+            if (partner < 1 || partner > p) continue;
+
+            int image_id = get_proc_id(current_team, partner) + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            k1 = 1;
+            k2 = sz+1;
+            proc_id = get_proc_id(current_team, partner);
+
+            if (me > partner) {
+
+                comm_write_x( proc_id,
+                              &((char*)work_buffers)[(k1-1)*elem_size],
+                              &((char*)base_buffer)[0],
+                              sz*elem_size );
+
+                comm_nbi_write( proc_id,
+                                &((char*)work_buffers)[(k2-1)*elem_size],
+                                &((char*)base_buffer)[sz*elem_size],
+                                1 );
+            } else {
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_udr(opr, base_buffer,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            sz, elem_size, *charlen, type);
+            }
+        }
+    }
+
+
+#endif
+
     if (me == *result_image) {
         ((char*)base_buffer)[sz*elem_size] = 0;
         if (me != 1) {
@@ -2980,11 +4077,31 @@ static void co_reduce_to_image__(void *source, int *result_image, int *size,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+#ifdef NEW_REDUCE
+    if (!base_buffer_alloc) {
+        /* notify partners that wrote to me for reduce that my collectives
+         * buffers are free for next time */
+        for (i = 0; i < pindex; i++) {
+            coll_flags_t val = 1;
+            comm_nbi_write(partners[i], &current_team->reduce_go[bufid],
+                           &val, sizeof(val));
+        }
+
+        free(partners);
+    }
+#else
 
     free(pot_partners);
     free(partners);
+#endif
+
+    current_team->reduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -2998,17 +4115,30 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
     int p, pp, q, qq, me, partner, proc_id;
     int i, j, step, log2_q, log2_qq, val;
     int k1, k2;
-    int num_bufs;
-    int *partners, *pot_partners;
+    int num_bufs, nbufs1, nbufs2;
     size_t elem_size;
     int sz;
     void *base_buffer;
     void *work_buffers;
     int base_buffer_alloc = 0;
     int work_buffers_alloc = 0;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
+    int *partners;
+    int pindex = 0;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+
+    if (current_team != NULL) {
+        bufid = current_team->reduce_bufid;
+        collectives_buf = reduce_buffer[bufid];
+        collectives_bufsz = reduce_bufsize;
+    } else {
+        Error("current_team is not set!");
+    }
 
     sz = *size;
 
@@ -3079,22 +4209,35 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
 
     elem_size = *elem_size_p;
 
+
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        /* find largest number of work buffers that can be accomodated.
+         *
+         * Goal is to get log2_q + log2_qq buffers. If nb is the number of
+         * buffers that can be allocated from the symmetric heap, it must be
+         * at least 2 (otherwise we do not have space for both the base buffer
+         * and one work buffer).
+         */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((num_bufs+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -3102,45 +4245,105 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+        /*
+         * Now that we have the number of work buffers, we need to determine
+         * how many of them are reserved for inter-node communication (nbufs1)
+         * and how many for intra-node communication (nbufs2).
+         * Since inter-node communication is more costly, we try to use as
+         * many for this as we can. 
+         *
+         * */
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(num_bufs*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q + log2_qq);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
     }
 
-    pot_partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
-    partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
+    if (!base_buffer_alloc)
+        partners = malloc((log2_q+log2_qq)*sizeof(int));
 
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
@@ -3149,40 +4352,136 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
     /* Phase 1: Reduce to Leader */
 
     me = intranode_index;
-    step = 1;
-    for (i = 1; i <= log2_qq; i += num_bufs) {
-        k = 0;
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            k2 = j*(sz+1);
-            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-            if (((me-1)%(2*step)) < step) {
-                pot_partners[j-1] = me+step;
-                if ((me+step) <= pp) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me+step]+1;
-                }
-            } else {
-                pot_partners[j-1] = me-step;
-                if ((me-step) >= 1) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me-step]+1;
-                }
-            }
-            step = step * 2;
-        }
 
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            if (j == 1 && k > 0) {
-                comm_sync_images(partners, k, NULL, 0, NULL, 0);
+    if (nbufs2 > 0) {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += nbufs2) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= pp) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > pp) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t *flag;
+
+                        proc_id = current_team->intranode_set[partner];
+
+                        flag = comm_get_sharedptr(current_team->reduce_flag,
+                                                  proc_id);
+
+                        *flag = 1;
+                    }
+                }
             }
-            partner = pot_partners[j-1];
+
+            for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= pp) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > pp) continue;
+
+                k1 = (nbufs1+j-1)*(sz+1)+1;
+                k2 = (nbufs1+j)*(sz+1);
+
+                proc_id = current_team->intranode_set[partner];
+
+                if (me > partner) {
+
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                        current_team->reduce_go[bufid] = 0;
+                    }
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    comm_write_x( proc_id,
+                                  &((char*)work_buffers)[(k1-1)*elem_size],
+                                  &((char*)base_buffer)[0],
+                                  sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_udr(opr, base_buffer,
+                                &((char*)work_buffers)[(k1-1)*elem_size],
+                                sz, elem_size, *charlen, type);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= pp) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
             if (partner < 1 || partner > pp) continue;
 
-            k1 = (j-1)*(sz+1)+1;
-            k2 = j*(sz+1);
+            int image_id = current_team->intranode_set[partner] + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+            k1 = (nbufs1)*(sz+1)+1;
+            k2 = (nbufs1+1)*(sz+1);
+
+            proc_id = current_team->intranode_set[partner];
 
             if (me > partner) {
-                proc_id = current_team->intranode_set[partner];
 
                 comm_write_x( proc_id,
                               &((char*)work_buffers)[(k1-1)*elem_size],
@@ -3193,12 +4492,14 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-
             } else {
 
                 /* poll on flag */
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                if (!base_buffer_alloc) partners[pindex++] = proc_id;
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -3211,54 +4512,150 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
         }
     }
 
+
     /* Phase 2: Leaders reduce to the first leader */
 
     if (is_leader) {
         me = leader_index+1;
 
-        step = 1;
-        for (i = 1; i <= log2_q; i += num_bufs) {
-            k = 0;
-            for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
-                k2 = j*(sz+1);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                if (((me-1)%(2*step)) < step) {
-                    pot_partners[j-1] = me+step;
-                    if ((me+step) <= p) {
-                        k = k + 1;
-                        partners[k-1] = leader_set[me+step-1] + 1;
-                    }
-                } else {
-                    pot_partners[j-1] = me-step;
-                    if ((me-step) >= 1) {
-                        k = k + 1;
-                        partners[k-1] = leader_set[me-step-1] + 1;
+        if (nbufs1 > 0) {
+            step = 1;
+            for (i = 1; i <= log2_q; i += nbufs1) {
+                /* send sync notifications prior to each round except the first
+                 * one */
+                if (i > 1) {
+                    int s = step;
+                    for (j = 1; j <= MIN(nbufs1,log2_q-i+1); j++) {
+                        partner = 0;
+                        if (((me-1)%(2*s)) == 0) {
+                            if ((me+s) <= p) {
+                                partner = me+s;
+                            }
+                        } else if (((me-1)%(2*s)) == s) {
+                            if ((me-s) >= 1) {
+                                partner = me-s;
+                            }
+                        }
+
+                        s = s * 2;
+                        if (partner < 1 || partner > p) continue;
+
+                        if (me < partner) {
+                            /* notify partner I'm ready to receive data */
+                            coll_flags_t val = 1;
+
+                            proc_id = leader_set[partner-1];
+
+                            comm_nbi_write(proc_id, current_team->reduce_flag, 
+                                           &val, sizeof(val));
+                        }
                     }
                 }
-                step = step * 2;
-            }
 
-            for (j = 1; j <= MIN(num_bufs,log2_q-i+1); j++) {
-                if (j == 1 && k > 0) {
-                    comm_sync_images(partners, k, NULL, 0, NULL, 0);
-                }
-                partner = pot_partners[j-1];
-                if (partner < 1 || partner > p) continue;
+                for (j = 1; j <= MIN(nbufs1,log2_q-i+1); j++) {
 
-                k1 = (j-1)*(sz+1)+1;
-                k2 = j*(sz+1);
+                    partner = 0;
+                    if (((me-1)%(2*step)) == 0) {
+                        if ((me+step) <= p) {
+                            partner = me+step;
+                        }
+                    } else if (((me-1)%(2*step)) == step) {
+                        if ((me-step) >= 1) {
+                            partner = me-step;
+                        }
+                    }
 
-                if (me > partner) {
+                    step = step * 2;
+
+                    if (partner < 1 || partner > p) continue;
+
+                    k1 = (j-1)*(sz+1)+1;
+                    k2 = (j)*(sz+1);
+
                     proc_id = leader_set[partner-1];
 
-                    if (enable_collectives_use_canary) {
+                    if (me > partner) {
 
-                    comm_nbi_write( proc_id,
+                        if (!base_buffer_alloc) {
+                            /* wait for reduce-go to be set */
+                            comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+                            current_team->reduce_go[bufid] = 0;
+                        }
+
+                        if (i > 1) {
+                            /* subsequent rounds, wait for notification signal
+                             * from partner */
+                            comm_poll_char_while_zero(current_team->reduce_flag);
+                            *current_team->reduce_flag = 0;
+                        }
+
+                        if (enable_collectives_use_canary) {
+
+                            comm_nbi_write( proc_id,
                                     &((char*)work_buffers)[(k1-1)*elem_size],
                                     &((char*)base_buffer)[0],
                                     sz*elem_size+1 );
-                    } else {
 
+                        } else {
+
+                            comm_write_x( proc_id,
+                                    &((char*)work_buffers)[(k1-1)*elem_size],
+                                    &((char*)base_buffer)[0],
+                                    sz*elem_size );
+
+                            comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+                        }
+
+                    } else {
+                        /* poll on flag */
+                        comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                        ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                        if (!base_buffer_alloc) partners[pindex++] = proc_id;
+
+                        /* reduce:
+                         *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                         */
+
+                        perform_udr(opr, base_buffer,
+                                    &((char*)work_buffers)[(k1-1)*elem_size],
+                                    sz, elem_size, *charlen, type);
+                    }
+                }
+            }
+        } else {
+            step = 1;
+            for (i = 1; i <= log2_q; i += 1) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= p) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > p) continue;
+
+                int image_id = leader_set[partner-1] + 1;
+                comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+                k1 = 1;
+                k2 = sz+1;
+
+                proc_id = leader_set[partner-1];
+
+                if (me > partner) {
                     comm_write_x( proc_id,
                                   &((char*)work_buffers)[(k1-1)*elem_size],
                                   &((char*)base_buffer)[0],
@@ -3268,12 +4665,14 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
                                     &((char*)work_buffers)[(k2-1)*elem_size],
                                     &((char*)base_buffer)[sz*elem_size],
                                     1 );
-                    }
-
                 } else {
 
                     /* poll on flag */
                     comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    if (!base_buffer_alloc) partners[pindex++] = proc_id;
 
                     /* reduce:
                      *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -3285,7 +4684,9 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
                 }
             }
         }
+
     }
+
 
     /* TODO: can be a bit more clever here and avoid this extra copy, by
      * temporarily treating the result image as the leader of its
@@ -3315,8 +4716,6 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
                 1 );
     }
 
-    free(partners);
-    free(pot_partners);
 
     if (is_leader) {
       free(local_images);
@@ -3325,8 +4724,25 @@ static void co_reduce_to_image_2level__(void *source, int *result_image, int *si
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+    if (!base_buffer_alloc) {
+        /* notify partners that wrote to me for reduce that my collectives
+         * buffers are free for next time */
+        for (i = 0; i < pindex; i++) {
+            coll_flags_t val = 1;
+            comm_nbi_write(partners[i], &current_team->reduce_go[bufid],
+                           &val, sizeof(val));
+        }
+        free(partners);
+    }
+
+
+    current_team->reduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
@@ -3350,21 +4766,31 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
     int work_buffers_alloc = 0;
     int do_mpi;
     int ierr;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
 
     sz = *size;
 
-    if ((enable_collectives_2level || enable_reduction_2level) &&
-        current_team && (current_team->leaders_count > 1  &&
-          current_team->leaders_count < _num_images) ) {
+    if ((enable_collectives_2level || enable_reduction_2level)
+        && current_team) {
         co_reduce_to_all_2level__(source, size, elem_size_p, charlen, type, opr);
         PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
         LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
         return;
 
         /* does not reach */
+    }
+
+    if (current_team != NULL) {
+        bufid = current_team->allreduce_bufid;
+        collectives_buf = allreduce_buffer[bufid];
+        collectives_bufsz = allreduce_bufsize;
+    } else {
+        Error("current_team is not set!");
     }
 
     me = _this_image;
@@ -3381,19 +4807,26 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
     elem_size = *elem_size_p;
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        const int num_steps = log2_q;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_q+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -3401,40 +4834,47 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
+        const int num_steps = log2_q;
+
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_q*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
     }
+
 
     partners = malloc(log2_q*sizeof(int));
 
@@ -3492,6 +4932,8 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
     }
 
 
+#ifndef NEW_ALLREDUCE
+
     /* first q processes do recursive doubling algorithm */
     if (me <= q) {
         step = 1;
@@ -3517,14 +4959,6 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
                 partner = partners[j-1];
                 proc_id = get_proc_id(current_team, partner);
 
-                if (0 /*enable_collectives_use_canary*/) {
-
-                comm_nbi_write( proc_id,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size+1 );
-
-                } else {
 
                 comm_write_x( proc_id,
                               &((char*)work_buffers)[(k1-1)*elem_size],
@@ -3535,8 +4969,6 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-
-                }
 
 
                 /* poll on flag */
@@ -3554,6 +4986,126 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
         }
     }
 
+#else
+
+    /* first q processes do recursive doubling algorithm */
+    if (me <= q && num_bufs > 1) {
+        step = 1;
+        for (i = 1; i <= log2_q; i += num_bufs) {
+
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+                    coll_flags_t val = 1;
+                    if (((me-1)%(2*s)) < s) {
+                        proc_id = get_proc_id(current_team, me+s);
+                    } else {
+                        proc_id = get_proc_id(current_team, me-s);
+                    }
+
+                    comm_nbi_write(proc_id,
+                        &current_team->allreduce_sync[2*(i+j-2)+bufid],
+                        &val, sizeof(val));
+
+                    s = s * 2;
+                }
+            }
+
+            for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+                int partner;
+                k1 = (j-1)*(sz+1)+1;
+                k2 = j*(sz+1);
+
+                if (((me-1)%(2*step)) < step) {
+                    partner = me+step;
+                } else {
+                    partner = me-step;
+                }
+
+                proc_id = get_proc_id(current_team, partner);
+
+                if (i > 1) {
+                    /* subsequent rounds, wait for notification signal
+                     * from partner */
+
+                    comm_poll_char_while_zero(
+                        &current_team->allreduce_sync[2*(i+j-2)+bufid]);
+                    current_team->allreduce_sync[2*(i+j-2)+bufid] = 0;
+                }
+
+                comm_write_x( proc_id,
+                        &((char*)work_buffers)[(k1-1)*elem_size],
+                        &((char*)base_buffer)[0],
+                        sz*elem_size );
+
+                comm_nbi_write( proc_id,
+                        &((char*)work_buffers)[(k2-1)*elem_size],
+                        &((char*)base_buffer)[sz*elem_size],
+                        1 );
+
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_udr(opr, base_buffer,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            sz, elem_size, *charlen, type);
+
+                step = step * 2;
+            }
+
+        }
+    } else if (me <= q && num_bufs == 1) {
+        step = 1;
+        for (i = 1; i <= log2_q; i += 1) {
+            k1 = 1;
+            k2 = sz+1;
+
+            if (((me-1)%(2*step)) < step) {
+                proc_id = get_proc_id(current_team, me+step);
+            } else {
+                proc_id = get_proc_id(current_team, me-step);
+            }
+
+            int image_id = proc_id + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            comm_write_x( proc_id,
+                    &((char*)work_buffers)[(k1-1)*elem_size],
+                    &((char*)base_buffer)[0],
+                    sz*elem_size );
+
+            comm_nbi_write( proc_id,
+                    &((char*)work_buffers)[(k2-1)*elem_size],
+                    &((char*)base_buffer)[sz*elem_size],
+                    1 );
+
+
+            /* poll on flag */
+            comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+            ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+            /* reduce:
+             *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+             */
+
+            perform_udr(opr, base_buffer,
+                        &((char*)work_buffers)[(k1-1)*elem_size],
+                        sz, elem_size, *charlen, type);
+
+            step = step * 2;
+        }
+    }
+#endif
 
     /* first r processes put values to last r processes */
     if (me <= r) {
@@ -3599,369 +5151,17 @@ static void co_reduce_to_all__(void *source, int *size, int *elem_size_p,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+    current_team->allreduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
-
-#if 0
-
-/* old version -- keeping it around for now */
-
-static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
-                               int *charlen, int type, void *opr)
-{
-    int k;
-    int p, q, r, me, partner, proc_id;
-    int i, j, step, log2_q, val;
-    int k1, k2;
-    int num_bufs;
-    int *partners;
-    size_t elem_size;
-    int sz;
-    void *base_buffer;
-    void *work_buffers;
-    int base_buffer_alloc = 0;
-    int work_buffers_alloc = 0;
-    int do_mpi;
-    int ierr;
-
-
-    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
-    PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
-
-    sz = *size;
-
-    const int my_proc = current_team->codimension_mapping[_this_image - 1];
-    const int is_leader = (current_team->intranode_set[1] == my_proc);
-    const long int *leader_set = current_team->leader_set;
-    const int leaders_count = current_team->leaders_count;
-    const int intranode_count = current_team->intranode_set[0];
-
-    /* find leader index into leaders_set */
-    int leader_index = -1;
-    if (is_leader) {
-        int i;
-        for (i = 0; i < leaders_count; i++) {
-            if (leader_set[i] == my_proc) {
-                leader_index = i;
-                break;
-            }
-        }
-    }
-
-    /* compute image indices for other images on same node */
-    int *local_images;
-    if (is_leader) {
-        local_images = malloc((intranode_count-1) * sizeof(*local_images));
-        int i;
-        for (i = 0; i < intranode_count-1; i++) {
-            /* non-leaders start at intranode_set[2] ... */
-            local_images[i] = current_team->intranode_set[i+2]+1;
-        }
-    }
-
-    me = leader_index+1;
-    p = leaders_count;
-
-    /* find greatest power of 2 less than p */
-    q = 1;
-    log2_q = 0;
-    while ( (2*q) <= p) {
-        q = 2*q;
-        log2_q = log2_q + 1;
-    }
-
-    elem_size = *elem_size_p;
-
-    k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
-        /* not enough room in collectives buffer for the base or work
-         * buffer(s) */
-
-        /* find largest number of work buffers that can be accomodated */
-
-        const unsigned long largest_slot =
-            largest_allocatable_slot_avail((log2_q+1)*(sz+1)*elem_size);
-
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = coarray_allocatable_allocate_(
-                (num_bufs+1)*(sz+1)*elem_size, NULL, NULL);
-
-        work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
-        base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
-        /* not enough room in collectives buffer for the work buffer(s) */
-
-        /* find largest number of work buffers that can be accomodated */
-
-        const unsigned long largest_slot =
-            largest_allocatable_slot_avail(log2_q*(sz+1)*elem_size);
-
-        num_bufs = MIN(log2_q,((int)largest_slot-k)/k);
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
-
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        work_buffers = coarray_allocatable_allocate_(
-                num_bufs*(sz+1)*elem_size, NULL, NULL);
-
-        work_buffers_alloc = 1;
-    } else {
-        /* collectives buffer is large enough to accomodate at least one work
-         * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-    }
-
-    if (is_leader) {
-      partners = malloc(log2_q*sizeof(int));
-    }
-
-    /* r is the number of remaining processes, after q */
-    r = p - q;
-
-    memcpy(base_buffer, source, sz*elem_size);
-    ((char *)base_buffer)[sz*elem_size] = 1;
-
-
-    /* Phase 1: Reduce to Leader */
-
-    if (is_leader) {
-        /* leader reads and performs reduction operation for each non-leader
-         * */
-        int i;
-        for (i = 1; i < intranode_count; i++) {
-             /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
-            comm_sync_images(&local_images[i-1], 1, NULL, 0, NULL, 0);
-            comm_read(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                      &((char*)work_buffers)[0], sz*elem_size);
-
-            perform_udr(opr, base_buffer,
-                    &((char*)work_buffers)[0],
-                    sz, elem_size, *charlen, type);
-
-        }
-
-    } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
-        comm_sync_images(&my_leader_image, 1, NULL, 0, NULL, 0);
-    }
-
-    /* Phase 2: Leaders perform reduction using recursive-doubling */
-
-    if (is_leader) {
-
-        /* last r processes put values to first r processes */
-        if (me > q) {
-            partner = me - q;
-            //proc_id = get_proc_id(current_team, partner);
-            proc_id = leader_set[partner-1];
-
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            if (enable_collectives_use_canary) {
-
-                comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-
-            } else {
-
-
-                comm_write_x( proc_id,
-                        &((char*)work_buffers)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
-
-                comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-
-            }
-
-        } else if (me <= r) {
-            partner = me + q;
-            proc_id = leader_set[partner-1];
-
-            ((char*)work_buffers)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            /* poll on flag */
-            comm_poll_char_while_zero(&((char*)work_buffers)[sz*elem_size]);
-
-            /* reduce:
-             *   work_buf(1:sz) = work_buf(1:sz) + work_buf(sz+2:2*(sz+1)-1)
-             */
-
-            perform_udr(opr, base_buffer,
-                    &((char*)work_buffers)[0],
-                    sz, elem_size, *charlen, type);
-
-        }
-
-        /* first q processes do recursive doubling algorithm */
-        if (me <= q) {
-            step = 1;
-            for (i = 1; i <= log2_q; i += num_bufs) {
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-                    k2 = j*(sz+1);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                    if (((me-1)%(2*step)) < step) {
-                        partners[j-1] = leader_set[me+step-1] + 1;
-                    } else {
-                        partners[j-1] = leader_set[me-step-1] + 1;
-                    }
-                    step = step*2;
-                }
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-
-                    if (j == 1) {
-                        comm_sync_images(partners, MIN(num_bufs, log2_q), NULL, 0,
-                                NULL, 0);
-                    }
-                    k1 = (j-1)*(sz+1)+1;
-                    k2 = j*(sz+1);
-                    proc_id = partners[j-1] - 1;
-
-                    if (enable_collectives_use_canary) {
-
-                        comm_nbi_write( proc_id,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size+1 );
-
-                    } else {
-
-                        comm_write_x( proc_id,
-                                &((char*)work_buffers)[(k1-1)*elem_size],
-                                &((char*)base_buffer)[0],
-                                sz*elem_size );
-
-                        comm_nbi_write( proc_id,
-                                &((char*)work_buffers)[(k2-1)*elem_size],
-                                &((char*)base_buffer)[sz*elem_size],
-                                1 );
-
-                    }
-
-
-                    /* poll on flag */
-                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-
-                    /* reduce:
-                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
-                     */
-
-
-                    perform_udr(opr, base_buffer,
-                            &((char*)work_buffers)[(k1-1)*elem_size],
-                            sz, elem_size, *charlen, type);
-
-                }
-            }
-        }
-
-
-        /* first r processes put values to last r processes */
-        if (me <= r) {
-            partner = me + q;
-            //proc_id = get_proc_id(current_team, partner);
-            proc_id = leader_set[partner-1];
-
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            if (enable_collectives_use_canary) {
-
-                comm_nbi_write( proc_id,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size+1 );
-
-            } else {
-
-                comm_write_x( proc_id,
-                        &((char*)base_buffer)[0],
-                        &((char*)base_buffer)[0],
-                        sz*elem_size );
-
-                comm_nbi_write( proc_id,
-                        &((char*)base_buffer)[sz*elem_size],
-                        &((char*)base_buffer)[sz*elem_size],
-                        1 );
-
-            }
-
-        } else if (me > q) {
-            partner = me - q;
-            proc_id = leader_set[partner-1];
-            ((char*)base_buffer)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
-
-            /* poll on flag */
-            comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
-        }
-
-    }
-
-    /* Phase 3: Leader writes values back to its non-leaders */
-
-    if (is_leader) {
-        int i;
-        for (i = 1; i < intranode_count; i++) {
-            comm_write_x(current_team->intranode_set[i+1], &((char*)base_buffer)[0],
-                      &((char*)base_buffer)[0], sz*elem_size);
-             /* NOTE: assumes that SYNC_IMAGES_HASH is NOT defined  */
-            comm_sync_images(&local_images[i-1], 1, NULL, 0, NULL, 0);
-        }
-    } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
-        comm_sync_images(&my_leader_image, 1, NULL, 0, NULL, 0);
-    }
-
-
-    memcpy(source, base_buffer, sz*elem_size);
-
-    if (is_leader) {
-      free(partners);
-      free(local_images);
-    }
-
-    if (base_buffer_alloc) {
-        coarray_deallocate_(base_buffer, NULL);
-    } else if (work_buffers_alloc) {
-        coarray_deallocate_(work_buffers, NULL);
-    }
-
-    PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
-    LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
-}
-
-#else
 
 static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
                                int *charlen, int type, void *opr)
@@ -3970,8 +5170,7 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
     int p, pp, q, qq, r, me, partner, proc_id;
     int i, j, step, log2_q, log2_qq, val;
     int k1, k2;
-    int num_bufs;
-    int *partners, *pot_partners;
+    int num_bufs, nbufs1, nbufs2;
     size_t elem_size;
     int sz;
     void *base_buffer;
@@ -3980,9 +5179,20 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
     int work_buffers_alloc = 0;
     int do_mpi;
     int ierr;
+    void *collectives_buf;
+    size_t collectives_bufsz;
+    int bufid;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+    if (current_team != NULL) {
+        bufid = current_team->allreduce_bufid;
+        collectives_buf = allreduce_buffer[bufid];
+        collectives_bufsz = allreduce_bufsize;
+    } else {
+        Error("current_team is not set!");
+    }
 
     sz = *size;
 
@@ -4055,21 +5265,33 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
     elem_size = *elem_size_p;
 
     k = (sz+1)*elem_size;
-    if (collectives_bufsize < k) {
+    if (collectives_bufsz < k) {
         /* not enough room in collectives buffer for the base or work
          * buffer(s) */
 
-        /* find largest number of work buffers that can be accomodated */
+        /* find largest number of work buffers that can be accomodated.
+         *
+         * Goal is to get log2_q + log2_qq buffers. If nb is the number of
+         * buffers that can be allocated from the symmetric heap, it must be
+         * at least 2 (otherwise we do not have space for both the base buffer
+         * and one work buffer).
+         */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail((num_bufs+1)*(sz+1)*elem_size);
+            largest_allocatable_slot_avail((num_steps+1)*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
+
+        num_bufs = nb-1;
 
         if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
+              num_bufs = MIN(num_bufs, collectives_max_workbufs);
+        }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
         }
 
         base_buffer = coarray_allocatable_allocate_(
@@ -4077,84 +5299,238 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
 
         work_buffers = &((char*)base_buffer)[(sz+1)*elem_size];
         base_buffer_alloc = 1;
-    } else if (collectives_bufsize < 2*k) {
+
+        /*
+         * Now that we have the number of work buffers, we need to determine
+         * how many of them are reserved for inter-node communication (nbufs1)
+         * and how many for intra-node communication (nbufs2).
+         * Since inter-node communication is more costly, we try to use as
+         * many for this as we can. 
+         *
+         * */
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+    } else if (collectives_bufsz < 2*k) {
         /* not enough room in collectives buffer for the work buffer(s) */
 
         /* find largest number of work buffers that can be accomodated */
 
-        num_bufs = MAX(log2_q, log2_qq);
+        const int num_steps = log2_q + log2_qq;
 
         const unsigned long largest_slot =
-            largest_allocatable_slot_avail(num_bufs*(sz+1)*elem_size);
+            largest_allocatable_slot_avail(num_steps*(sz+1)*elem_size);
 
-        num_bufs = MIN(num_bufs,((int)largest_slot-k)/k);
+        const unsigned long nb = ((int)largest_slot)/k;
 
-        if (collectives_max_workbufs >= 1) {
-          num_bufs = MIN(num_bufs, collectives_max_workbufs);
-        }
-
-        base_buffer = collectives_buffer;
+        num_bufs = nb;
 
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
+
+        if (num_bufs == 0 && ((log2_q+log2_qq) != 0)) {
+            Error("not enough buffer space for collectives!");
+        }
+
+        base_buffer = collectives_buf;
 
         work_buffers = coarray_allocatable_allocate_(
                 num_bufs*(sz+1)*elem_size, NULL, NULL);
 
         work_buffers_alloc = 1;
+
+        nbufs1 = 0;
+        nbufs2 = 0;
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
     } else {
         /* collectives buffer is large enough to accomodate at least one work
          * buffer, so use that */
-        base_buffer = collectives_buffer;
-        work_buffers = &((char*)collectives_buffer)[(sz+1)*elem_size];
-        num_bufs = ((int)collectives_bufsize-k)/k;
+        base_buffer = collectives_buf;
+        work_buffers = &((char*)collectives_buf)[(sz+1)*elem_size];
+        num_bufs = MIN(((int)collectives_bufsz-k)/k, log2_q + log2_qq);
         if (collectives_max_workbufs >= 1) {
           num_bufs = MIN(num_bufs, collectives_max_workbufs);
         }
-    }
 
-    pot_partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
-    partners = malloc(MAX(log2_q, log2_qq)*sizeof(int));
+        nbufs1 = 0;
+        nbufs2 = 0;
+
+        if (num_bufs > 1) {
+            if (log2_q == 0) {
+              nbufs2 = num_bufs;
+            } else if (log2_qq == 0) {
+              nbufs1 = num_bufs;
+            } else if (num_bufs <= log2_q) {
+              nbufs1 = num_bufs - 1;
+              nbufs2 = 1;
+            } else {
+              nbufs1 = log2_q;
+              nbufs2 = num_bufs - log2_q;
+            }
+        }
+    }
 
     memcpy(base_buffer, source, sz*elem_size);
     ((char *)base_buffer)[sz*elem_size] = 1;
 
-
     /* Phase 1: Reduce to Leader */
 
     me = intranode_index;
-    step = 1;
-    for (i = 1; i <= log2_qq; i += num_bufs) {
-        k = 0;
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            k2 = j*(sz+1);
-            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-            if (((me-1)%(2*step)) < step) {
-                pot_partners[j-1] = me+step;
-                if ((me+step) <= pp) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me+step]+1;
-                }
-            } else {
-                pot_partners[j-1] = me-step;
-                if ((me-step) >= 1) {
-                    k = k + 1;
-                    partners[k-1] = current_team->intranode_set[me-step]+1;
-                }
-            }
-            step = step * 2;
-        }
 
-        for (j = 1; j <= MIN(num_bufs,log2_qq-i+1); j++) {
-            if (j == 1 && k > 0) {
-                comm_sync_images(partners, k, NULL, 0, NULL, 0);
+    if (nbufs2 > 0) {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += nbufs2) {
+            /* send sync notifications prior to each round except the first
+             * one */
+            if (i > 1) {
+                int s = step;
+                for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+                    partner = 0;
+                    if (((me-1)%(2*s)) == 0) {
+                        if ((me+s) <= pp) {
+                            partner = me+s;
+                        }
+                    } else if (((me-1)%(2*s)) == s) {
+                        if ((me-s) >= 1) {
+                            partner = me-s;
+                        }
+                    }
+
+                    s = s * 2;
+                    if (partner < 1 || partner > pp) continue;
+
+                    if (me < partner) {
+                        /* notify partner I'm ready to receive data */
+                        coll_flags_t *flag;
+
+                        proc_id = current_team->intranode_set[partner];
+
+                        flag = comm_get_sharedptr(current_team->reduce_flag,
+                                                  proc_id);
+
+                        *flag = 1;
+                    }
+                }
             }
-            partner = pot_partners[j-1];
+
+            for (j = 1; j <= MIN(nbufs2,log2_qq-i+1); j++) {
+
+                partner = 0;
+                if (((me-1)%(2*step)) == 0) {
+                    if ((me+step) <= pp) {
+                        partner = me+step;
+                    }
+                } else if (((me-1)%(2*step)) == step) {
+                    if ((me-step) >= 1) {
+                        partner = me-step;
+                    }
+                }
+
+                step = step * 2;
+
+                if (partner < 1 || partner > pp) continue;
+
+                k1 = (nbufs1+j-1)*(sz+1)+1;
+                k2 = (nbufs1+j)*(sz+1);
+
+                if (me > partner) {
+
+#if 0
+                    if (!base_buffer_alloc) {
+                        /* wait for reduce-go to be set */
+                        comm_poll_char_while_zero(&current_team->reduce_go[bufid]);
+
+                        /* no need for reset since we'll be doing a broadcast
+                         * in the last phase of the all-reduce */
+                    }
+#endif
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+                        comm_poll_char_while_zero(current_team->reduce_flag);
+                        *current_team->reduce_flag = 0;
+                    }
+
+                    proc_id = current_team->intranode_set[partner];
+
+                    comm_write_x( proc_id,
+                                  &((char*)work_buffers)[(k1-1)*elem_size],
+                                  &((char*)base_buffer)[0],
+                                  sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                                    &((char*)work_buffers)[(k2-1)*elem_size],
+                                    &((char*)base_buffer)[sz*elem_size],
+                                    1 );
+                } else {
+                    /* poll on flag */
+                    comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+
+                    /* reduce:
+                     *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                     */
+
+                    perform_udr(opr, base_buffer,
+                                &((char*)work_buffers)[(k1-1)*elem_size],
+                                sz, elem_size, *charlen, type);
+                }
+            }
+        }
+    } else {
+        step = 1;
+        for (i = 1; i <= log2_qq; i += 1) {
+
+            partner = 0;
+            if (((me-1)%(2*step)) == 0) {
+                if ((me+step) <= pp) {
+                    partner = me+step;
+                }
+            } else if (((me-1)%(2*step)) == step) {
+                if ((me-step) >= 1) {
+                    partner = me-step;
+                }
+            }
+
+            step = step * 2;
+
             if (partner < 1 || partner > pp) continue;
 
-            k1 = (j-1)*(sz+1)+1;
-            k2 = j*(sz+1);
+            int image_id = current_team->intranode_set[partner] + 1;
+            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+
+            k1 = (nbufs1)*(sz+1)+1;
+            k2 = (nbufs1+1)*(sz+1);
 
             if (me > partner) {
                 proc_id = current_team->intranode_set[partner];
@@ -4168,12 +5544,12 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
                                 &((char*)work_buffers)[(k2-1)*elem_size],
                                 &((char*)base_buffer)[sz*elem_size],
                                 1 );
-
             } else {
 
                 /* poll on flag */
                 comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
 
                 /* reduce:
                  *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
@@ -4186,6 +5562,7 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
         }
     }
 
+
     /* Phase 2: Leaders perform reduction using recursive-doubling */
 
     if (is_leader) {
@@ -4194,29 +5571,30 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
         /* last r processes put values to first r processes */
         if (me > q) {
             partner = me - q;
-            //proc_id = get_proc_id(current_team, partner);
             proc_id = leader_set[partner-1];
 
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            comm_poll_char_while_zero(current_team->reduce_flag);
+            *(current_team->reduce_flag) = 0;
 
             if (enable_collectives_use_canary) {
+                int k1 = nbufs1*(sz+1)+1;
 
                 comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[0],
+                        &((char*)work_buffers)[(k1-1)*elem_size],
                         &((char*)base_buffer)[0],
                         sz*elem_size+1 );
 
             } else {
-
+                int k1 = nbufs1*(sz+1)+1;
+                int k2 = (nbufs1+1)*(sz+1);
 
                 comm_write_x( proc_id,
-                        &((char*)work_buffers)[0],
+                        &((char*)work_buffers)[(k1-1)*elem_size],
                         &((char*)base_buffer)[0],
                         sz*elem_size );
 
                 comm_nbi_write( proc_id,
-                        &((char*)work_buffers)[sz*elem_size],
+                        &((char*)work_buffers)[(k2-1)*elem_size],
                         &((char*)base_buffer)[sz*elem_size],
                         1 );
 
@@ -4225,47 +5603,72 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
         } else if (me <= r) {
             partner = me + q;
             proc_id = leader_set[partner-1];
+            int k1 = nbufs1*(sz+1)+1;
+            int k2 = (nbufs1+1)*(sz+1);
 
-            ((char*)work_buffers)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            /* notify sender that I'm ready */
+            comm_nbi_write(proc_id, current_team->reduce_flag, &val,
+                           sizeof(val));
 
             /* poll on flag */
-            comm_poll_char_while_zero(&((char*)work_buffers)[sz*elem_size]);
-            ((char *)work_buffers)[sz*elem_size] = 0;
+            comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+            ((char *)work_buffers)[(k2-1)*elem_size] = 0;
 
             /* reduce:
              *   work_buf(1:sz) = work_buf(1:sz) + work_buf(sz+2:2*(sz+1)-1)
              */
 
             perform_udr(opr, base_buffer,
-                    &((char*)work_buffers)[0],
-                    sz, elem_size, *charlen, type);
+                        &((char*)work_buffers)[(k1-1)*elem_size],
+                        sz, elem_size, *charlen, type);
         }
 
         /* first q processes do recursive doubling algorithm */
-        if (me <= q) {
+        if (me <= q && nbufs1 > 0) {
             step = 1;
-            for (i = 1; i <= log2_q; i += num_bufs) {
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
-                    k2 = j*(sz+1);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
-                    if (((me-1)%(2*step)) < step) {
-                        partners[j-1] = leader_set[me+step-1] + 1;
-                    } else {
-                        partners[j-1] = leader_set[me-step-1] + 1;
-                    }
-                    step = step*2;
-                }
-                for (j = 1; j <= MIN(num_bufs, log2_q-i+1); j++) {
+            for (i = 1; i <= log2_q; i += nbufs1) {
 
-                    if (j == 1) {
-                        comm_sync_images(partners, MIN(num_bufs, log2_q), NULL, 0,
-                                NULL, 0);
+                /* send sync notifications prior to each round except the first
+                 * one */
+                if (i > 1) {
+                    int s = step;
+                    for (j = 1; j <= MIN(nbufs1, log2_q-i+1); j++) {
+                        coll_flags_t val = 1;
+                        if (((me-1)%(2*s)) < s) {
+                            proc_id = leader_set[me+s-1];
+                        } else {
+                            proc_id = leader_set[me-s-1];
+                        }
+
+                        comm_nbi_write(proc_id,
+                            &current_team->allreduce_sync[2*(i+j-2)+bufid],
+                            &val, sizeof(val));
+
+                        s = s * 2;
                     }
+                }
+
+                for (j = 1; j <= MIN(nbufs1, log2_q-i+1); j++) {
+                    int partner;
                     k1 = (j-1)*(sz+1)+1;
                     k2 = j*(sz+1);
-                    proc_id = partners[j-1] - 1;
+
+                    if (((me-1)%(2*step)) < step) {
+                        partner = me+step;
+                    } else {
+                        partner = me-step;
+                    }
+
+                    proc_id = leader_set[partner-1];
+
+                    if (i > 1) {
+                        /* subsequent rounds, wait for notification signal
+                         * from partner */
+
+                        comm_poll_char_while_zero(
+                            &current_team->allreduce_sync[2*(i+j-2)+bufid]);
+                        current_team->allreduce_sync[2*(i+j-2)+bufid] = 0;
+                    }
 
                     if (enable_collectives_use_canary) {
 
@@ -4288,30 +5691,83 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
 
                     }
 
-
                     /* poll on flag */
                     comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
-                    ((char *)work_buffers)[(k2-1)*elem_size] = 0;
+
+                    ((char*)work_buffers)[(k2-1)*elem_size] = 0;
 
                     /* reduce:
                      *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
                      */
 
                     perform_udr(opr, base_buffer,
+                                &((char*)work_buffers)[(k1-1)*elem_size],
+                                sz, elem_size, *charlen, type);
+
+                    step = step * 2;
+                }
+
+            }
+        } else if (me <= q && nbufs1 == 0) {
+            step = 1;
+            for (i = 1; i <= log2_q; i += 1) {
+                k1 = 1;
+                k2 = sz+1;
+
+                if (((me-1)%(2*step)) < step) {
+                    proc_id = leader_set[me+step-1];
+                } else {
+                    proc_id = leader_set[me-step-1];
+                }
+
+                int image_id = proc_id + 1;
+                comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+                if (enable_collectives_use_canary) {
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size+1 );
+
+                } else {
+
+                    comm_write_x( proc_id,
+                            &((char*)work_buffers)[(k1-1)*elem_size],
+                            &((char*)base_buffer)[0],
+                            sz*elem_size );
+
+                    comm_nbi_write( proc_id,
+                            &((char*)work_buffers)[(k2-1)*elem_size],
+                            &((char*)base_buffer)[sz*elem_size],
+                            1 );
+
+                }
+
+                /* poll on flag */
+                comm_poll_char_while_zero(&((char*)work_buffers)[(k2-1)*elem_size]);
+
+                ((char*)work_buffers)[(k2-1)*elem_size] = 0;
+
+                /* reduce:
+                 *   work_buf(1:sz) = work_buf(1:sz) + work_buf(k1:k2-1)
+                 */
+
+                perform_udr(opr, base_buffer,
                             &((char*)work_buffers)[(k1-1)*elem_size],
                             sz, elem_size, *charlen, type);
-                }
+
+                step = step * 2;
             }
         }
-
 
         /* first r processes put values to last r processes */
         if (me <= r) {
             partner = me + q;
             proc_id = leader_set[partner-1];
 
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+            comm_poll_char_while_zero(current_team->reduce_flag);
+            *(current_team->reduce_flag) = 0;
 
             if (enable_collectives_use_canary) {
 
@@ -4338,8 +5794,10 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
             partner = me - q;
             proc_id = leader_set[partner-1];
             ((char*)base_buffer)[sz*elem_size] = 0;
-            int image_id = proc_id+1;
-            comm_sync_images(&image_id, 1, NULL, 0, NULL, 0);
+
+            /* notify sender that I'm ready to receive in base buffer */
+            comm_nbi_write(proc_id, current_team->reduce_flag, &val,
+                           sizeof(val));
 
             /* poll on flag */
             comm_poll_char_while_zero(&((char*)base_buffer)[sz*elem_size]);
@@ -4351,24 +5809,31 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
 #if defined(GASNET)
     if (is_leader) {
         int i;
-        *(current_team->intranode_collflags[0]) = intranode_count-1;
+        /* NOTE: assuming that intranode_count doesn't exceed 256! */
+        *(current_team->allreduce_flag) = intranode_count-1;
         for (i = 1; i < intranode_count; i++) {
-            *(current_team->intranode_collflags[i]) = 1;
+            int proc_id = current_team->intranode_set[i+1];
+            coll_flags_t *flag = comm_get_sharedptr(current_team->allreduce_flag,
+                                                    proc_id);
+            *flag = 1;
         }
 
         /* wait for non-leaders to finish reading buffer */
-        comm_poll_char_while_nonzero(current_team->intranode_collflags[0]);
+        comm_poll_char_while_nonzero(current_team->allreduce_flag);
     } else {
-        int my_leader_image = current_team->intranode_set[1] + 1;
+        int leader_proc_id = current_team->intranode_set[1];
+        coll_flags_t *leader_flag = comm_get_sharedptr(current_team->allreduce_flag,
+                                                       leader_proc_id);
 
         /* poll on flag */
-        comm_poll_char_while_zero(current_team->intranode_collflags[0]);
-        comm_read(my_leader_image-1, &((char*)base_buffer)[0],
+        comm_poll_char_while_zero(current_team->allreduce_flag);
+
+        comm_read(leader_proc_id, &((char*)base_buffer)[0],
                   &((char*)base_buffer)[0], sz*elem_size);
-        *(current_team->intranode_collflags[0]) = 0;
-        SYNC_FETCH_AND_ADD(
-            (barrier_flags_t *)current_team->intranode_collflags[1],
-            -1);
+
+        *(current_team->allreduce_flag) = 0;
+
+        SYNC_FETCH_AND_ADD((coll_flags_t *)leader_flag, -1);
     }
 #else
     if (is_leader) {
@@ -4387,9 +5852,6 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
 
     memcpy(source, base_buffer, sz*elem_size);
 
-    free(partners);
-    free(pot_partners);
-
     if (is_leader) {
       free(local_images);
     }
@@ -4397,14 +5859,17 @@ static void co_reduce_to_all_2level__(void *source, int *size, int *elem_size_p,
     if (base_buffer_alloc) {
         coarray_deallocate_(base_buffer, NULL);
     } else if (work_buffers_alloc) {
+        memset(base_buffer, 0, (sz+1)*elem_size);
         coarray_deallocate_(work_buffers, NULL);
+    } else {
+        memset(base_buffer, 0, (num_bufs+1)*(sz+1)*elem_size);
     }
+
+    current_team->allreduce_bufid = 1 - bufid;
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
-
-#endif
 
 
 void CO_REDUCE__(void *source, void *opr, INTEGER4 *result_image,
@@ -4446,9 +5911,18 @@ void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
 #ifdef MPI_AVAIL
     MPI_Datatype dtype;
 #endif
+    void *collectives_buf;
+    size_t collectives_bufsz;
 
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "entry");
     PROFILE_FUNC_ENTRY(CAFPROF_REDUCE);
+
+    if (current_team != NULL) {
+      collectives_buf = collectives_buffer[0];
+      collectives_bufsz = collectives_bufsize;
+    } else {
+      Error("current_team is not set!");
+    }
 
     me = _this_image;
     p = _num_images;
@@ -4535,8 +6009,8 @@ void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
      */
 
     char *b;
-    if (collectives_bufsize >= (p*block_size)) {
-        b = (char *)collectives_buffer;
+    if (collectives_bufsz >= (p*block_size)) {
+        b = (char *)collectives_buf;
     } else {
         b = malloc(p*block_size);
     }
@@ -4555,11 +6029,12 @@ void co_gather_to_all__(void *source, void *dest, int size, int elem_size)
            (me-1)*block_size);
 
 
-    if (collectives_bufsize < (p*block_size)) {
+    if (collectives_bufsz < (p*block_size)) {
         free(b);
+    } else {
+        memset(b, 0, p*block_size);
     }
 
     PROFILE_FUNC_EXIT(CAFPROF_REDUCE);
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "exit");
 }
-

@@ -13900,6 +13900,7 @@ static void linearize_pe_dims(int	pe_dim_list_idx,
    int		plus_idx;
    opnd_type dope_opnd;
    int      is_dope = 0;
+   int      rnk = 0;
 
    OPND_FLD(dope_opnd) = AT_Tbl_Idx;
    OPND_IDX(dope_opnd) = attr_idx;
@@ -13910,6 +13911,7 @@ static void linearize_pe_dims(int	pe_dim_list_idx,
 
    if (BD_ARRAY_CLASS(bd_idx) == Deferred_Shape) {
        is_dope = 1;
+       rnk = BD_RANK(ATD_ARRAY_IDX(attr_idx));
    }
 
    list_idx = pe_dim_list_idx;
@@ -13937,7 +13939,7 @@ static void linearize_pe_dims(int	pe_dim_list_idx,
 
    if (is_dope) {
        opnd_type lb_opnd;
-       gen_dv_access_low_bound(&lb_opnd, &dope_opnd, 1);
+       gen_dv_access_low_bound(&lb_opnd, &dope_opnd, rnk+1);
        IR_FLD_R(minus_idx) = OPND_FLD(lb_opnd);
        IR_IDX_R(minus_idx) = OPND_IDX(lb_opnd);
    } else {
@@ -13952,7 +13954,7 @@ static void linearize_pe_dims(int	pe_dim_list_idx,
 
    list_idx = IL_NEXT_LIST_IDX(list_idx);
 
-   for (i = 2; i <= BD_RANK(bd_idx); i++) {
+   for (i = rnk+2; i <= rnk+BD_RANK(bd_idx); i++) {
       NTR_IR_TBL(plus_idx);
       IR_OPR(plus_idx) = Plus_Opr;
       IR_TYPE_IDX(plus_idx) = INTEGER_DEFAULT_TYPE;

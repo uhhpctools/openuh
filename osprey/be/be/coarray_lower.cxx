@@ -2388,50 +2388,63 @@ WN * Coarray_Symbols_Lower(PU_Info *current_pu, WN *pu)
         WN_TREE_CONTAINER<POST_ORDER> ::iterator wipost;
         for (wipost = wcpost.begin(); wipost != wcpost.end(); ++wipost) {
             WN *blk_node, *stmt_node;
+            WN *parent;
             WN *wn = wipost.Wn();
             ST *st1;
             TY_IDX ty;
             WN_OFFSET offset = 0;
-            switch (WN_operator(wn)) {
-            case OPR_RETURN:
-                if (func_exit_stmts) {
-                    WN *insert_wnx;
-                    insert_wnx = WN_first(func_exit_stmts);
-                    while (insert_wnx) {
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, WN_COPY_Tree(insert_wnx));
-                        insert_wnx = WN_next(insert_wnx);
-                    }
-                }
-                break;
-              case OPR_LDA:
-                  st1 = WN_st(wn);
-                  ty  = WN_ty(wn);
-                  offset = WN_offset(wn);
-                  if (st1 && is_coarray_type(ST_type(st1))) {
-                      ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
-                          ST_sclass(st1) == SCLASS_DGLOBAL) {
-                          save_coarray_replace =
-                              common_save_coarray_symbol_map[st1];
-                      } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
-                          save_coarray_replace =
-                              save_coarray_symbol_map[st1];
-                      } else {
-                          continue;
-                      }
-                      Is_True(save_coarray_replace,
-                        ("New symbol for save coarray was not created yet"));
+            parent = wipost.Get_parent_wn();
 
-                      wipost.Replace(
-                              WN_Add( MTYPE_U8,
-                                 WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
-                                      0, save_coarray_replace, ty),
-                                 WN_Intconst(MTYPE_U8, offset))
-                              );
-                      WN_Delete(wn);
-                  } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
-                      ST *targptr_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON ||
+            /* if its a statement, set stmt_node and also set blk_node to
+             * parent if the parent is a block */
+            if ((OPCODE_is_stmt(WN_opcode(wn)) ||
+                        OPCODE_is_scf(WN_opcode(wn)) &&
+                        WN_operator(wn) != OPR_BLOCK &&
+                        WN_operator(wn) != OPR_FUNC_ENTRY)) {
+                stmt_node = wn;
+                if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
+            }
+
+            switch (WN_operator(wn)) {
+                case OPR_RETURN:
+                    if (func_exit_stmts) {
+                        WN * insert_wnx;
+                        insert_wnx = WN_first(func_exit_stmts);
+                        while (insert_wnx) {
+                            WN_INSERT_BlockBefore(blk_node, stmt_node, WN_COPY_Tree(insert_wnx));
+                            insert_wnx = WN_next(insert_wnx);
+                        }
+                    }
+                    break;
+                case OPR_LDA:
+                    st1 = WN_st(wn);
+                    ty  = WN_ty(wn);
+                    offset = WN_offset(wn);
+                    if (st1 && is_coarray_type(ST_type(st1))) {
+                        ST *save_coarray_replace;
+                        if (ST_sclass(st1) == SCLASS_COMMON ||
+                                ST_sclass(st1) == SCLASS_DGLOBAL) {
+                            save_coarray_replace =
+                                common_save_coarray_symbol_map[st1];
+                        } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
+                            save_coarray_replace =
+                                save_coarray_symbol_map[st1];
+                        } else {
+                            continue;
+                        }
+                        Is_True(save_coarray_replace,
+                                ("New symbol for save coarray was not created yet"));
+
+                        wipost.Replace(
+                                WN_Add( MTYPE_U8,
+                                    WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
+                                        0, save_coarray_replace, ty),
+                                    WN_Intconst(MTYPE_U8, offset))
+                                );
+                        WN_Delete(wn);
+                    } else if (st1 && ST_is_f90_target(st1) && !is_dope(ST_type(st1))) {
+                        ST *targptr_replace;
+                        if (ST_sclass(st1) == SCLASS_COMMON ||
                           ST_sclass(st1) == SCLASS_DGLOBAL) {
                           targptr_replace =
                               common_save_target_symbol_map[st1];

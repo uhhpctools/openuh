@@ -4063,6 +4063,16 @@ boolean final_arg_work(opnd_type	*list_opnd,
       if (i==1 && strcmp(AT_OBJ_NAME_PTR(spec_idx),"_SYNC_IMAGES")==0)
           d_type = Intrin_Dope_Dummy;
 
+      /* the arg_assoc_tble, used below, assumes that all intrinsics with a
+       * dope vector argument are not implemented as Fortran
+       * subroutines/functions with assumed shape arrays. This is the case for
+       * the predefed reduce intrinsics, so modifying the d_type here to make
+       * this explicit. */
+      if (AT_IS_INTRIN(spec_idx) &&
+          ATP_INTRIN_ENUM(spec_idx) == Co_predef_reduce_Intrinsic &&
+          d_type == Intrin_Dope_Dummy) {
+          d_type = Assumed_Shape_Dummy;
+      }
 #endif
 
       association = arg_assoc_tbl[a_type][d_type];

@@ -45,16 +45,25 @@ typedef struct team {
     long current_num_images;
     long *codimension_mapping;
     barrier_flags_t **intranode_barflags;
-    coll_flags_t **intranode_collflags;
     barrier_data_t barrier;
-    struct team *parent;
+    coll_flags_t *coll_syncflags;
     long *intranode_set;
     long *leader_set;
     /* end of first cache line */
+    coll_flags_t *allreduce_sync;
+    coll_flags_t *reduce_flag;
+    coll_flags_t *bcast_flag;
+    coll_flags_t *allreduce_flag;
+    coll_flags_t *reduce_go;
+    coll_flags_t *bcast_go;
+    struct team *parent;
     int team_id;
     int leaders_count;
-    int defined;
-    int activated;
+    char defined;
+    char activated;
+    char allreduce_bufid;
+    char reduce_bufid;
+    char bcast_bufid;
     int depth;
     unsigned long current_log2_images;  //log2_procs
     unsigned long current_rem_images;   //rem_procs

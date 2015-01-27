@@ -14726,17 +14726,23 @@ static void translate_uh_dv_component(opnd_type           *result_opnd,
       ATD_TYPE_IDX(ptee_idx) = ATD_TYPE_IDX(dv_idx);
       ATD_PTR_IDX(ptee_idx) = ptr_idx;
 
+      /* TODO: I suspect there is somethin bad going on somewhere in this routine,
+       * because I'm getting SEGV errors unless I use the temp t variable
+       * for assignment from capture_bounds_from_dv and
+       * capture_pe_bounds_from_dv. Need to track down this bug.
+       */
+
       if (ATD_ARRAY_IDX(tmp_dv_idx) != NULL_IDX) {
          int t = capture_bounds_from_dv(tmp_dv_idx, line, col);
          ATD_ARRAY_IDX(ptee_idx) =  t;
       }
 
       if (ATD_IM_A_DOPE(pe_dim_ref_attr)) {
-          ATD_PE_ARRAY_IDX(ptee_idx) = capture_pe_bounds_from_dv(
-                                                          pe_dim_ref_attr,
-                                                          &opnd2,
-                                                          line,
-                                                          col);
+          int t = capture_pe_bounds_from_dv(pe_dim_ref_attr,
+                                            &opnd2,
+                                            line,
+                                            col);
+          ATD_PE_ARRAY_IDX(ptee_idx) = t;
       } else {
           ATD_PE_ARRAY_IDX(ptee_idx) = ATD_PE_ARRAY_IDX(pe_dim_ref_attr);
       }

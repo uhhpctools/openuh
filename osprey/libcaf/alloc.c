@@ -712,7 +712,10 @@ static void empty_shared_memory_slot(struct shared_memory_slot *slot,
 {
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
+    /* set to empty, and zero out the memory */
     slot->feb = 0;
+    memset(slot->addr, 0, slot->size);
+
     if (slot->prev && (slot->prev->feb == 0) && slot->next
         && (slot->next->feb == 0)) {
         join_3_shared_memory_slots(slot, common_slot_p);
