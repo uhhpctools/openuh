@@ -10493,6 +10493,30 @@ static void parse_open_acc_clauses(open_acc_directive_type directive)
 				
                break;
 
+            case Tok_Open_Acc_Dir_Seq:
+               if (! open_acc_clause_allowed[directive][Independent_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "seq", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only seq clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_SEQ_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "SEQ", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+			   IL_LINE_NUM(list_array[OPEN_ACC_SEQ_IDX]) = TOKEN_LINE(token);
+			   IL_COL_NUM(list_array[OPEN_ACC_SEQ_IDX]) = TOKEN_COLUMN(token);
+			   IL_FLD(list_array[OPEN_ACC_SEQ_IDX]) = CN_Tbl_Idx;
+			   IL_IDX(list_array[OPEN_ACC_SEQ_IDX]) = CN_INTEGER_ZERO_IDX;
+				
+               break;
+
             case Tok_Open_Acc_Dir_Independent:
                if (! open_acc_clause_allowed[directive][Independent_Acc_Clause]) {
                   PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
@@ -11087,6 +11111,42 @@ static void parse_open_acc_clauses(open_acc_directive_type directive)
 					IL_COL_NUM(list_array[OPEN_ACC_ASYNC_IDX]) = TOKEN_COLUMN(token);
 					IL_FLD(list_array[OPEN_ACC_ASYNC_IDX]) = CN_Tbl_Idx;
 					IL_IDX(list_array[OPEN_ACC_ASYNC_IDX]) = CN_INTEGER_NEG_ONE_IDX;
+               }
+               break;
+
+            case Tok_Open_Acc_Dir_Collapse:
+               if (! open_acc_clause_allowed[directive][Collapse_Acc_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1733, Error, TOKEN_COLUMN(token),
+                           "Collapse", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one Collapse clause allowed */
+
+               if (IL_IDX(list_array[OPEN_ACC_COLLAPSE_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "COLLAPSE", open_acc_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  NEXT_LA_CH;
+                  parse_expr(&opnd);
+
+                  COPY_OPND(IL_OPND(list_array[OPEN_ACC_COLLAPSE_IDX]), opnd);
+
+                  if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                  }
+               }
+               else {
+					parse_err_flush(Find_EOS, "(");
                }
                break;
 

@@ -534,7 +534,7 @@ Process_Command_Line (INT argc, char **argv)
 				else if(!strncmp( cp, "ccarch:", 7 ))
                 {
                         char* strArchType = cp+7;
-			UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;
+			UHACC_Arch_Type = ACC_ARCH_TYPE_APU;
                         if(!strcmp( strArchType, "nvidia" ))
                         {
                                 UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;

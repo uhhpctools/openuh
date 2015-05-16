@@ -105,15 +105,15 @@
 #endif
 #include "alias_analyzer.h"
 
+  
 
 /*****************************************/
-static void Load_Kernel_Parameters(WN* wn_kernel_call)
+static void Push_Kernel_Parameters(WN* wn_replaceBlock, BOOL bParallel)
 {
 	WN* wnx, *wn;
 	int parm_id = 0;
 	int i=0;
 	
-	int iarg_no = 0;
 	
 	//WN_Set_Call_IS_KERNEL_LAUNCH(wn);
 	//first copyin, then copyout, then copy, then param pragma
@@ -126,19 +126,98 @@ static void Load_Kernel_Parameters(WN* wn_kernel_call)
 		TY_IDX ty = ST_type(hostST);
 		TY_KIND kind = TY_kind(ty);//ST_name(old_st)
 		TYPE_ID typeID;
-		if(kind == KIND_POINTER || 
-			kind == KIND_ARRAY ||
-			(kind == KIND_STRUCT && F90_ST_Has_Dope_Vector(hostST)) ||
-			(kind == KIND_SCALAR && acc_kernelLaunchParamList[i].st_device!=NULL))
+		if(kind == KIND_POINTER || kind == KIND_ARRAY)
 		{		
-			//wnx = WN_Lda( Pointer_type, 0, acc_kernelLaunchParamList[i].st_device);
-			wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
-							ST_type(acc_kernelLaunchParamList[i].st_device));
+			INT64 acc_dtype = 
+					GetKernelParamType(acc_kernelLaunchParamList[i].st_device);
+			wn = WN_Create(OPC_VCALL, 2);
+			WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_KERNELPARAMPUSH_POINTER);
+			
+			WN_Set_Call_Non_Data_Mod(wn);
+			WN_Set_Call_Non_Data_Ref(wn);
+			WN_Set_Call_Non_Parm_Mod(wn);
+			WN_Set_Call_Non_Parm_Ref(wn);
+			WN_Set_Call_Parm_Ref(wn);
+			WN_linenum(wn) = acc_line_number;
+			
+	  		//wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
+			//					ST_type(acc_kernelLaunchParamList[i].st_device));
+			
+			wnx = WN_Lda( Pointer_type, 0, acc_kernelLaunchParamList[i].st_device);
 			//First, pointer
-		    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(Pointer_type, wnx, 
+		    WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
 		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
 
 			
+			char* strname = (char *) alloca ( strlen(ST_name(acc_kernelLaunchParamList[i].st_device)) + 10);
+			sprintf ( strname, "%s \0", ST_name(acc_kernelLaunchParamList[i].st_device));
+			WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
+			WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_strname, 
+								 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
+			
+			//Attach two the replacement block
+			WN_INSERT_BlockLast(wn_replaceBlock, wn);
+		}
+		else if(kind == KIND_STRUCT && F90_ST_Has_Dope_Vector(hostST))
+		{		
+			wn = WN_Create(OPC_VCALL, 2);
+			WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_KERNELPARAMPUSH_POINTER);
+			
+			WN_Set_Call_Non_Data_Mod(wn);
+			WN_Set_Call_Non_Data_Ref(wn);
+			WN_Set_Call_Non_Parm_Mod(wn);
+			WN_Set_Call_Non_Parm_Ref(wn);
+			WN_Set_Call_Parm_Ref(wn);
+			WN_linenum(wn) = acc_line_number;
+			
+	  		//wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
+			//					ST_type(acc_kernelLaunchParamList[i].st_device));
+			//TY_IDX alignty = F90_ST_Get_Dope_Vector_etype(hostST);
+			wnx = WN_Lda( Pointer_type, 0, acc_kernelLaunchParamList[i].st_device);
+			
+			//First, pointer
+		    WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
+		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+
+			
+			char* strname = (char *) alloca ( strlen(ST_name(acc_kernelLaunchParamList[i].st_device)) + 10);
+			sprintf ( strname, "%s \0", ST_name(acc_kernelLaunchParamList[i].st_device));
+			WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
+			WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_strname, 
+								 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
+			
+			//Attach two the replacement block
+			WN_INSERT_BlockLast(wn_replaceBlock, wn);
+		}
+		else if(kind == KIND_SCALAR && acc_kernelLaunchParamList[i].st_device != NULL)
+		{		
+			INT64 acc_dtype = 
+					GetKernelParamType(acc_kernelLaunchParamList[i].st_device);
+			wn = WN_Create(OPC_VCALL, 2);
+			WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_KERNELPARAMPUSH_POINTER);
+			
+			WN_Set_Call_Non_Data_Mod(wn);
+			WN_Set_Call_Non_Data_Ref(wn);
+			WN_Set_Call_Non_Parm_Mod(wn);
+			WN_Set_Call_Non_Parm_Ref(wn);
+			WN_Set_Call_Parm_Ref(wn);
+			WN_linenum(wn) = acc_line_number;
+			
+	  		//wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
+			//					ST_type(acc_kernelLaunchParamList[i].st_device));
+			
+			wnx = WN_Lda( Pointer_type, 0, acc_kernelLaunchParamList[i].st_device);
+			//First, pointer
+		    WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
+		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+			
+			char* strname = (char *) alloca ( strlen(ST_name(acc_kernelLaunchParamList[i].st_device)) + 10);
+			sprintf ( strname, "%s \0", ST_name(acc_kernelLaunchParamList[i].st_device));
+			WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
+			WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_strname, 
+								 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
+			//Attach two the replacement block
+			WN_INSERT_BlockLast(wn_replaceBlock, wn);
 		}
 		else if(kind == KIND_SCALAR && acc_kernelLaunchParamList[i].st_device == NULL)
 		{
@@ -148,24 +227,42 @@ static void Load_Kernel_Parameters(WN* wn_kernel_call)
 			if(itor != acc_reduction_tab_map.end())
 				continue;
 			//////////////////////////////////////////////////
+			wn = WN_Create(OPC_VCALL, 2);
+			WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_KERNELPARAMPUSH_SCALAR);
 			
-			//wnx = WN_Lda( Pointer_type, 0, old_st);
-			wnx = WN_Ldid(TY_mtype(ST_type(old_st)), 
-					0, old_st, ST_type(old_st));
+			WN_Set_Call_Non_Data_Mod(wn);
+			WN_Set_Call_Non_Data_Ref(wn);
+			WN_Set_Call_Non_Parm_Mod(wn);
+			WN_Set_Call_Non_Parm_Ref(wn);
+			WN_Set_Call_Parm_Ref(wn);
+			WN_linenum(wn) = acc_line_number;
+			
+	  		//wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
+			//					ST_type(acc_kernelLaunchParamList[i].st_device));
+			
+			wnx = WN_Lda( Pointer_type, 0, old_st);
 			//First, pointer
-		    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(TY_mtype(ST_type(old_st)), wnx, 
-		                       WN_ty(wnx), WN_PARM_BY_VALUE);
+		    WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
+		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+			
+			char* strname = (char *) alloca ( strlen(ST_name(acc_kernelLaunchParamList[i].st_host)) + 10);
+			sprintf ( strname, "%s \0", ST_name(acc_kernelLaunchParamList[i].st_host));
+			WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
+			WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_strname, 
+								 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
+			
+			//Attach two the replacement block
+			WN_INSERT_BlockLast(wn_replaceBlock, wn);
 		}
 		else
 		{
 			Is_True(FALSE, ("Wrong Kernel Parameter Kind Type. in Push_Kernel_Parameters 1"));
 		}
-		iarg_no ++;
 	}
 	//launch the reduction parameters
 	i=0;
 	//Only parallel region doing the reduction this way
-	for(i=0; i<acc_additionalKernelLaunchParamList.size(); i++)
+	for(i=0; (bParallel && (i<acc_additionalKernelLaunchParamList.size())); i++)
 	{
 		KernelParameter parmList = acc_additionalKernelLaunchParamList[i];
 		////////////////////////////////////////////////////////////////////////////
@@ -173,66 +270,112 @@ static void Load_Kernel_Parameters(WN* wn_kernel_call)
 		TY_IDX ty = ST_type(st_device);
 		TY_KIND kind = TY_kind(ty);//ST_name(old_st)
 		TYPE_ID typeID;
-		if(kind == KIND_POINTER)
-		{			
-	  		//wnx = WN_Lda(Pointer_type, 0, st_device);
-			wnx = WN_Ldid(Pointer_type, 0, st_device, ST_type(st_device));
+		if(kind == KIND_POINTER || kind == KIND_ARRAY)
+		{
+			wn = WN_Create(OPC_VCALL, 2 );
+			WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_KERNELPARAMPUSH_POINTER);
+			
+			WN_Set_Call_Non_Data_Mod(wn);
+			WN_Set_Call_Non_Data_Ref(wn);
+			WN_Set_Call_Non_Parm_Mod(wn);
+			WN_Set_Call_Non_Parm_Ref(wn);
+			WN_Set_Call_Parm_Ref(wn);
+			WN_linenum(wn) = acc_line_number;
+			
+	  		wnx = WN_Lda(Pointer_type, 0, st_device);
 			//First, pointer
-			WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(Pointer_type, wnx, 
+			WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
 							 		WN_ty(wnx), WN_PARM_BY_VALUE);
+			
+			char* strname = (char *) alloca ( strlen(ST_name(st_device)) + 10);
+			sprintf ( strname, "%s \0", ST_name(st_device));
+			WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
+			WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_strname, 
+								 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
+			//Attach two the replacement block
+			WN_INSERT_BlockLast(wn_replaceBlock, wn);
 		}
 		else
 		{
 			Is_True(FALSE, ("Wrong Kernel Parameter Kind Type in Push_Kernel_Parameters 2."));
 		}
-		iarg_no ++;
 	}
 }
 
-WN* ACC_Launch_HSA_Kernel(int index, WN* wn_replace_block)
+// A VLA that is scoped within a parallel construct
+// will have its ALLOCA generated by the front end,
+// and it doesn't need a new ALLOCA when localized.
+
+static vector<ST*> acc_inner_scope_vla;
+
+static void 
+ACC_Gather_Inner_Scope_Vlas(WN *wn)
 {
+  if (WN_operator(wn) == OPR_STID && WN_operator(WN_kid0(wn)) == OPR_ALLOCA) {
+    acc_inner_scope_vla.push_back(WN_st(wn));    
+  }
+  else if (WN_operator(wn) == OPR_BLOCK) {
+    for (WN *kid = WN_first(wn); kid; kid = WN_next(kid)) {
+      ACC_Gather_Inner_Scope_Vlas(kid);
+    }
+  }
+  else {
+    for (INT kidno = 0; kidno < WN_kid_count(wn); kidno++) {
+      ACC_Gather_Inner_Scope_Vlas(WN_kid(wn, kidno));
+    }
+  }
+}
+
+
+/****************************************************/
+WN* ACC_LaunchKernel_nvidia (int index, WN* wn_replace_block, BOOL bParallel)
+{	
 	WN * wn;
 	WN * wnx;
 	WN * l;
 	//int iParm = device_copyout.size() + device_copyin.size() + acc_parms_count;
 	UINT32 i = 0;
 	int parm_id = 0;
-	int arg_num = acc_kernelLaunchParamList.size() 
-						+ acc_additionalKernelLaunchParamList.size() + 1;
-	///////////////////////////////////////////////////////////////////////////
-	
-	char* localname = (char *) alloca(256);
-	sprintf ( localname, "__accr_dim_%d", acc_reg_tmp_count);
-	acc_reg_tmp_count++;
-	TY_IDX ty_p = Make_Pointer_Type(Be_Type_Tbl(MTYPE_V));
-	ST* st_dim = New_ST( CURRENT_SYMTAB );
-	ST_Init(st_dim,
-		Save_Str( localname ),
-		CLASS_VAR,
-		SCLASS_AUTO,
-		EXPORT_LOCAL,
-		ty_p);
-	WN* wn_init_dim = ACC_Gen_Dim_Init_Call(st_dim);
-	WN_INSERT_BlockLast(wn_replace_block, wn_init_dim);
-	///////////////////////////////////////////////////////////////////////////
-	
-	wn = WN_Create(OPC_VCALL, arg_num);
-	WN_st_idx(wn) = ST_st_idx(*(acc_kernel_functions_st[index]));
 	//make the kernels parameters ready first
-	Load_Kernel_Parameters(wn);
-	//setup one more parameter for launch kernel
+	Push_Kernel_Parameters(wn_replace_block, bParallel);
 
-	
-	wnx = WN_Ldid( Pointer_type, 0, st_dim, ST_type(st_dim));
-	WN_kid(wn, arg_num-1) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-	
+	//Then launch the kernel module
+	//create whirl CALL
+	wn = WN_Create(OPC_VCALL, 3 );
+	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_LAUNCHKERNEL);
+
+	WN_Set_Call_IS_KERNEL_LAUNCH(wn);
+	WN_Set_Call_Non_Data_Mod(wn);
+	WN_Set_Call_Non_Data_Ref(wn);
+	WN_Set_Call_Non_Parm_Mod(wn);
+	WN_Set_Call_Non_Parm_Ref(wn);
+	WN_Set_Call_Parm_Ref(wn);
+	WN_linenum(wn) = acc_line_number;
+	//which kernel function
+	char* kernelname = ST_name(acc_kernel_functions_st[index]);
+	WN* wn_kernelname = WN_LdaString(kernelname,0, strlen(kernelname)+1);
+	WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wn_kernelname, 
+						 		WN_ty(wn_kernelname), WN_PARM_BY_VALUE);
+	//which PTX file	
+    char* srcfname = Last_Pathname_Component(Src_File_Name);   
+    char* ptxfname = New_Extension ( srcfname, ".w2c.ptx");
+	WN* wn_ptxname = WN_LdaString(ptxfname,0, strlen(ptxfname)+1);
+	WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_ptxname, 
+						 		WN_ty(wn_ptxname), WN_PARM_BY_VALUE);
+	if(acc_AsyncExpr)
+	{
+		WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
+			  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	}
+	else 
+		WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -2), 
+			  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
 	WN_INSERT_BlockLast(wn_replace_block, wn);
 	return wn;
 }
 
 WN * 
-lower_acc_apu ( WN * block, WN * node, LOWER_ACTIONS actions )
+lower_acc_nvidia ( WN * block, WN * node, LOWER_ACTIONS actions )
 {
   INT32 i;			/* Temporary index */
   INT32 vsize;			/* Var_table size */
@@ -267,9 +410,8 @@ lower_acc_apu ( WN * block, WN * node, LOWER_ACTIONS actions )
   WN* wn_replace_block = NULL;  
   ACCP_process_type acc_process_type;
 
-
+  acc_target_arch = ACC_ARCH_TYPE_NVIDIA;
   /* Validate input arguments. */
-  acc_target_arch = ACC_ARCH_TYPE_APU;
 
   Is_True(actions & LOWER_ACC,
 	  ("actions does not contain LOWER_ACC"));
@@ -598,7 +740,41 @@ lower_acc_apu ( WN * block, WN * node, LOWER_ACTIONS actions )
     return (return_nodes);
 }
 
+/*
+static BB_NODE* Find_region_start_bb(CFG* cfg)
+{
+	BB_NODE* bb = cfg->First_bb();
+	while(bb && bb->Kind() != BB_REGIONSTART)
+	{
+		bb = bb->Next();
+	}
+	return bb;
+}
 
+void Check_XPragma_stmt_list_wn(CFG* cfg)
+{
+  BB_NODE *bb = Find_region_start_bb(cfg);
+  if(bb == NULL)
+  	return;
+  //STMT_CONTAINER stmt_cont(bb->Firststmt(), bb->Laststmt());
+  STMT_LIST *stmt_list = bb->Stmtlist();
+  STMTREP_ITER stmt_iter(stmt_list);
+  STMTREP  *tmp;
+  FOR_ALL_NODE(tmp, stmt_iter, Init()) {
+    OPERATOR crepOperator, wnOpr = tmp->Opr();
+    CODEREP* crep;
+    if(wnOpr == OPR_XPRAGMA)
+    {
+    	crep = tmp->Rhs();
+    	CODEKIND ckind = crep->Kind();
+    	//crepOperator = crep->Opr();
+    	int test = 1;
+    	test ++;
+    }
+  }
+}
+*/
+ 
 
 static void ACC_Blank()
 {

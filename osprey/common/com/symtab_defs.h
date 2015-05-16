@@ -311,6 +311,7 @@ public:
 
     friend std::ostream& operator<<(std::ostream &os, const ST& st);
 	STR_IDX src_fname_idx;
+	mUINT32 acc_shared_size; //for the fixed size, the number of double type
 
 }; // ST
 
@@ -645,6 +646,11 @@ enum TY_PU_FLAGS
 #endif
 };
 
+enum TY_ACC_FLAGS
+{
+    TY_IS_SHARED_MEMORY_TYPE	= 0x00000001,	// return value through first param
+};
+
 class TY
 {
 public:
@@ -678,7 +684,7 @@ public:
     } u2;
 	
     ST_IDX vtable;
-
+	UINT32 acc_flags;
     // access function for unions
 
     FLD_IDX Fld () const		{ return u1.fld; }

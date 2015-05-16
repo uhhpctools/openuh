@@ -168,13 +168,22 @@ Set_ST_sym_class (ST& s, ST_CLASS c)	{ s.sym_class = c; }
 
 #ifdef __UH_OPENACC_1_0
 inline ST_ACC_TYPE
-ST_acc_type_class (ST& s)	{ return s.acc_type; }
+ST_acc_type_class (const ST& s)	{ return s.acc_type; }
 inline void
 Set_ST_acc_type_class (ST& s, ST_ACC_TYPE act)	{ s.acc_type= act; }
 inline ST_ACC_TYPE
-ST_acc_type_class (ST* s)	{ return s->acc_type; }
+ST_acc_type_class (const ST* s)	{ return s->acc_type; }
 inline void
 Set_ST_acc_type_class (ST* s, ST_ACC_TYPE act)	{ s->acc_type= act; }
+
+inline UINT32
+ST_acc_shared_array_size (const ST& s)	{ return s.acc_shared_size; }
+inline void
+Set_ST_acc_shared_array_size (ST& s, UINT32 nsize)	{ s.acc_shared_size = nsize; }
+inline UINT32
+ST_acc_shared_array_size (const ST* s)	{ return s->acc_shared_size; }
+inline void
+Set_ST_acc_shared_array_size (ST* s, UINT32 nsize)	{ s->acc_shared_size = nsize; }
 
 inline BOOL
 ST_is_ACC_global_data (const ST& s)            { return s.acc_flags & ST_IS_ACC_GLOBAL_DATA;}
@@ -1528,6 +1537,19 @@ inline void
 Clear_TY_is_coarray (TY_IDX tyi)  { Clear_TY_is_coarray(Ty_Table[tyi]); }
 #endif
 
+//for shared memory in cuda/local memory in opencl during OpenACC ir transformation
+inline BOOL
+TY_is_shared_mem (const TY& ty)		{ return ty.acc_flags & TY_IS_SHARED_MEMORY_TYPE; }
+inline void
+Set_TY_is_shared_mem (TY& ty)		{ ty.acc_flags |= TY_IS_SHARED_MEMORY_TYPE; }
+inline void
+Clear_TY_is_shared_mem (TY& ty)		{ ty.acc_flags &= ~TY_IS_SHARED_MEMORY_TYPE; }
+inline BOOL
+TY_is_shared_mem (const TY_IDX tyi)	{ return TY_is_shared_mem(Ty_Table[tyi]); }
+inline void
+Set_TY_is_shared_mem (TY_IDX tyi)    { Set_TY_is_shared_mem(Ty_Table[tyi]); }
+inline void
+Clear_TY_is_shared_mem (TY_IDX tyi)  { Clear_TY_is_shared_mem(Ty_Table[tyi]); }
 
 
 inline BOOL

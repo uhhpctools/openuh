@@ -458,7 +458,15 @@ typedef enum {
   								the following two pragmas are connect to this dope,
   								The parameter in this pragma shows how many dope dimensions plus start addr*/
   WN_PRAGMA_ACC_CLAUSE_DOPE_START_ADDR,  
-  WN_PRAGMA_ACC_CLAUSE_DOPE_DIM,  
+  WN_PRAGMA_ACC_CLAUSE_DOPE_DIM,
+  WN_PRAGMA_ACC_CLAUSE_GANG_X,    
+  WN_PRAGMA_ACC_CLAUSE_GANG_Y,    
+  WN_PRAGMA_ACC_CLAUSE_GANG_Z, 
+  WN_PRAGMA_ACC_CLAUSE_VECTOR_X,  
+  WN_PRAGMA_ACC_CLAUSE_VECTOR_Y,  
+  WN_PRAGMA_ACC_CLAUSE_VECTOR_Z,   
+  WN_PRAGMA_ACC_CLAUSE_INNEST_LOOP, //this is for scalar replacement inside the innest loop body    
+  WN_PRAGMA_ACC_CLAUSE_TOPLEVEL_LOOP, //this is for the reduction operations which appear in the outter most loop  
   /*****************/
 #ifdef _UH_COARRAYS
   WN_PRAGMA_DEFER_SYNC,		/* defer_sync directive */

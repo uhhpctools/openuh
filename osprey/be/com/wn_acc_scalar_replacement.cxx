@@ -135,6 +135,7 @@ BOOL acc_scalarization_level2_enabled = FALSE;
 BOOL acc_scalarization_level3_enabled = FALSE;
 BOOL acc_ptr_restrict_enabled = FALSE;
 map<ST*, BOOL> acc_const_offload_scalar;
+UINT32 kernel_tmp_licm_count = 0;
 
 
 

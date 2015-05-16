@@ -165,6 +165,10 @@ char* nvcc_path = NULL;
 char* native_cmd = NULL;
 char* native_flags = NULL;
 char* native_path = NULL;
+char* cloc_cmd = NULL;
+char* cloc_path = NULL;
+char* cl_obj_file_path = NULL;
+boolean compiling_opencl = FALSE;
 
 extern void turn_down_opt_level (int new_olevel, char *msg);
 
@@ -1741,6 +1745,64 @@ add_file_args (string_list_t *args, phases_t index)
 		sprintf (buf, "%s/%s.ptx", temp, temp1);
 		add_string(args, buf);
 		break;
+
+	case P_cloc:	
+		if(cloc_cmd != NULL)
+		{
+			temp = cloc_cmd;
+			while(temp)
+			{
+				char* newloc = strchr(temp, ',');
+				if(newloc)
+				{
+					*newloc = '\0';
+					newloc ++;
+				}	
+				sprintf (buf, "%s", temp);
+				temp = newloc;
+				add_string(args, buf);
+			}
+		}
+		if(keep_flag)
+		   add_string(args, "-k");	
+		add_string(args, "-c");
+		add_string(args, "-noglobs");
+		{
+			char* pname = strdup(the_file);
+			//char *cp = strdup(pname) + strlen(pname);
+			int index;
+
+			//while (cp != pname) {
+			//if (*cp == '/') return cp+1;
+			//--cp;
+			//}
+			//if (*cp == '/') return cp+1;
+			//temp = cp;
+			for ( index=strlen(pname)-1; index>=0; index-- ) 
+			{
+			    if ( pname[index] == '/' ) break;	/* Don't touch directory prefixes */
+			    if ( pname[index] == '.' ) 
+				{
+			      pname[index] = 0;
+			      break;
+			    }
+		  	}
+			temp = pname;
+		}
+		//temp = strcat(temp,"w2c.cu");
+		sprintf (buf, "%s_w2c.cl", temp);
+		add_string(args, buf);
+		
+		sprintf (buf, "%s_w2c.o", temp);
+		if(cl_obj_file_path)
+		{
+			free(cl_obj_file_path);
+			cl_obj_file_path = NULL;
+		}
+		cl_obj_file_path = strdup(buf);
+		//add_string(args, buf);
+		break;
+		
 	case P_be:
 #if defined(TARG_NVISA)
 	case P_bec:
@@ -3805,7 +3867,7 @@ run_compiler (int argc, char *argv[])
 			//check if it is necessary to run CUDA files
 			if(phase_order[i] == P_be && compiling_cuda == TRUE)
 			{
-				char *the_file = fix_name_by_phase(source_file, P_nvcc);
+				char* the_file = fix_name_by_phase(source_file, P_nvcc);
  				char* pname = strdup(the_file);
 				int index;
 				buffer_t buf;
@@ -3868,6 +3930,129 @@ run_compiler (int argc, char *argv[])
 					accfeedback_phase ++;
 					goto acc_feedback_startpoint;
 				}
+			}
+			//check if it is necessary to run OpenCL files
+			else if(phase_order[i] == P_be && compiling_opencl == TRUE)
+			{
+				char* the_file = fix_name_by_phase(source_file, P_cloc);
+ 				char* pname = strdup(the_file);
+				int index;
+				buffer_t buf;
+				FILE* file;
+				string_list_t * cloc_args;
+	
+				for ( index=strlen(pname)-1; index>=0; index-- ) 
+				{
+				    if ( pname[index] == '/' ) 
+						break;
+			    	if ( pname[index] == '.' ) 
+				    {
+			      		pname[index] = 0;
+			      		break;
+			    	}
+		  		}
+				if(compiling_acc_s2s)
+				{
+					string_list_t *nativecc_args;
+					sprintf(buf, "%s.w2c.c", pname);
+                                	file = fopen(buf, "r");
+					if(file != NULL && native_path && native_cmd && native_flags)
+					{
+						fclose(file);
+						char* full_native_path = concat_strings(native_path, native_cmd);
+						nativecc_args = init_string_list();
+						add_file_args (nativecc_args, P_nativecc);
+						run_phase (P_nativecc, full_native_path, nativecc_args);
+					}
+				}
+				sprintf(buf, "%s_w2c.cl", pname);
+				file = fopen(buf, "r");
+				if(file != NULL)
+				{
+					fclose(file);
+					if(!cloc_path)					
+					{
+						fprintf(stderr, "AMD OPENCL compiler should be provided with -clpath,PATH.\n");
+						cloc_path = "";
+					}
+					char* full_path =concat_strings(cloc_path, get_phase_name(P_cloc));
+					cloc_args = init_string_list();
+					add_file_args (cloc_args, P_cloc);
+					run_phase (P_cloc, full_path, cloc_args);
+				}
+
+				/*sprintf(buf, "%s_w2c.o", pname);
+				file = fopen(buf, "r"); 
+				if(acc_feedback==TRUE && cloc_path != NULL && accfeedback_phase<2 && file != NULL)
+				{
+					//accfeedback_phase = 0: analysis the register usage without scalar replacement
+					//accfeedback_phase = 1: analysis the register usage with scalar replacement 
+					//					     and determine the threads setup
+					string_list_t *nvptxas_args;
+					fclose(file);
+					//the ptxas is in the same folder as nvcc
+					char* full_path =concat_strings(cloc_path, get_phase_name(P_nvptxas));
+					nvptxas_args = init_string_list();
+					add_file_args (nvptxas_args, P_nvptxas);
+					run_phase (P_nvptxas, full_path, nvptxas_args);
+					accfeedback_phase ++;
+					goto acc_feedback_startpoint;
+				}*/
+			}
+			else if(phase_order[i] == P_gas && cl_obj_file_path != NULL)
+			{
+				//merge the opencl obj file and host obj file
+				string_list_t * ld_args;
+				buffer_t buf;
+				char* new_objfile = NULL;
+				char* the_file = source_file;
+				//char* full_path =get_full_phase_name(P_ld);
+				ld_args = init_string_list();
+				
+				sprintf (buf, "-r");
+				add_string(ld_args, buf);
+
+				//add opencl object file
+				add_string(ld_args, cl_obj_file_path);
+
+				if( outfile != NULL)
+				{
+					new_objfile = outfile;
+				}
+				else
+				{
+					new_objfile = construct_given_name(the_file,"o", TRUE);
+				}
+
+				//add host object file				
+				add_string(ld_args, new_objfile);
+				
+				sprintf (buf, "-o");
+				add_string(ld_args, buf);
+				//new output file
+				{
+					char* pname = strdup(new_objfile);
+					//char *cp = strdup(pname) + strlen(pname);
+					int index;
+					char* temp = NULL;
+					
+					for ( index=strlen(pname)-1; index>=0; index-- ) 
+					{
+					    if ( pname[index] == '/' ) break;	/* Don't touch directory prefixes */
+					    if ( pname[index] == '.' ) 
+						{
+					      pname[index] = 0;
+					      break;
+					    }
+				  	}
+					temp = pname;
+					sprintf (buf, "%s_combined.o", temp);
+					add_string(ld_args, buf);
+				}
+				run_phase (P_ld, "/usr/bin/ld", ld_args);
+				remove(new_objfile);
+				remove(cl_obj_file_path);
+				rename(buf, new_objfile);
 			}
 			//acc_feedback_endpoint:	
                         /* undefine the environment variable

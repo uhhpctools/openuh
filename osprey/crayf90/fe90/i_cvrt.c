@@ -10148,9 +10148,9 @@ CONTINUE:
 		WAIT_CLAUSE_PROCESSING();
 		
 		/* process Copy clause */
-		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPY_IDX, ACC_Context_Copy);
-		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPY_IDX, ACC_Context_PCopy);
-		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPY_IDX, ACC_Context_PCopy);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_COPYIN_IDX, ACC_Context_Copyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PRESENT_OR_COPYIN_IDX, ACC_Context_PCopyin);
+		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_PCOPYIN_IDX, ACC_Context_PCopyin);
 		
 		/* process Create clause */
 		ARRAY_CLAUSE_PROCESSING(OPEN_ACC_CREATE_IDX, ACC_Context_Create);
@@ -10200,7 +10200,7 @@ CONTINUE:
 	   /*begin process clauses*/
 
 	    //int-exp processing
-        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_ASYNC_IDX], ACC_Context_Collapse);
+        acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_COLLAPSE_IDX], ACC_Context_Collapse);
         acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_GANG_IDX], ACC_Context_Gang);
         acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_WORKER_IDX], ACC_Context_Worker);
         acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_VECTOR_IDX], ACC_Context_Vector);

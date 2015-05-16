@@ -13,12 +13,36 @@ unsigned int shared_size = 0;
 
 acc_hashmap* __accr_file_map = NULL;
 
-typedef struct transfer_t { int nargs ; size_t* rsrvd1; size_t* rsrvd2 ; size_t* rsrvd3 ; } transfer_t;
-struct lparm_t { int ndim; size_t gdims[3]; size_t ldims[3]; transfer_t transfer ; } ;
+#define SNK_ORDERED 1
+#define SNK_UNORDERED 0
 
-typedef struct lparm_t Launch_params_t;
+#include <stdint.h>
+typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 
-static Launch_params_t launch_params;
+typedef struct snk_task_s snk_task_t;
+struct snk_task_s {
+   hsa_signal_t signal ;
+   snk_task_t* next;
+};
+
+typedef struct snk_lparm_s snk_lparm_t;
+struct snk_lparm_s {
+   int ndim;                  /* default = 1 */
+   size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */
+   size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
+   int stream;                /* default = -1 , synchrnous */
+   int barrier;               /* default = SNK_UNORDERED */
+   int acquire_fence_scope;   /* default = 2 */
+   int release_fence_scope;   /* default = 2 */
+   snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
+   snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
+} ;
+
+/* This string macro is used to declare launch parameters set default values  */
+//#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL} ; X = &_ ## X ;
+
+
+static snk_lparm_t launch_params;
 
 void __accr_init_launch_params(void** plaunch_params)
 {
@@ -30,8 +54,41 @@ void __accr_init_launch_params(void** plaunch_params)
         launch_params.ldims[0] = vectors[0];
         launch_params.ldims[1] = vectors[1];
         launch_params.ldims[2] = vectors[2];
+	launch_params.stream=-1;
+	launch_params.barrier=SNK_UNORDERED;
+	launch_params.acquire_fence_scope=2;
+	launch_params.release_fence_scope=2;
+	launch_params.requires=NULL;
+	launch_params.needs=NULL;
 
         *plaunch_params = &launch_params;
+}
+
+void __accr_init_launch_reduction_params(void** plaunch_params, unsigned int* pblock_size)
+{
+        launch_params.ndim = 3;
+		gangs[0] = 1;
+		gangs[1] = 1;
+		gangs[2] = 1;
+		vectors[0] = 256;
+		vectors[1] = 1;
+		vectors[2] = 1;
+        launch_params.gdims[0] = gangs[0] * vectors[0];
+        launch_params.gdims[1] = gangs[1] * vectors[1];
+        launch_params.gdims[2] = gangs[2] * vectors[2];
+
+        launch_params.ldims[0] = vectors[0];
+        launch_params.ldims[1] = vectors[1];
+        launch_params.ldims[2] = vectors[2];
+	launch_params.stream=-1;
+	launch_params.barrier=SNK_UNORDERED;
+	launch_params.acquire_fence_scope=2;
+	launch_params.release_fence_scope=2;
+	launch_params.requires=NULL;
+	launch_params.needs=NULL;
+
+        *plaunch_params = &launch_params;
+		*pblock_size = (unsigned int)vectors[0];
 }
 
 void __accr_set_gangs(int x, int y, int z)
@@ -50,7 +107,7 @@ void __accr_set_vectors(int x, int y, int z)
 
 void __accr_set_gang_num_x(int x)
 {
-	if(x==0)
+	if(x<=0)
 		gangs[0] = 1;
 	else
 		gangs[0] = x;
@@ -58,7 +115,7 @@ void __accr_set_gang_num_x(int x)
 
 void __accr_set_gang_num_y(int y)
 {
-	if(y==0)
+	if(y<=0)
 		gangs[1] = 1;
 	else
 		gangs[1] = y;
@@ -66,7 +123,7 @@ void __accr_set_gang_num_y(int y)
 
 void __accr_set_gang_num_z(int z)
 {
-	if(z==0)
+	if(z<=0)
 		gangs[2] = 1;
 	else
 		gangs[2] = z;
@@ -74,12 +131,12 @@ void __accr_set_gang_num_z(int z)
 
 void __accr_set_vector_num_x(int x)
 {
-	if(x<=0 || x>1024)
+	if(x<=0 || x>512)
 	{
 		if(vectors[1]<=0)
 			vectors[0] = 32;
 		else
-			vectors[0] = 1024/vectors[1];
+			vectors[0] = 512/vectors[1];
 	}
 	else
 		vectors[0] = x;
@@ -87,13 +144,13 @@ void __accr_set_vector_num_x(int x)
 
 void __accr_set_vector_num_y(int y)
 {
-	if(y <= 0 || y>1024)
+	if(y <= 0 || y>512)
 		vectors[1] = 1;
 	else
 	{
 		vectors[1] = y;
-		if(vectors[0] * vectors[1] > 1024)			
-			vectors[0] = 1024/vectors[1];
+		if(vectors[0] * vectors[1] > 512)			
+			vectors[0] = 512/vectors[1];
 	}
 }
 

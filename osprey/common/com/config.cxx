@@ -1026,11 +1026,11 @@ BOOL Enable_UHACC = FALSE;		    /* run OpenACC generator */
 /*reduction flags: 0bit-global/shared memory: if shared memory is used, it is 0; else it is 1; shared memory is default option
 			      1bit-rolling/unrolling: if unrolling, it is 0; else it is 1. default is unrolling*/
 /*DFA analysis flag: bit 2. If the DFA is enabled, set to 1; else set to 0*/
-UINT32 Enable_UHACCFlag = 0;  
+UINT32 Enable_UHACCFlag = 1<<UHACC_ENABLE_DFA_OFFLOAD_REGION;  
 UINT32 Enable_UHACCInfoFlag = 0;
 UINT32 Enable_UHACCRegNum = 0;
 ACC_REGISTER_FEEDBACK Enable_UHACCFeedback = ACC_REGISTER_FEEDBACK_NONE;
-ACC_ARCH_TYPE UHACC_Arch_Type = ACC_ARCH_TYPE_NVIDIA;
+ACC_ARCH_TYPE UHACC_Arch_Type = ACC_ARCH_TYPE_APU;
 
 
 BOOL Run_lno = FALSE;		    /* run loop-nest optimizer */

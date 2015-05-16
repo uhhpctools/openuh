@@ -526,30 +526,31 @@ extern void fei_acc_defaut_boundary_pragma( INTPTR	sym_idx)
 			//fei_get_dv_low_bnd(idims, 0);
 			//WN* wn_lower_bound = cwh_stk_pop_WN();
 			//get the extent which is actual the data length in this dimension
-			cwh_stk_push(st, ST_item);
-			fei_get_dv_extent(idims, 0);
-			WN* wn_extent = cwh_stk_pop_WN();
-			//get the stride
-			cwh_stk_push(st, ST_item);
-			fei_get_dv_str_mult(idims, 0);
-			WN* wn_stride = cwh_stk_pop_WN();
+			
+			WN* wn_length = WN_Intconst(MTYPE_I8, 1);
+			WN* wn_extent;
+			while(idims)
+			{
+				cwh_stk_push(st, ST_item);
+				fei_get_dv_extent(idims, 0);
+				wn_extent = cwh_stk_pop_WN();
+				idims --;
+				wn_length = WN_Binary(OPR_MPY, WN_rtype(wn_extent), wn_extent, wn_length);
+			}
 
 			//create region pragma
 			WN* wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_START, (ST_IDX)NULL, 1);
 			//always start from 0
-			WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I4, 0);
-		    WN_set_pragma_acc(wn_pragma);
-		    cwh_stk_push(wn_pragma, WN_item);
+			WN_kid0(wn_pragma) = WN_Intconst(MTYPE_I8, 0);
+		    	WN_set_pragma_acc(wn_pragma);
+		    	cwh_stk_push(wn_pragma, WN_item);
 			
-			//wn_upper_bound = WN_Binary(OPR_SUB, WN_rtype(wn_upper_bound), wn_upper_bound, wn_lower_bound);
-			//wn_extent = WN_Binary(OPR_ADD, WN_rtype(wn_extent), wn_extent, WN_Intconst(MTYPE_I4, 1));
-			
-			wn_extent = WN_Binary(OPR_MPY, WN_rtype(wn_stride), wn_stride, wn_extent);
+			wn_extent = wn_length;
 			
 			wn_pragma = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH, (ST_IDX)NULL, 1);
 			WN_kid0(wn_pragma) = wn_extent;
-		    WN_set_pragma_acc(wn_pragma);
-		    cwh_stk_push(wn_pragma, WN_item);
+		    	WN_set_pragma_acc(wn_pragma);
+		    	cwh_stk_push(wn_pragma, WN_item);
 		}
 	}
 

@@ -467,6 +467,12 @@ static BOOL WN2C_IsFunCall_OP(char p)
    ((WN2C_Opc2cname[opc]!=NULL)? (!WN2C_IsFunCall_OP(WN2C_Opc2cname[opc][0])) : FALSE)
    //((WN2C_Opc2cname[opc]!=NULL)? (WN2C_Opc2cname[opc][0]!='_') : FALSE)
 
+#define WN2CUDA_IS_INFIX_OP(opc) \	
+   ((WN2CUDA_Opc2cname[opc]!=NULL)? (!WN2CUDAIsFunCall_OP(WN2CUDA_Opc2cname[opc][0])) : FALSE)
+   
+#define WN2OpenCL_IS_INFIX_OP(opc) \	
+   ((WN2OpenCL_Opc2cname[opc]!=NULL)? (!WN2OpenCL_IsFunCall_OP(WN2OpenCL_Opc2cname[opc][0])) : FALSE)
+
 #ifdef TARG_NVISA
 // allow system calls that don't begin with _
 #define WN2C_IS_FUNCALL_OP(opc) \
@@ -1373,9 +1379,9 @@ static const OPC2CNAME_MAP WN2CUDA_Opc2cname_Map[] =
   {OPC_I4DIV, "/"},
   {OPC_F4DIV, "/"},
   {OPC_C4DIV, "_C4DIV"},
-  {OPC_I4MOD, "_I4MOD"},
+  {OPC_I4MOD, "%"},
   {OPC_U8MOD, "%"},
-  {OPC_I8MOD, "_I8MOD"},
+  {OPC_I8MOD, "%"},
   {OPC_U4MOD, "%"},
   {OPC_I4REM, "%"},
   {OPC_U8REM, "%"},
@@ -1930,8 +1936,8 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_I4NEG, "-"},
   {OPC_F4NEG, "-"},
   {OPC_C4NEG, "_C4NEG"},
-  {OPC_I4ABS, "fabsf"},
-  {OPC_F4ABS, "fabsf"},
+  {OPC_I4ABS, "fabs"},
+  {OPC_F4ABS, "fabs"},
 #ifdef TARG_IA64
   {OPC_F10ABS, "_F10ABS"},
 #elif defined (TARG_X8664)
@@ -1941,7 +1947,7 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_FQABS, "_FQABS"},
   {OPC_I8ABS, "fabs"},
   {OPC_F8ABS, "fabs"},
-  {OPC_F4SQRT, "sqrtf"},
+  {OPC_F4SQRT, "sqrt"},
   {OPC_C4SQRT, "_C4SQRT"},
   {OPC_F10SQRT, "_F10SQRT"},
   {OPC_FQSQRT, "_FQSQRT"},
@@ -1964,45 +1970,45 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_U8F10RND, "_U8F10RND"},
   {OPC_U8FQRND, "_U8FQRND"},
   {OPC_U8F8RND, "_U8F8RND"},
-  {OPC_I4F4TRUNC, "truncf"},
+  {OPC_I4F4TRUNC, "trunc"},
   {OPC_I4F10TRUNC, "_I4F10TRUNC"},
   {OPC_I4FQTRUNC, "_I4FQTRUNC"},
   {OPC_I4F8TRUNC, "trunc"},
-  {OPC_U4F4TRUNC, "truncf"},
+  {OPC_U4F4TRUNC, "trunc"},
   {OPC_U4F10TRUNC, "_U4F10TRUNC"},
   {OPC_U4FQTRUNC, "_U4FQTRUNC"},
   {OPC_U4F8TRUNC, "trunc"},
-  {OPC_I8F4TRUNC, "truncf"},
+  {OPC_I8F4TRUNC, "trunc"},
   {OPC_I8F10TRUNC, "_I8F10TRUNC"},
   {OPC_I8FQTRUNC, "_I8FQTRUNC"},
   {OPC_I8F8TRUNC, "trunc"},
-  {OPC_U8F4TRUNC, "truncf"},
+  {OPC_U8F4TRUNC, "trunc"},
 #ifdef TARG_NVISA
-  {OPC_F4F4TRUNC, "truncf"},
+  {OPC_F4F4TRUNC, "trunc"},
   {OPC_F8F8TRUNC, "trunc"},
 #endif
   {OPC_U8F10TRUNC, "_U8F10TRUNC"},
   {OPC_U8FQTRUNC, "_U8FQTRUNC"},
   {OPC_U8F8TRUNC, "trunc"},
-  {OPC_I4F4CEIL, "ceilf"},
+  {OPC_I4F4CEIL, "ceil"},
   {OPC_I4F10CEIL, "_I4F10CEIL"},
   {OPC_I4FQCEIL, "_I4FQCEIL"},
   {OPC_I4F8CEIL, "ceil"},
-  {OPC_U4F4CEIL, "ceilf"},
+  {OPC_U4F4CEIL, "ceil"},
   {OPC_U4F10CEIL, "_U4F10CEIL"}, 
   {OPC_U4FQCEIL, "_U4FQCEIL"},
   {OPC_U4F8CEIL, "ceil"},
-  {OPC_I8F4CEIL, "ceilf"},
+  {OPC_I8F4CEIL, "ceil"},
   {OPC_I8F10CEIL, "_I8F10CEIL"},
   {OPC_I8FQCEIL, "_I8FQCEIL"},
   {OPC_I8F8CEIL, "ceil"},
-  {OPC_U8F4CEIL, "ceilf"},
+  {OPC_U8F4CEIL, "ceil"},
   {OPC_U8F10CEIL, "_U8F10CEIL"},
   {OPC_U8FQCEIL, "_U8FQCEIL"},
   {OPC_U8F8CEIL, "ceil"},
-  {OPC_I4F4FLOOR, "floorf"},
+  {OPC_I4F4FLOOR, "floor"},
 #ifdef TARG_NVISA
-  {OPC_F4F4CEIL, "ceilf"},
+  {OPC_F4F4CEIL, "ceil"},
   {OPC_F8F8CEIL, "ceil"},
 #endif
   {OPC_I4F10FLOOR, "_I4F10FLOOR"},
@@ -2012,11 +2018,11 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_U4F10FLOOR, "_U4F10FLOOR"},
   {OPC_U4FQFLOOR, "_U4FQFLOOR"},
   {OPC_U4F8FLOOR, "floor"},
-  {OPC_I8F4FLOOR, "floorf"},
+  {OPC_I8F4FLOOR, "floor"},
   {OPC_I8F10FLOOR, "_I8F10FLOOR"},
   {OPC_I8FQFLOOR, "_I8FQFLOOR"},
   {OPC_I8F8FLOOR, "floor"},
-  {OPC_U8F4FLOOR, "floorf"},
+  {OPC_U8F4FLOOR, "floor"},
 #ifdef TARG_NVISA
   {OPC_F4F4FLOOR, "floorf"},
   {OPC_F8F8FLOOR, "floor"},
@@ -2025,7 +2031,7 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_U8FQFLOOR, "_U8FQFLOOR"},
   {OPC_U8F8FLOOR, "floor"},
 #ifdef KEY
-  {OPC_F4F4FLOOR, "floorf"},
+  {OPC_F4F4FLOOR, "floor"},
 #endif
   {OPC_I4BNOT, "~"},
   {OPC_U8BNOT, "~"},
@@ -2080,21 +2086,21 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_I4DIV, "/"},
   {OPC_F4DIV, "/"},
   {OPC_C4DIV, "_C4DIV"},
-  {OPC_I4MOD, "_I4MOD"},
+  {OPC_I4MOD, "%"},
   {OPC_U8MOD, "%"},
-  {OPC_I8MOD, "_I8MOD"},
+  {OPC_I8MOD, "%"},
   {OPC_U4MOD, "%"},
   {OPC_I4REM, "%"},
   {OPC_U8REM, "%"},
   {OPC_I8REM, "%"},
   {OPC_U4REM, "%"},
-  {OPC_I4MAX, "fmaxf"},
-  {OPC_U8MAX, "_U8MAX"},
-  {OPC_F4MAX, "fmaxf"},
-  {OPC_F10MAX, "_F10MAX"},
-  {OPC_FQMAX, "_FQMAX"},
+  {OPC_I4MAX, "max"},
+  {OPC_U8MAX, "max"},
+  {OPC_F4MAX, "fmax"},
+  {OPC_F10MAX, "max"},
+  {OPC_FQMAX, "max"},
   {OPC_I8MAX, "fmax"},
-  {OPC_U4MAX, "_U4MAX"},
+  {OPC_U4MAX, "max"},
   {OPC_F8MAX, "fmax"},
 #ifdef TARG_X8664
   {OPC_V16F4MAX, "_V16F4MAX"},
@@ -2110,14 +2116,14 @@ static const OPC2CNAME_MAP WN2OpenCL_Opc2cname_Map[] =
   {OPC_V32I4MAX, "_V32I4MAX"},
   {OPC_V32I8MAX, "_V32I8MAX"},
 #endif
-  {OPC_I4MIN, "fminf"},
-  {OPC_U8MIN, "_U8MIN"},
-  {OPC_F4MIN, "fminf"},
+  {OPC_I4MIN, "min"},
+  {OPC_U8MIN, "min"},
+  {OPC_F4MIN, "fmin"},
   {OPC_F10MIN, "_F10MIN"},
   {OPC_FQMIN, "_FQMIN"},
-  {OPC_I8MIN, "fmin"},
-  {OPC_U4MIN, "_U4MIN"},
-  {OPC_F8MIN, "fmax"},
+  {OPC_I8MIN, "min"},
+  {OPC_U4MIN, "min"},
+  {OPC_F8MIN, "fmin"},
 #ifdef TARG_X8664
   {OPC_V16F4MIN, "_V16F4MIN"},
   {OPC_V16F8MIN, "_V16F8MIN"},
@@ -2732,6 +2738,12 @@ WN2C_generate_cast(TY_IDX cast_to,         /* Cast expr to this ty */
    if (TY_Is_Array_Or_Function(cast_to))
       WHIRL2C_parenthesize(ty_buffer);
    TY2C_translate_unqualified(ty_buffer, cast_to);
+   if(TY_kind(cast_to) == KIND_POINTER)
+   {   	 
+   	  //for the opencl offload kernel, the __local have to be explicitly identified.
+      if(isGPUKernelFunc && isGPUOpenCLKernelFunc && TY_is_shared_mem(cast_to))
+	  	Prepend_Token_String(ty_buffer, "__local");
+   }
    WHIRL2C_parenthesize(ty_buffer);
    return ty_buffer;
 } /* WN2C_generate_cast */
@@ -3054,9 +3066,25 @@ WN2C_infix_op(TOKEN_BUFFER tokens,
 	 TCON2C_translate(tokens, tcon);
       else
       {
-	 /* Explicitly do the operation */
-	 for (op_char = WN2C_Opc2cname[opcode]; *op_char != '\0'; op_char++)
-	    Append_Token_Special(tokens, *op_char);
+	 /* Explicitly do the operation */	    
+	 if(isGPUKernelFunc)
+	 {
+		if(isGPUOpenCLKernelFunc)
+		{
+				for (op_char = WN2OpenCL_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+		  		Append_Token_Special(tokens, *op_char);
+		}
+		else
+		{
+			for (op_char = WN2CUDA_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+		  		Append_Token_Special(tokens, *op_char);
+		}
+	 }
+	 else
+	 {
+		 for (op_char = WN2C_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+		    Append_Token_Special(tokens, *op_char);
+	 }
 	 Append_Token_Special(tokens, '(');
 	 TCON2C_translate(tokens, tcon1);
 	 Append_Token_Special(tokens, ')');
@@ -3114,9 +3142,25 @@ WN2C_infix_op(TOKEN_BUFFER tokens,
       Append_And_Reclaim_Token_List(tokens, &opnd_tokens);
    }
        
-   /* Operation */
-   for (op_char = WN2C_Opc2cname[opcode]; *op_char != '\0'; op_char++)
-      Append_Token_Special(tokens, *op_char);
+   /* Operation */   
+   if(isGPUKernelFunc)
+   {
+	   if(isGPUOpenCLKernelFunc)
+	   {
+	   		for (op_char = WN2OpenCL_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+	      		Append_Token_Special(tokens, *op_char);
+	   }
+	   else
+	   {
+			for (op_char = WN2CUDA_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+	      		Append_Token_Special(tokens, *op_char);
+	   }
+   }
+   else
+   {
+	   for (op_char = WN2C_Opc2cname[opcode]; *op_char != '\0'; op_char++)
+	      Append_Token_Special(tokens, *op_char);
+   }
 
    /* Second operand, or only operand for unary operation */
    opnd_tokens = WN2C_Translate_Arithmetic_Operand(wn1, wn1_ty, context);
@@ -5695,12 +5739,26 @@ WN2C_binaryop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 			       WN_kid0(wn), 
 			       WN_kid1(wn), 
 			       context);
+   else if (isGPUKernelFunc && isGPUOpenCLKernelFunc==FALSE && WN2CUDA_IS_INFIX_OP(WN_opcode(wn)))
+      status = WN2C_infix_op(tokens,
+			     WN_opcode(wn),
+			     WN_Tree_Type(wn),
+			     WN_kid0(wn), 
+			     WN_kid1(wn), 
+			     context);
    else if (isGPUKernelFunc && isGPUOpenCLKernelFunc==FALSE && WN2CUDA_IS_FUNCALL_OP(WN_opcode(wn)))
       status = WN2C_funcall_op(tokens, 
 			       WN_opcode(wn), 
 			       WN_kid0(wn), 
 			       WN_kid1(wn), 
 			       context);
+   else if (isGPUKernelFunc && isGPUOpenCLKernelFunc && WN2OpenCL_IS_INFIX_OP(WN_opcode(wn)))
+      status = WN2C_infix_op(tokens,
+			     WN_opcode(wn),
+			     WN_Tree_Type(wn),
+			     WN_kid0(wn), 
+			     WN_kid1(wn), 
+			     context);
    else if (isGPUKernelFunc && isGPUOpenCLKernelFunc && WN2OpenCL_IS_FUNCALL_OP(WN_opcode(wn)))
       status = WN2C_funcall_op(tokens, 
 			       WN_opcode(wn), 
@@ -8885,8 +8943,10 @@ WN2C_initialize(void)
       WN2CUDA_Opc2cname[WN2CUDA_Opc2cname_Map[map].opc] = 
 	 WN2CUDA_Opc2cname_Map[map].cname;
 
-   
-   
+   for (map = 0; map < NUMBER_OF_OPC2CNAME_MAPS; map++)
+       WN2OpenCL_Opc2cname[WN2OpenCL_Opc2cname_Map[map].opc] =
+	 WN2OpenCL_Opc2cname_Map[map].cname;
+
 } /* WN2C_initialize */
 
 

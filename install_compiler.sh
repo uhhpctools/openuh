@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Copyright (C) 2011-2014 University of Houston.
+#  Copyright (C) 2011-2013 University of Houston.
 #
 #  Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
@@ -73,22 +73,15 @@ if [ -z "$5" ]; then
   BUILD_CAF_RUNTIME="NO"
 else
   BUILD_CAF_RUNTIME=$5
-fi
+fi 
 
 if [ -z "$6" ]; then
-  ENABLED_OSA="NO"
-else
-  ENABLED_OSA=$6
-fi
-
-
-if [ -z "$7" ]; then
 	CROSS_TARGET=""
 	if [ $1 = "PPC32" ]; then
 		ARCH="ppc"
 	fi
 else
-    CROSS_TARGET=$7
+    CROSS_TARGET=$6
 fi
 
 # set the build host
@@ -380,7 +373,6 @@ INSTALL_WHIRL_STUFF () {
     [ "$INSTALL_FORTRAN" = "YES" ] && (cd ${PHASEPATH}; ln -sf be whirl2f_be) 
 
     INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_b2a    ${BIN_DIR}/ir_b2a
-    INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_viz    ${BIN_DIR}/ir_viz
     if [ "$INSTALL_GNU4" = "YES"  ]; then
       INSTALL_EXEC_SUB  ${AREA}/libspin_4_2_0/gspin42 ${BIN_DIR}/gspin42
       (cd ${BIN_DIR}; ln -sf gspin42 gspin)
@@ -419,7 +411,7 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
         # 32bit libraries
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
@@ -482,13 +474,6 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
     return 0
 }
 
-INSTALL_SHMEM_ANALYZER_SCRIPTS() {
-    INSTALL_EXEC_SUB osprey/scripts/callgraph  ${BIN_DIR}/callgraph
-    INSTALL_EXEC_SUB osprey/scripts/call  ${BIN_DIR}/call
-    cd ${PHASEPATH}/64; ${ROOT}/bin/opencc -m64 -ipa -c ${TOP_SRCDIR}/osprey/include/shmem.c
-    cd ${PHASEPATH}/32; ${ROOT}/bin/opencc -m32 -ipa -c ${TOP_SRCDIR}/osprey/include/shmem.c
-}
-
 # Install the CAF runtime library
 INSTALL_CAF_LIB () {
     #install uhcaf script
@@ -532,14 +517,14 @@ INSTALL_CAF_LIB () {
         # 32bit libraries
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/32/libcaf-armci.so.1
-        (cd ${PHASEPATH}/32; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        (cd ${PHASEPATH/32}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
         gasnet_builds=`ls -d ${LIB32AREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
           lib_name=libcaf-gasnet-$gasnet_conduit
           INSTALL_DATA_SUB ${gb}/$lib_name.a   ${PHASEPATH}/32/$lib_name.a
           INSTALL_DATA_SUB ${gb}/$lib_name.so.1 ${PHASEPATH}/32/$lib_name.so.1
-          (cd ${PHASEPATH}/32; ln -sf $lib_name.so.1 $lib_name.so)
+          (cd ${PHASEPATH/32}; ln -sf $lib_name.so.1 $lib_name.so)
         done
     fi
 }
@@ -579,7 +564,7 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
@@ -600,8 +585,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/libopenmp-pcl.a
@@ -619,8 +604,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/32/libopenmp-pcl.a
@@ -749,9 +734,6 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/openacc/openacc_lib.h ${ROOT}/include/${VERSION}/openacc_lib.h
 
-    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/shmem.h
-    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.h  ${ROOT}/include/${VERSION}/mpp/shmem.h
-
     [ "$ENABLED_CAF" = "YES" ] && INSTALL_DATA_SUB \
                 ${TOP_SRCDIR}/osprey/include/fort/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
     return 0
@@ -856,15 +838,5 @@ INSTALL_PREBUILD_PHASE
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
 [ "$ENABLED_CAF" = "YES" ] && INSTALL_CAF_EXTRA_LIB
 [ "$BUILD_CAF_RUNTIME" = "YES" ] && INSTALL_CAF_LIB
-
-# OPENSHMEM_ANALYZER start
-#echo "ENABLED_OSA: $ENABLED_OSA $1, $2, $3, $4, $5, $6, $7"
-[ "$ENABLED_OSA" = "YES" ] && INSTALL_SHMEM_ANALYZER_SCRIPTS
-# INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/shmem.c  ${PHASEPATH}/shmem.c
-# cd ${PHASEPATH}/64; ${ROOT}/bin/opencc -m64 -ipa -c ../shmem.c
-# cd ${PHASEPATH}/32; ${ROOT}/bin/opencc -m32 -ipa -c ../shmem.c
-
-# OPENSHMEM_ANALYZER end
-
 exit 0
 

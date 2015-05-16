@@ -106,274 +106,6 @@
 #include "alias_analyzer.h"
 
   
-typedef enum {
-	PAR_FUNC_ACC_NONE = 0,
-	PAR_FUNC_ACC_KERNEL,
-	PAR_FUNC_ACC_DEVICE,
-	PAR_FUNC_ACC_LAST = PAR_FUNC_ACC_DEVICE
-} PAR_FUNC_ACC_TYPE;
-
-
-typedef struct {
-	ST* hostName;
-	ST* deviceName;
-	WN* wnSize;
-	WN* wnStart;
-	unsigned int type_size;
-	ST* st_is_pcreate_tmp;
-}ACC_DATA_ST_MAP;
-
-
-typedef enum 
-{
-	ACC_KDATA_UNKOWN = 0,
-//MTYPE_I1=2, 		 /*   8-bit integer */
-	ACC_KDATA_UINT8,
-//MTYPE_I2=3, 		 /*  16-bit integer */
-	ACC_KDATA_UINT16,
-//MTYPE_I4=4, 		 /*  32-bit integer */
-	ACC_KDATA_UINT32,
-//MTYPE_I8=5, 		 /*  64-bit integer */
-	ACC_KDATA_UINT64,
-//MTYPE_U1=6, 		 /*   8-bit unsigned integer */
-	ACC_KDATA_INT8,
-//MTYPE_U2=7, 		 /*  16-bit unsigned integer */
-	ACC_KDATA_INT16,
-//MTYPE_U4=8, 		 /*  32-bit unsigned integer */
-	ACC_KDATA_INT32,
-//MTYPE_U8=9, 		 /*  64-bit unsigned integer */
-	ACC_KDATA_INT64,
-//MTYPE_F4=10,		 /*  32-bit IEEE floating point */
-	ACC_KDATA_FLOAT,
-//MTYPE_F8=11,		 /*  64-bit IEEE floating point */
-	ACC_KDATA_DOUBLE	
-}ACC_KERNEL_DATA_TYPE;
-
-static INT64 GetKernelParamType(ST* pParamST)
-{
-	
-    TY_IDX ty = ST_type(pParamST);
-    TY_KIND kind = TY_kind(ty);//ST_name(old_st)
-    TYPE_ID typeID;
-    if(kind == KIND_POINTER)
-	{		
-		TY_IDX pty = TY_pointed(ty);
-		//check if it is dynamic array
-		if(TY_kind(pty) == KIND_ARRAY)
-		{
-			pty = TY_etype(pty);
-		}
-		typeID = TY_mtype(pty);
-	}
-	else if(kind == KIND_SCALAR)
-	{
-		typeID = TY_mtype(ty);
-	}
-	else
-	{
-		Is_True(FALSE, ("Wrong Kernel Parameter Kind Type in GetKernelParamType 1."));
-	}
-
-	switch(typeID)
-	{
-	case MTYPE_I1: 		 /*   8-bit integer */
-		return ACC_KDATA_UINT8;
-	case MTYPE_I2:  		 /*  16-bit integer */
-		return ACC_KDATA_UINT16;
-	case MTYPE_I4:  		 /*  32-bit integer */
-		return ACC_KDATA_UINT32;
-	case MTYPE_I8:  		 /*  64-bit integer */
-		return ACC_KDATA_UINT64;
-	case MTYPE_U1:  		 /*   8-bit unsigned integer */
-		return ACC_KDATA_INT8;
-	case MTYPE_U2:  		 /*  16-bit unsigned integer */
-		return ACC_KDATA_INT16;
-	case MTYPE_U4:  		 /*  32-bit unsigned integer */
-		return ACC_KDATA_INT32;
-	case MTYPE_U8:  		 /*  64-bit unsigned integer */
-		return ACC_KDATA_INT64;
-	case MTYPE_F4: 		 /*  32-bit IEEE floating point */
-		return ACC_KDATA_FLOAT;
-	case MTYPE_F8: 		 /*  64-bit IEEE floating point */
-		return ACC_KDATA_DOUBLE;
-	default:
-		Is_True(FALSE, ("Wrong Kernel Parameter Type ID in GetKernelParamType 2."));
-	}
-	return ACC_KDATA_UNKOWN;
-}
-
-typedef enum {
-
-	ACCRUNTIME_NONE = 0,
-	ACCRUNTIME_FIRST = 1,
-
-	ACCR_SETUP              = 1,
-	ACCR_CLEANUP            = 2,
-
-	ACCR_SYNC				= 3,	/* Not really needed? to be deleted*/	
-	ACCR_DEVICEMEMMALLOC			= 4,	
-	ACCR_DEVICEMEMIN			= 5,
-	ACCR_DEVICEMEMOUT			= 6,
-	ACCR_LAUNCHKERNEL		= 7,
-	ACCR_KERNELPARAMPUSH_POINTER	= 8,
-	ACCR_PRESENT_COPY		= 9,
-	ACCR_PRESENT_COPYIN		= 10,
-	ACCR_PRESENT_COPYOUT	= 11,
-	ACCR_PRESENT_CREATE		= 12,
-	ACCR_SET_GANG_NUM_X		= 13,
-	ACCR_SET_GANG_NUM_Y		= 14,
-	ACCR_SET_GANG_NUM_Z		= 15,
-	ACCR_SET_VECTOR_NUM_X	= 16,
-	ACCR_SET_VECTOR_NUM_Y	= 17,
-	ACCR_SET_VECTOR_NUM_Z	= 18,
-	ACCR_DMEM_RELEASE		= 19,
-	ACCR_MAP_DREGION		= 20,
-	ACCR_KERNELPARAMPUSH_SCALAR	= 21,
-	ACCR_KERNELPARAMPUSH_DOUBLE = 22,
-	ACCR_REDUCTION_BUFF_MALLOC = 23,
-	ACCR_FINAL_REDUCTION_ALGORITHM = 24,
-	ACCR_FREE_ON_DEVICE = 25,
-	ACCR_SETUP_DEFAULT_TOLOGY = 26,
-	ACCR_SETUP_GANG_TOLOGY 	  = 27,
-	ACCR_SETUP_VECTOR_TOLOGY 	  = 28,
-	ACCR_RESET_DEFAULT_TOLOGY = 29,
-	ACCR_GET_DEVICE_ADDR = 30,
-	ACCR_UPDATE_HOST_VARIABLE = 31,
-	ACCR_UPDATE_DEVICE_VARIABLE 	= 32,
-	ACCR_WAIT_SOME_OR_ALL_STREAM	= 33,
-	ACCR_SYNCTHREADS				= 34, //this one is only used in kernel functions
-	ACCR_PRINTF_DBG				= 35,
-	ACCR_GET_NUM_GANGS			= 36,
-	ACCR_GET_NUM_WORKERS		= 37,
-	ACCR_GET_NUM_VECTORS		= 38,	
-	ACCR_GET_TOTAL_VECTORS		= 39,	
-	ACCR_GET_TOTAL_GANGS		= 40,
-	ACCR_GET_TOTAL_GANGS_WORKERS = 41,
-	ACCR_CALL_LOCAL_REDUCTION	= 42,
-	ACCR_DYNAMIC_LAUNCH_KERNEL	= 43,
-	ACCR_STACK_PUSH			= 44,
-	ACCR_STACK_POP			= 45,
-	ACCR_STACK_PENDING_TO_CURRENT_STACK = 46,
-	ACCR_STACK_CLEAR_DEVICE_PTR_IN_CURRENT_STACK = 47,
-	ACCR_DATA_EXIT_COPYOUT = 48,
-	ACCR_DATA_EXIT_DELETE = 49,
-	ACCR_FREE_REDUCTION_BUFF = 50,
-	ACCRUNTIME_LAST 		= ACCR_FREE_REDUCTION_BUFF
-} OACCRUNTIME;
-
-static const char *accr_names [ACCRUNTIME_LAST + 1] = {
-  "",				/* MPRUNTIME_NONE */
-  "__accr_setup",			/* ACCR_SETUP */
-  "__accr_cleanup",		/* ACCR_CLEANUP */
-  "__accr_sync",    	/* ACCR_SYNC */
-  "__accr_malloc_on_device",  	/* ACCR_CUDAMALLOC */
-  "__accr_memin_h2d",		/*ACCR_CUDAMEMIN*/
-  "__accr_memout_d2h",		/*ACCR_CUDAMEMOUT*/
-  "__accr_launchkernel",	/*ACCR_LAUNCHKERNEL*/
-  "__accr_push_kernel_param_pointer", /*ACCR_KERNELPARAMPUSH*/
-  "__accr_present_copy",		/*ACCR_PRESENT_COPY*/
-  "__accr_present_copyin",		/*ACCR_PRESENT_COPYIN*/
-  "__accr_present_copyout",		/*ACCR_PRESENT_COPYOUT*/
-  "__accr_present_create",		/*ACCR_PRESENT_CREATE*/
-  "__accr_set_gang_num_x",		/*ACCR_SET_GANG_NUM_X*/
-  "__accr_set_gang_num_y",		/*ACCR_SET_GANG_NUM_Y*/
-  "__accr_set_gang_num_z",		/*ACCR_SET_GANG_NUM_Z*/
-  "__accr_set_vector_num_x",	/*ACCR_SET_VECTOR_NUM_X*/
-  "__accr_set_vector_num_y",	/*ACCR_SET_VECTOR_NUM_Y*/
-  "__accr_set_vector_num_z",	/*ACCR_SET_VECTOR_NUM_Z*/
-  "__accr_dmem_release",		/*ACCR_DMEM_RELEASE*/
-  "__accr_map_data_region",		/*map data region*/  
-  "__accr_push_kernel_param_scalar", 
-  "__accr_push_kernel_param_double",
-  "__accr_reduction_buff_malloc",
-  "__accr_final_reduction_algorithm",
-  "__accr_free_on_device",
-  "__accr_set_default_gang_vector",
-  "__accr_set_gangs",
-  "__accr_set_vectors",
-  "__accr_reset_default_gang_vector",
-  "__accr_get_device_addr",
-  "__accr_update_host_variable",
-  "__accr_update_device_variable",
-  "__accr_wait_some_or_all_stream",
-  "__syncthreads",
-  "printf",
-  "__accr_get_num_gangs",
-  "__accr_get_num_workers",
-  "__accr_get_num_vectors",
-  "__accr_get_total_num_vectors",
-  "__accr_get_total_num_gangs",
-  "__accr_get_total_gangs_workers",
-  "__accr_call_local_reduction",
-  "__accr_dynamic_launch_kernel",
-  "__accr_stack_push",
-  "__accr_stack_pop",
-  "__accr_stack_pending_to_current_stack",
-  "__accr_stack_clear_device_ptr_in_current_stack",
-  "__accr_data_exit_copyout",
-  "__accr_data_exit_delete",
-  "__accr_free_reduction_buff"
-};
-
-
-/*  This table contains ST_IDX entries entries for each of the MP
-    runtime routines.  These entries allow efficient sharing of all
-    calls to a particular runtime routine. */
-
-static ST_IDX accr_sts [ACCRUNTIME_LAST + 1] = {
-  ST_IDX_ZERO,	 /* ACCRUNTIME_NONE */
-  ST_IDX_ZERO,	 /* ACCR_SETUP */
-  ST_IDX_ZERO,	 /* ACCR_CLEANUP */
-  ST_IDX_ZERO,   /* ACCR_SYNC */
-  ST_IDX_ZERO,   /* ACCR_CUDAMALLOC */
-  ST_IDX_ZERO,   /* ACCR_CUDAMEMIN */
-  ST_IDX_ZERO,   /* ACCR_CUDAMEMOUT */
-  ST_IDX_ZERO,	 /*ACCR_LAUNCHKERNEL*/
-  ST_IDX_ZERO,	 /*ACCR_KERNELPARAMPUSH*/
-  ST_IDX_ZERO,	/*ACCR_PRESENT_COPY*/
-  ST_IDX_ZERO,	/*ACCR_PRESENT_COPYIN*/
-  ST_IDX_ZERO,	/*ACCR_PRESENT_COPYOUT*/
-  ST_IDX_ZERO,	/*ACCR_PRESENT_CREATE*/
-  ST_IDX_ZERO,	/*ACCR_SET_GANG_NUM_X*/
-  ST_IDX_ZERO,	/*ACCR_SET_GANG_NUM_Y*/
-  ST_IDX_ZERO,	/*ACCR_SET_GANG_NUM_Z*/
-  ST_IDX_ZERO,	/*ACCR_SET_VECTOR_NUM_X*/
-  ST_IDX_ZERO,	/*ACCR_SET_VECTOR_NUM_Y*/
-  ST_IDX_ZERO,	/*ACCR_SET_VECTOR_NUM_Z*/
-  ST_IDX_ZERO,  /*ACCR_DMEM_RELEASE*/
-  ST_IDX_ZERO,  /*MAP DATA REGION*/
-  ST_IDX_ZERO,  /*ACCR_PUSH_KERNEL_PARAM_INT*/
-  ST_IDX_ZERO,  /*ACCR_PUSH_KERNEL_PARAM_DOUBLE*/
-  ST_IDX_ZERO,  /*ACCR_REDUCTION_BUFF_MALLOC*/
-  ST_IDX_ZERO,  /*ACCR_FINAL_REDUCTION_ALGORITHM*/
-  ST_IDX_ZERO,	/**ACCR_FREE_ON_DEVICE*/
-  ST_IDX_ZERO,	/*ACCR_SETUP_DEFAULT_TOLOGY*/
-  ST_IDX_ZERO,	/*ACCR_SETUP_GANG_TOLOGY*/
-  ST_IDX_ZERO, 	/*ACCR_SETUP_VECTOR_TOLOGY*/
-  ST_IDX_ZERO, 	/*ACCR_RESET_DEFAULT_TOLOGY*/
-  ST_IDX_ZERO, 	/*ACCR_GET_DEVICE_ADDR*/
-  ST_IDX_ZERO, 	/*ACCR_UPDATE_HOST_VARIABLE*/
-  ST_IDX_ZERO,	/*ACCR_UPDATE_DEVICE_VARIABLE*/
-  ST_IDX_ZERO,	/*ACCR_WAIT_SOME_OR_ALL_STREAM*/
-  ST_IDX_ZERO,	/*ACCR_SYNCTHREADS*/
-  ST_IDX_ZERO,	/*FOR DEBUG*/
-  ST_IDX_ZERO,	/*ACCR_GET_NUM_GANGS*/
-  ST_IDX_ZERO,	/*ACCR_GET_NUM_WORKERS*/
-  ST_IDX_ZERO,	/*ACCR_GET_NUM_VECTORS*/
-  ST_IDX_ZERO,  /*ACCR_GET_TOTAL_VECTORS*/
-  ST_IDX_ZERO,   /*ACCR_GET_TOTAL_GANGS*/
-  ST_IDX_ZERO,	/*ACCR_GET_TOTAL_GANGS_WORKERS*/
-  ST_IDX_ZERO,	/*ACCR_CALL_LOCAL_REDUCTION*/
-  ST_IDX_ZERO,	/*ACCR_DYNAMIC_LAUNCH_KERNEL*/
-  ST_IDX_ZERO,  /*ACCR_STACK_PUSH*/
-  ST_IDX_ZERO,  /*ACCR_STACK_POP*/
-  ST_IDX_ZERO,  /*ACCR_STACK_PENDING_TO_CURRENT_STACK*/
-  ST_IDX_ZERO,  /*ACCR_STACK_CLEAR_DEVICE_PTR_IN_CURRENT_STACK*/
-  ST_IDX_ZERO,  /*ACCR_DATA_EXIT_COPYOUT*/
-  ST_IDX_ZERO,  /*ACCR_DATA_EXIT_DELETE*/
-  ST_IDX_ZERO	/*ACCR_FREE_REDUCTION_BUFF*/
-};
-
 
 typedef enum {
   ACC_VAR_NONE        = 0,
@@ -398,139 +130,6 @@ typedef struct {
   WN_OFFSET  new_offset;
   OPERATOR   reduction_opr; /* specified in REDUCTION pragma */
 } ACC_VAR_TABLE;
-
-static ST_IDX Make_ACCRuntime_ST ( OACCRUNTIME rop );
-
-#define GET_ACCRUNTIME_ST(x) (accr_sts[x] == ST_IDX_ZERO ? \
-                             Make_ACCRuntime_ST(x) : accr_sts[x])
-typedef enum 
-{
-	ACC_NONE_SPECIFIED,
-	ACC_VECTOR = 1,
-	ACC_GANG_VECTOR,
-	ACC_WORKER,
-	ACC_GANG,
-	ACC_GANG_WORKER,
-	ACC_WORKER_VECTOR,
-	ACC_GANG_WORKER_VECTOR
-}ACC_LOOP_TYPE;
-
-typedef enum ACC_LOOP_LEVEL
-{
-	ACC_OUTTER_LOOP,
-	ACC_MIDDER_LOOP,
-	ACC_INNER_LOOP,
-	ACC_PARALLEL_REDUCTION
-}ACC_LOOP_LEVEL;
-
-typedef struct ACC_ReductionMap
-{
-	ST* hostName;//host reduction ST
-	ST* deviceName; //device memory ST, allocated in host side
-	ST* st_Inkernel; //st in the kernel. For each reduction, there is a respective st* in the kernel, usually as kernel parameter. this is a buffer
-	ST* st_inout_used;	//the variable init/output buffer before/after reduction
-	ST* reduction_kenels; //an independent kernel carry the final reduction
-	ST* local_reduction_fun; //for the top level reduction, the kernel may call another device function to do the local reduction first, then launch final reduction kernel
-	ST* st_private_var; //private var in kernel to store reduction result
-	WN* wn_private_var;
-	ST* st_local_array;//local memory buffer for reduction in the block
-	OPERATOR ReductionOpr; 
-	ACC_LOOP_LEVEL acc_looplevel;
-	ACC_LOOP_LEVEL acc_stmt_location; //where is the reduction stmt
-	ACC_LOOP_TYPE looptype;
-	WN* wn_localIndexOpr; //for local reduction used inner gang
-	WN* wn_assignment2localArray; //this is used in kernel
-	WN* wn_IndexOpr;
-	WN* wn_assignment2Array; //this is used in kernel
-	WN* wn_initialAssign; //this is used in kernel
-	WN* wn_assignBack2PrivateVar; //this is used in kernel
-	ST* st_num_of_element;	
-	ST* st_backupValue;		
-	WN* wn_backupValue;	
-	WN* wn_backupStmt;
-	/*ACC_ReductionMap()
-	{
-		hostName = NULL;
-		deviceName = NULL;
-		st_Inkernel = NULL;
-		reduction_kenels = NULL;
-		st_private_var = NULL;
-		wn_private_var = NULL;
-		st_local_array = NULL;
-		wn_IndexOpr = NULL;
-		wn_assignment2Array = NULL;
-		wn_initialAssign = NULL;
-		wn_assignBack2PrivateVar = NULL;
-		st_num_of_element = NULL;
-		st_backupValue = NULL;
-		wn_backupValue = NULL;
-		wn_backupStmt = NULL;
-	}*/
-	
-}ACC_ReductionMap;
-
-typedef struct ACC_Reduction_Item
-{
-	ACC_LOOP_LEVEL acc_looplevel;
-	WN* acc_wn_reduction;
-}ACC_Reduction_Item;
-
-
-//structure for preserve loop info
-typedef struct
-{
-	WN* init;
-	WN* condition;
-	WN* incr;
-	WN* acc_test_stmt; //the whole test statement
-	ACC_LOOP_TYPE looptype;
-	WN* vectors;	//a node contains number of vectors
-	WN* gangs;		//a node contains number of gangs
-	WN* workers;	//a node contains number of workers
-	vector<ACC_ReductionMap> reductionmap;
-	BOOL isIndependent;
-	BOOL isSeq;
-	WN* acc_private;
-	INT32 private_count;
-	//vector<ACC_Reduction_Item> acc_reduction;
-	INT32 reduction_count;
-	WN* acc_collapse;
-	WN* acc_loopbody;
-	ST * acc_index_st;		/* User forloop index variable ST */
-	ST * acc_limit_st;
-    TYPE_ID acc_index_type;
-	char* szIndexName;
-	char* szLimitName;
-	ST * acc_newIndex;
-	ST * acc_newLimit;
-	WN* wn_regionbody;
-	//this is used in parallel region, there may be some redundenccy execution code
-	//WN * wn_following_nodes;
-	//for nonperfect loopnest
-	//loop region
-	//for(.....)		->current loop info
-	//{
-	//	prehands nodes
-	//	for(....){}	->next level of loop info
-	//	afterhand nodes
-	//}
-	//end loop region
-
-	//there is a case for Fortran	
-	//special case: nonperfect loopnest for fortran
-	//loop region
-	//seuqential statements
-	//for(.....)		->current loop info
-	//{
-	//	prehands nodes
-	//	for(....){}	->next level of loop info
-	//	afterhand nodes
-	//}
-	//end loop region
-	WN * wn_prehand_nodes;
-	WN * wn_afterhand_nodes;
-	WN * wn_sequential_nodes;
-}FOR_LOOP_INFO;
 
 typedef enum
 {
@@ -559,36 +158,6 @@ typedef struct ACC_VAR_Liveness
   //ACC_VAR_Liveness *pPrev;
 } ACC_VAR_Liveness;
 
-
-//prehand nodes
-//for loop
-//{
-//     nested loop here
-// }
-//following nodes
-typedef struct ACC_LOOP_INFO
-{
-	INT32 loopnum; //how many loopnest in this loop, depth of nested loop
-	vector<FOR_LOOP_INFO> acc_forloop;
-	WN* wn_following_nodes;
-	WN* wn_prehand_nodes;
-	ACC_LOOP_INFO()
-	{
-		wn_following_nodes = NULL;
-		wn_prehand_nodes = NULL;
-		loopnum = 0;
-		acc_forloop.clear();
-	}
-}ACC_LOOP_INFO;
-
-typedef struct PARALLEL_LOOP_INFO
-{
-	INT32 loopnum; //how many loops in this parallel region
-	vector<ACC_LOOP_INFO> acc_loopinfo;
-	WN* wn_prehand_nodes;
-}PARALLEL_LOOP_INFO;
-
-static ACC_LOOP_INFO acc_loopinfo;
 static PARALLEL_LOOP_INFO acc_parallel_loop_info;
 static ST* st_shared_array_4parallelRegion = NULL;
 static TY_IDX ty_shared_array_in_parallel = 0;
@@ -630,29 +199,6 @@ static BOOL acc_dfa_enabled = FALSE;
 
 
 #define WN_ACC_Compare_Trees(x,y)	(WN_Simp_Compare_Trees(x,y))  
-
-typedef enum ACC_SCALAR_TYPE
-{
-	ACC_SCALAR_VAR_IN,
-	ACC_SCALAR_VAR_OUT,
-	ACC_SCALAR_VAR_INOUT,
-	ACC_SCALAR_VAR_PRIVATE,	
-	//The difference between ACC_SCALAR_VAR_OUT and 
-	//ACC_SCALAR_VAR_CREATE is that CREATE do not need copyout
-	ACC_SCALAR_VAR_CREATE,	
-	ACC_SCALAR_VAR_PRESENT 
-}ACC_SCALAR_TYPE;
-
-typedef struct ACC_DREGION__ENTRY
-{
-	WN* acc_data_clauses;
-	//This is for .dope structure
-	WN* acc_data_start_addr;
-	//may be multi-dimension segment
-	vector<WN*> acc_data_start;
-	vector<WN*> acc_data_length;
-	ACC_SCALAR_TYPE acc_scalar_type;
-}ACC_DREGION__ENTRY;
 
 static vector<ACC_DREGION__ENTRY> acc_dregion_pcreate;
 static vector<ACC_DREGION__ENTRY> acc_dregion_pcopy;
@@ -712,9 +258,6 @@ static vector<ACC_DATA_ST_MAP*> acc_unspecified_pcopyMap;
 
 //typedef ST * ACC_SHARED_TABLE;
 
-// Generic type for parallel runtime routines
-static TY_IDX accruntime_ty = TY_IDX_ZERO;
-
   // TRUE if ACC region we're currently processing has the compiler-
   // generated flag set on its first pragma (the one that identifies it
   // as a PARALLEL_REGION, PDO, etc.), FALSE otherwise
@@ -725,7 +268,6 @@ static BOOL cacc_gen_construct;
   // when we reach an inner construct (say, MPP_PDO) we save the old value
   // of mpt, set it to something appropriate for the inner construct until
   // we're done processing that construct, then restore the old value of mpt.
-static ACCP_process_type acc_t;
 
 static WN *acc_host_nodes;
 static WN *acc_device_nodes;
@@ -743,7 +285,6 @@ static WN *acc_seq_node;
 static WN *acc_independent_node;
 
 static WN *acc_reduction_nodes;	/* Points to (optional) reduction nodes */
-static INT32 acc_reduction_count; 
 static vector<WN*> acc_wait_list;
 static WN *acc_copy_nodes;		/* Points to (optional) shared nodes */
 static WN *acc_copyin_nodes;	/* Points to (optional) copyin nodes */
@@ -766,9 +307,6 @@ static WN *acc_use_device_nodes;
 
 static map<ST*, BOOL> acc_const_offload_ptr;
 
-static WN* acc_AsyncExpr = NULL;
-static WN* acc_async_nodes;   /* async int expression */
-static WN* acc_clause_intnum;	/*Int expression, it's for integer expression, e.g, in wait pragma*/
 
 //This table is used to localize the ST  which is used in kernel/parallel region.
 //static ACC_VAR_TABLE* acc_local_var_table;		//All the data in the kernel function
@@ -801,9 +339,6 @@ static map<ST*, ST*> acc_reduction_device_reduction_call;
 
 static ST *acc_reduction_proc;	/* reduction for ACC process */
 static ST *acc_parallel_proc;	/* Extracted parallel/kernels process */
-static SYMTAB_IDX acc_psymtab;	/* Parent symbol table */
-static SYMTAB_IDX acc_csymtab;	/* Child symbol table */
-static INT32 acc_func_level;	/* Parallel function stab level */
 static ST *acc_local_taskargs;  /* Microtask local task args */
 static WN *acc_pragma_block;	/* Parallel funciton pragma block */
 static WN *acc_reference_block;	/* Parallel funciton reference block */
@@ -817,7 +352,6 @@ static DST_INFO_IDX  acc_nested_dst;
 static PU_Info *acc_ppuinfo;	/* Parent PU info structure */
 
 
-static INT64 acc_line_number;	/* Line number of acc parallel/kernel region */
 static INT64 acc_line_no; //for debug
 
 static TY_IDX acc_region_ty = TY_IDX_ZERO;
@@ -838,57 +372,14 @@ static vector<ACC_DATA_ST_MAP*> device_present_or_create;
 //static vector<ACC_DATA_ST_MAP*> device_deviceptr;
 //static vector<ACC_DATA_ST_MAP*> device_device_resident;
 
-//For forloop analysis
-static WN * acc_test_stmt;
-static vector<WN *> acc_base_node;		  /* Parallel forloop base */
-static vector<WN *> acc_limit_node;		/* Parallel forloop limit */
-static WN *acc_ntrip_node;		/* Parallel forloop trip count, iterations in this loop */
-static vector<WN *> acc_stride_node;		/* Parallel forloop stride */
-static WN *acc_doloop_body;
-static UINT32 acc_collapse_count;   /* collapse count */
-static UINT32 acc_loopnest_depth;
-static vector<ST *> acc_forloop_index_st;		/* User forloop index variable ST */
-static vector<TYPE_ID> acc_forloop_index_type;	/* User forloop index variable type */
 
 static UINT32 kernel_parameters_count = 0;
-static UINT32 kernel_tmp_variable_count = 0; //not index, New ST, name didn't appear in host code.
-static char acc_tmp_name_prefix[] = "__acc_tmp_";
 
 UINT32 kernel_tmp_licm_count = 0;
 
-static ST *glbl_threadIdx_x;
-static ST *glbl_threadIdx_y;
-static ST *glbl_threadIdx_z;
-static ST *glbl_blockIdx_x;
-static ST *glbl_blockIdx_y;
-static ST *glbl_blockIdx_z;
-static ST *glbl_blockDim_x;
-static ST *glbl_blockDim_y;
-static ST *glbl_blockDim_z;
-static ST *glbl_gridDim_x;
-static ST *glbl_gridDim_y;
-static ST *glbl_gridDim_z;
-
-static WN* threadidx;
-static WN* threadidy;
-static WN* threadidz;
-
-static WN* blockidx;
-static WN* blockidy;
-static WN* blockidz;
-
-static WN* blockdimx;
-static WN* blockdimy;
-static WN* blockdimz;
-
-static WN* griddimx;
-static WN* griddimy;
-static WN* griddimz;
 	
 
 static WN* acc_wn_reduction_index;
-static WN_MAP_TAB *acc_pmaptab;	/* Parent map table */
-static WN_MAP_TAB *acc_cmaptab;	/* Child map table */
 
 static const mINT32 ACC_NUM_HASH_ELEMENTS = 1021;
 static vector<ST*> acc_kernel_functions_st; //ST list of kernel functions created
@@ -1094,49 +585,8 @@ static void ACC_Array_Ref_Results_Analysis();
 static WN* ACC_Array_Ref_Scalar_Replacement (WN * tree);
 static WN* ACC_Loop_Invariant_Code_Motion_Level1(WN* tree);
 static WN* ACC_Loop_Invariant_Code_Motion_Level2(WN* tree);
-static WN* ACC_GetArrayElementSize(ACC_DREGION__ENTRY dEntry);
 static TY_IDX ACC_GetDopeElementType(ST* st_host);
 
-
-
-
-/*
-Hack for determining if an ST has an associated F90 dope vector (this is
-true for F90 pointers, allocatable arrays, and arrays that may be
-non-contiguous).
-*/
-
-/*
-from dphillim:
-so  if it has a dope TY and
-    the dope_TY points to a KIND_ARRAY,
-    and its not an f90 pointer 
-    and not an argument (SCALAR_FORMAL_REF), 
-    Then it's an allocatable because there's nothing left.
-*/
-
-//(PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG)
-static TY_IDX
-F90_ST_Get_Dope_Vector_etype(ST *st)
-{
-	FLD_HANDLE  fli ;
-	TY_IDX base_pointer_ty;
-	fli = TY_fld(Ty_Table[ST_type(st)]);
-	base_pointer_ty = FLD_type(fli);
-	TY_IDX e_ty = TY_etype(TY_pointed(base_pointer_ty));
-	return e_ty;
-}
-
-static int acc_get_lineno(WN *wn)
-{ 
-  USRCPOS srcpos;
-  USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
-  if (USRCPOS_srcpos(srcpos) != 0)
-  {
-    return USRCPOS_linenum(srcpos);
-  }
-  return 0; 
-} 
 
 /********************************************************************/
 /*Create local table which will be used for kernel function ST replacement*/
@@ -1189,183 +639,8 @@ static BOOL ACC_Is_Same_ST(ST* stA, ST* stB)
 	return FALSE;
 }
 
-/*  Create either a preg or a temp depending on presence of C++ exception
-    handling.  */
-
-static void 
-ACC_Device_Create_Preg_or_Temp ( TYPE_ID mtype, const char *name, ST **st,
-				  WN_OFFSET *ofst )
-{
-	ST *new_st;
-  
-	new_st = New_ST (CURRENT_SYMTAB);
-	ST_Init (new_st,
-	         Save_Str2 ( "__accd_temp_", name ),
-	         CLASS_VAR,
-	         SCLASS_AUTO,
-	         EXPORT_LOCAL,
-	         MTYPE_To_TY (mtype));
-	Set_ST_is_temp_var ( new_st );
-	*st = new_st;
-	*ofst = 0;
-}
-
-static UINT32 acc_reg_tmp_count = 0; 
-static void 
-ACC_Host_Create_Preg_or_Temp ( TYPE_ID mtype, const char *name, ST **st)
-{
-	ST *new_st;
-	char szTmp[256];
-	sprintf(szTmp, "__acch_temp_%s_%d", name, acc_reg_tmp_count);
-    acc_reg_tmp_count++;
-	
-	new_st = New_ST (CURRENT_SYMTAB);
-	ST_Init (new_st,
-	         Save_Str (szTmp),
-	         CLASS_VAR,
-	         SCLASS_AUTO,
-	         EXPORT_LOCAL,
-	         MTYPE_To_TY (mtype));
-	Set_ST_is_temp_var ( new_st );
-	*st = new_st;
-}
-
-
-static void
-acc_my_Get_Return_Pregs(PREG_NUM *rreg1, PREG_NUM *rreg2, mTYPE_ID type,
-                    const char *file, INT line)
-{
-  if (WHIRL_Return_Info_On) {
-    RETURN_INFO return_info = Get_Return_Info(Be_Type_Tbl(type),
-                                              Use_Simulated);
-    if (RETURN_INFO_count(return_info) <= 2) {
-      *rreg1 = RETURN_INFO_preg(return_info, 0);
-      *rreg2 = RETURN_INFO_preg(return_info, 1);
-    } else
-      Fail_FmtAssertion("file %s, line %d: more than 2 return registers",
-                        file, line);
-
-  } else
-    Get_Return_Pregs(type, MTYPE_UNKNOWN, rreg1, rreg2);
-
-  FmtAssert(*rreg1 != 0 && *rreg2 == 0, ("bad return pregs"));
-} // my_Get_Return_Pregs()
-
 #define ACC_GET_RETURN_PREGS(rreg1, rreg2, type) \
   acc_my_Get_Return_Pregs(&rreg1, &rreg2, type, __FILE__, __LINE__)
-
-
-// Return a non-structure field from offset, if there's multiple field
-// with the same offset, return the first.
-// This routine can return empty fld handler.
-static FLD_HANDLE 
-ACC_Get_FLD_From_Offset_r(const TY_IDX ty_idx, const UINT64 offset, UINT* field_id)
-{
-  Is_True(Is_Structure_Type(ty_idx), ("need to be a structure type"));
-
-  UINT64 cur_offset = 0;
-
-  FLD_ITER fld_iter = Make_fld_iter(TY_fld(ty_idx));
-  do {
-    if ( field_id != NULL )
-      (*field_id) ++;
-    FLD_HANDLE fld(fld_iter);       
-
-    // we assume that we will not see bit-fields here.
-    cur_offset = FLD_ofst(fld);
-
-    if (cur_offset == offset)
-    {
-      // check type
-      TY_IDX cur_fld_idx = FLD_type(fld);
-      if (!Is_Structure_Type(cur_fld_idx))
-        return fld;
-    }
-
-    TY_IDX cur_fld_idx = FLD_type(fld);
-    if (TY_kind(cur_fld_idx) == KIND_STRUCT &&
-        TY_fld(cur_fld_idx) != FLD_HANDLE())
-    {
-      // it's possible that the new_offset becomes negative
-      // because of unions. 
-      INT64 new_offset = offset - cur_offset;
-      if (new_offset < 0) 
-	  	return FLD_HANDLE();
-      FLD_HANDLE fld1 = ACC_Get_FLD_From_Offset_r(cur_fld_idx, new_offset, field_id);
-      if (!fld1.Is_Null()) return fld1;
-    }
-
-  } while (!FLD_last_field(fld_iter++));
-
-  return FLD_HANDLE();
-}
-
-// Return a non-structure field from offset, if there's multiple field
-// with the same offset, return the first.
-// This routine will assert if it cannot find a valid field.
-static FLD_HANDLE 
-ACC_Get_FLD_From_Offset(const TY_IDX ty_idx, const UINT64 offset, UINT *field_id= NULL)
-{
-  if (field_id != NULL)
-	  *field_id= 0;
-  FLD_HANDLE fld = ACC_Get_FLD_From_Offset_r(ty_idx, offset, field_id);
-  FmtAssert(!fld.Is_Null(),("cannot find field from offset"));
-  return fld;
-}
-
-static void
-Gen_ACC_LS_get_fld_id_and_ty(ST *st, WN_OFFSET offset, BOOL scalar_only, UINT &field_id, TY_IDX &ty, TY_IDX &result_ty)
-{
-  ty = ST_type(st);
-  result_ty = ty;
-#ifdef KEY // bug 7259
-  if (scalar_only && TY_kind(ty) == KIND_STRUCT )
-  {
-    FLD_HANDLE fld = ACC_Get_FLD_From_Offset(ty, offset, &field_id);
-    result_ty = FLD_type(fld);
-  }
-#endif
-#ifdef KEY // bug 10681
-  if (scalar_only && TY_kind(ty) == KIND_ARRAY)
-    ty = TY_etype(ty);
-#endif
-  return; 
-}
-/*  Generate an appropriate load WN based on an ST.  */
-
-static WN *
-Gen_ACC_Load( ST * st, WN_OFFSET offset, BOOL scalar_only )
-{
-  UINT field_id = 0;
-  WN *wn;
-  TY_IDX ty;
-  TY_IDX result_ty;
-  
-  Gen_ACC_LS_get_fld_id_and_ty(st, offset, scalar_only, field_id, ty, result_ty);
-
-  wn = WN_Ldid ( TY_mtype(result_ty), offset, st, ty ,field_id);
-
-  return (wn);
-}
-
-/*  Generate an appropriate store WN based on an ST.  */
-
-static WN *
-Gen_ACC_Store( ST * st, WN_OFFSET offset, WN * value, BOOL scalar_only)
-{
-  UINT  field_id = 0;
-  WN *wn;
-  TY_IDX ty;
-  TY_IDX result_ty;
-
-  Gen_ACC_LS_get_fld_id_and_ty(st, offset, scalar_only, field_id, ty, result_ty);
-  
-  wn = WN_Stid ( TY_mtype(result_ty), offset, st, ty, value, field_id );
-  WN_linenum(wn) = acc_line_number;
-
-  return (wn);
-}
-
 
 /*******************************************************************/
 
@@ -1488,9 +763,6 @@ ACC_Create_Vertices(WN *wn, VV_HASH_TABLE *parent_to_child,
 }
 
 
-static BOOL 
-ACC_Identical_Pragmas ( WN * wn1, WN * wn2 );
-
 /*
 Transfer all maps (except WN_MAP_FEEDBACK) associated with each node in the
 tree from the parent mapset to the kid's.
@@ -1556,53 +828,6 @@ ACC_Transfer_Maps_R ( WN_MAP_TAB * parent, WN_MAP_TAB * child, WN * tree,
   }
 } // Transfer_Maps_R
 
-
-static ST_IDX Make_ACCRuntime_ST ( OACCRUNTIME rop )
-{
-  Is_True(rop >= ACCRUNTIME_FIRST && rop <= ACCRUNTIME_LAST,
-          ("Make_ACCRuntime_ST: bad rop == %d", (INT) rop));
-
-    // If the global type doesn't exist, create it and its pointer type.
-  if (accruntime_ty == TY_IDX_ZERO) {
-    TY &mpr_ty = New_TY ( accruntime_ty );
-    TY_Init(mpr_ty, 0, KIND_FUNCTION, MTYPE_UNKNOWN,
-            Save_Str(".accruntime"));
-    Set_TY_align(accruntime_ty, 1);
-
-    TYLIST_IDX parm_idx;
-    TYLIST& parm_list = New_TYLIST(parm_idx);
-    Set_TY_tylist(mpr_ty, parm_idx);
-    Set_TYLIST_type(parm_list, Be_Type_Tbl(MTYPE_I4));  // I4 return type
-      // are there really no parameters? -- DRK
-    Set_TYLIST_type(New_TYLIST(parm_idx), TY_IDX_ZERO); // end of parm list
-
-    TY_IDX ty_idx;
-    TY &ty = New_TY ( ty_idx );
-    TY_Init(ty, Pointer_Size, KIND_POINTER, Pointer_Mtype,
-      Save_Str ( ".accruntime_ptr" ));
-    Set_TY_pointed(ty, accruntime_ty);
-
-    Set_TY_align(ty_idx, Pointer_Size); // unnecessary? TY_Init does
-                                        // not set alignment -- DRK
-  }
-
-  PU_IDX pu_idx;
-  PU& pu = New_PU(pu_idx);
-  PU_Init(pu, accruntime_ty, CURRENT_SYMTAB);
-
-  /*  Create the ST, fill in all appropriate fields and enter into the */
-  /*  global symbol table.  */
-
-  ST *st = New_ST ( GLOBAL_SYMTAB );
-  ST_Init(st, Save_Str ( accr_names[rop] ), CLASS_FUNC, SCLASS_EXTERN,
-    EXPORT_PREEMPTIBLE, pu_idx);
-
-  Allocate_Object ( st );
-
-  accr_sts[rop] = ST_st_idx(*st);
-  return accr_sts[rop];
-}
-
 inline WN_OFFSET WN_offsetx ( WN *wn )
 {
   OPERATOR opr;
@@ -1614,509 +839,6 @@ inline WN_OFFSET WN_offsetx ( WN *wn )
   }
 }
 
-//WN node must have a kid which includes buffer region
-//wnArr is a pragma wn node which includes variable declaration
-static WN* ACC_GetArraySizeInUnit(ACC_DREGION__ENTRY dEntry)
-{
-	WN* wn_array = dEntry.acc_data_clauses;
-	WN* wn_start = dEntry.acc_data_start[0];
-	WN* wn_length = dEntry.acc_data_length[0];
-	
-	ST* st_array = WN_st(wn_array);
-	TY_IDX ty = ST_type(st_array);
-	TY_KIND kind = TY_kind(ty);
-	
-	WN* wnUpper = wn_length;
-	OPCODE opupper = WN_opcode(wnUpper);
-	//Two cases: array with no region limite which mean the entire array; buffer with region declaration
-	WN* wnBoundary = WN_COPY_Tree(wnUpper);
-	return wnBoundary;
-}
-
-static int ACC_Get_Array_TotalDim(WN* wnArr)
-{	
-	ST* stArr = WN_st(wnArr);
-	TY_IDX ty = ST_type(stArr);
-	TY_KIND kind = TY_kind(ty);
-	int idim = 1;
-	if(TY_kind(ty) == KIND_POINTER)
-		return 1;
-	if(TY_kind(TY_etype(ty)) == KIND_SCALAR)
-		return 1;
-	else if(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-	{
-		//multi-dimensional array
-		//ty = TY_etype(ty);
-		while(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-		{
-			ty = TY_etype(ty);
-			idim ++;
-		}
-	}
-	return idim;
-}
-
-static UINT32 ACC_Get_ElementSizeForMultiArray(WN* wnArr)
-{
-	ST* stArr = WN_st(wnArr);
-	TY_IDX ty = ST_type(stArr);
-	TY_KIND kind = TY_kind(ty);
-	int idim = 1;
-	if(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-	{
-		//multi-dimensional array
-		//ty = TY_etype(ty);
-		while(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-		{
-			ty = TY_etype(ty);
-			idim ++;
-		}
-	}
-	
-	//if(TY_kind(TY_etype(ty)) == KIND_SCALAR)
-	return TY_size(TY_etype(ty));
-	//return idim;
-}
-
-
-
-static TY_IDX ACC_Get_ElementTYForMultiArray_Fortran(ST* stArr)
-{
-	//ST* stArr = WN_st(wnArr);
-	TY_IDX ty = ST_type(stArr);
-	TY_KIND kind = TY_kind(ty);
-	int idim = 1;
-	
-	//if the st is dynamic array, then ST kind is pointer, 
-	//TY_pointed will be an array
-	if(TY_kind(ty) == KIND_ARRAY)
-	{
-		ty = TY_etype(ty);
-	}
-	else if(TY_kind(ty) == KIND_STRUCT && F90_ST_Has_Dope_Vector(stArr))
-	{
-		TY_IDX etype;
-		FLD_HANDLE  fli ;
-		TY_IDX base_pointer_ty;
-		fli = TY_fld(ty);
-		base_pointer_ty = FLD_type(fli);
-		ty = TY_etype(TY_pointed(base_pointer_ty));
-		return ty;
-	}
-	
-	//if(TY_kind(TY_etype(ty)) == KIND_SCALAR)
-	return ty;
-	//return idim;
-}
-
-
-TY_IDX ACC_Get_ElementTYForMultiArray(ST* stArr)
-{
-	//ST* stArr = WN_st(wnArr);
-	TY_IDX ty = ST_type(stArr);
-	TY_KIND kind = TY_kind(ty);
-	int idim = 1;
-	
-    if (PU_f77_lang(Current_PU_Info_pu()) || PU_f90_lang(Current_PU_Info_pu()))
-  	{
-  		return ACC_Get_ElementTYForMultiArray_Fortran(stArr);
-  	}
-	//if the st is dynamic array, then ST kind is pointer, 
-	//TY_pointed will be an array
-	if(TY_kind(ty) == KIND_POINTER)
-	{		
-		ty = TY_pointed(ty);
-	}
-	if(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-	{
-		//multi-dimensional array
-		//ty = TY_etype(ty);
-		while(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-		{
-			ty = TY_etype(ty);
-			idim ++;
-		}
-	}
-	
-	//if(TY_kind(TY_etype(ty)) == KIND_SCALAR)
-	return TY_etype(ty);
-	//return idim;
-}
-
-
-static WN* ACC_Get_Specified_Dim(WN* wnArr, int n)
-{
-
-	ST* stArr = WN_st(wnArr);
-	TY_IDX ty = ST_type(stArr);
-	TY_KIND kind = TY_kind(ty);
-	int idim = 1;
-	int upper_bound;
-	int lower_bound;
-	
-	if(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY && n > 0)
-	{
-		//multi-dimensional array
-		//ty = TY_etype(ty);
-		while(TY_kind(TY_etype(ty)) != KIND_SCALAR 
-				&& TY_kind(TY_etype(ty)) == KIND_ARRAY)
-		{
-			if(idim == n)
-			{
-				if(ARB_const_stride(TY_arb(ty))
-						&& ARB_const_lbnd(TY_arb(ty)) && ARB_const_ubnd(TY_arb(ty)))
-				{			
-					upper_bound = ARB_ubnd_val(TY_arb(ty));
-					lower_bound = ARB_lbnd_val(TY_arb(ty));
-					break;
-				}
-				else
-					Fail_FmtAssertion(("%s is not a static array in ACC_Get_Specified_Dim."), ST_name(stArr));
-			}
-			ty = TY_etype(ty);
-			idim ++;
-		}
-	}
-	
-	if(TY_kind(ty) == KIND_ARRAY)
-	{
-		if(ARB_const_stride(TY_arb(ty))
-				&& ARB_const_lbnd(TY_arb(ty)) && ARB_const_ubnd(TY_arb(ty)))
-		{			
-			upper_bound = ARB_ubnd_val(TY_arb(ty));
-			lower_bound = ARB_lbnd_val(TY_arb(ty));
-		}
-		else
-			Fail_FmtAssertion(("%s is not a static array in ACC_Get_Specified_Dim."), ST_name(stArr));
-	}
-	
-	WN* wn_dim = WN_Intconst(MTYPE_U4, (upper_bound - lower_bound + 1));
-	return wn_dim;
-}
-
-
-static WN* ACC_Load_MultiDimArray_StartAddr(WN* wnArr)
-{
-	ST* base = WN_st(wnArr);
-	int idim = ACC_Get_Array_TotalDim(wnArr);
-	WN *arr_ref = WN_Create( OPCODE_make_op(OPR_ARRAY, Pointer_Mtype,MTYPE_V), 1+2*idim);
-    WN_element_size(arr_ref) = ACC_Get_ElementSizeForMultiArray(wnArr);
-    WN_array_base(arr_ref) = WN_Lda(Pointer_type, 0, base);
-
-				          
-	for( int j=0; j<idim; j++ )
-	{
-		 //assume the index type to be I8. also assume the dim-size I8 type.
-		 //TODO: make it more adaptive. csc
-		 WN_array_index( arr_ref, j ) = WN_Intconst(MTYPE_U4, 0);
-		 WN_array_dim( arr_ref, j ) = ACC_Get_Specified_Dim(wnArr, j);;
-	}
-
-    //WN_array_index(arr_ref,0) = WN_Intconst(MTYPE_U4, 0);
-    //WN_array_dim(arr_ref,0) = WN_Intconst(MTYPE_U4, idim);
-    return arr_ref;
-}
-
-static TY_IDX ACC_GetArrayElemType(TY_IDX ty)
-{
-    TY_IDX tyElement = TY_etype(ty);
-    while(TY_kind(tyElement) == KIND_ARRAY)
-        tyElement = TY_etype(tyElement);
-    return tyElement;
-}
-
-//WN node must have a kid which includes buffer region
-//wnArr is a pragma wn node which includes variable declaration
-//return the offset of the array buffer. It is in byte.
-static WN* ACC_GetArrayStart(ACC_DREGION__ENTRY dEntry)
-{
-	//now we only support 1 segment array region for all dimensional arrays
-	WN* wn_array = dEntry.acc_data_clauses;
-	WN* wn_start = dEntry.acc_data_start[0];
-	WN* wn_length = dEntry.acc_data_length[0];
-	
-	ST* st_array = WN_st(wn_array);
-	TY_IDX ty = ST_type(st_array);
-	TY_KIND kind = TY_kind(ty);
-	
-	WN* wnLower = wn_start;
-	//OPCODE oplower = WN_opcode(wnLower);
-	OPERATOR oplower = WN_operator(wnLower);
-	WN* wnUpper = wn_length;
-	//OPCODE opupper = WN_opcode(wnUpper);
-	OPERATOR opupper = WN_operator(wnLower);
-	
-	WN* wnStart;
-	WN* wnElementsize = ACC_GetArrayElementSize(dEntry);
-	wnStart = WN_Binary(OPR_MPY, MTYPE_U4, 
-						wnElementsize, WN_COPY_Tree(wnLower));
-	return wnStart;
-}
-
-static WN* ACC_GetArrayElementSize(ACC_DREGION__ENTRY dEntry)
-{
-	ST* st_array;
-	WN* wn_length;
-	UINT32 idims = dEntry.acc_data_length.size();	
-	WN* wn_array = dEntry.acc_data_clauses;
-	st_array = WN_st(wn_array);
-	TY_IDX ty = ST_type(st_array);
-	TY_KIND kind = TY_kind(ty);
-	int i;
-
-	WN* wn_TotalSize = WN_Intconst(MTYPE_U4, 1);
-	WN* wnElementsize = NULL;
-
-	if(kind == KIND_ARRAY)
-	{
-		TY_IDX tyElement = TY_etype(ty);
-		//for C, multi-dimensional array
-		//it array of array of array ...
-		if(TY_kind(tyElement) == KIND_ARRAY)
-			tyElement = ACC_GetArrayElemType(tyElement);
-		if(TY_kind(tyElement) != KIND_SCALAR)
-			Fail_FmtAssertion("Only support KIND_SCALAR for fortran array, while array :%s is not.", ST_name(st_array));
-		INT32 elemSize = TY_size(tyElement);
-		wnElementsize = WN_Intconst(MTYPE_U4, elemSize);
-	}
-	else if(kind == KIND_POINTER)
-	{
-		TY_IDX tyPointed = TY_pointed(ty);
-		
-		if(TY_kind(tyPointed)==KIND_ARRAY)
-			tyPointed = ACC_GetArrayElemType(tyPointed);
-
-		if(TY_kind(tyPointed) != KIND_SCALAR)
-                            Fail_FmtAssertion("Pointer %s is not scalar pointer.", ST_name(st_array));
-		INT32 elemSize = TY_size(tyPointed);
-		wnElementsize = WN_Intconst(MTYPE_U4, elemSize);
-	}
-	else if(F90_ST_Has_Dope_Vector(st_array))
-	{
-		FLD_HANDLE  fli ;
-		TY_IDX base_pointer_ty;
-		fli = TY_fld(Ty_Table[ST_type(st_array)]);
-		base_pointer_ty = FLD_type(fli);
-		TY_IDX e_ty = TY_etype(TY_pointed(base_pointer_ty));
-		INT32 elemSize = TY_size(e_ty);
-		wnElementsize = WN_Intconst(MTYPE_U4, elemSize);
-	}
-	else
-	{
-		Fail_FmtAssertion("unsupported array %s type, in lower acc section (ACC_GetArraySize_Fortran).", ST_name(st_array));
-	}
-	return wnElementsize;
-}
-
-//WN node must have a kid which includes buffer region
-//return the size of the array buffer. It is in byte.
-static WN* ACC_GetArraySize(ACC_DREGION__ENTRY dEntry)
-{
-	//now we only support 1 segment array region for all dimensional arrays
-	UINT32 idims = dEntry.acc_data_length.size();	
-	WN* wn_array = dEntry.acc_data_clauses;
-	WN* wn_TotalSize = WN_Intconst(MTYPE_U4, 1);
-	WN* wnElementsize = NULL;	
-	ST* st_array = WN_st(wn_array);
-	TY_IDX ty = ST_type(st_array);
-	TY_KIND kind = TY_kind(ty);
-	int i=0;
-			
-    wnElementsize = ACC_GetArrayElementSize(dEntry);
-	
-	for(i=0; i<idims; i++)
-	{
-		WN* wn_length = dEntry.acc_data_length[i];
-		WN* wnBoundary = WN_COPY_Tree(wn_length);
-		WN* wnWholeSize;
-		wn_TotalSize = WN_Binary(OPR_MPY, MTYPE_U4, 
-							wn_TotalSize, wnBoundary);
-	}
-	wn_TotalSize = WN_Binary(OPR_MPY, MTYPE_U4, 
-							wn_TotalSize, wnElementsize);
-	return wn_TotalSize;
-}
-
-
-/*device Malloc memory*/
-static WN *
-Gen_DeviceMalloc( ST* st_hmem, ST *st_dmem, WN* wnSize) 
-{
-	WN * wn;
-	WN* wnx;
-	wn = WN_Create(OPC_VCALL, 4);	
-	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_DEVICEMEMMALLOC);
-  
-	WN_Set_Call_Non_Data_Mod(wn);
-	WN_Set_Call_Non_Data_Ref(wn);
-	WN_Set_Call_Non_Parm_Mod(wn);
-	WN_Set_Call_Non_Parm_Ref(wn);
-	WN_Set_Call_Parm_Ref(wn);
-
-	//Scalar/Array/Pointer
-    //if the host is multi dim array, it will be different    
-    if(F90_ST_Has_Dope_Vector(st_hmem))
-  	    wnx = WN_Ldid(Pointer_type, 0, st_hmem, ST_type(st_dmem));
-	else if(TY_kind(ST_type(st_hmem)) == KIND_ARRAY)
-		wnx = WN_Lda( Pointer_type, 0, st_hmem);
-	else if(TY_kind(ST_type(st_hmem)) == KIND_POINTER)
-  		wnx = WN_Ldid(Pointer_type, 0, st_hmem, ST_type(st_hmem));	
-	else if(TY_kind(ST_type(st_hmem)) == KIND_SCALAR)
-		wnx = WN_Lda( Pointer_type, 0, st_hmem);
-	
-    WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_VALUE);
-	
-	wnx = WN_Lda( Pointer_type, 0, st_dmem);
-    WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-  	//
-	WN_kid(wn, 2) = WN_CreateParm(MTYPE_U4, wnSize, 
-		  Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE); 
-
-	
-    char* strname = (char*) alloca ( strlen(ST_name(st_hmem))+ strlen(ST_name(st_dmem)) + 10);
-	sprintf ( strname, "%s : %s \0", ST_name(st_hmem), ST_name(st_dmem));
-	WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
-	WN_kid(wn, 3) = WN_CreateParm(Pointer_type, wn_strname, 
-						 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
-	
-  	return wn;
-}
-
-
-static WN *
-Gen_DataD2H (ST *Src, ST *Dst, WN* wnSize, WN* wnStart) 
-{
-  WN * wn;
-  WN * wnx;
-  wn = WN_Create(OPC_VCALL, 6 );
-  WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_DEVICEMEMOUT);
-
-  WN_Set_Call_Non_Data_Mod(wn);
-  WN_Set_Call_Non_Data_Ref(wn);
-  WN_Set_Call_Non_Parm_Mod(wn);
-  WN_Set_Call_Non_Parm_Ref(wn);
-  WN_Set_Call_Parm_Ref(wn);
-  WN_linenum(wn) = acc_line_number;
-
-  wnx = WN_Ldid(Pointer_type, 0, Src, ST_type(Src));
-
-
-  //WN* multiArrayT; //
-
-  //wnx = WN_Lda( Pointer_type, 0, Src);
-  WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-
-  //if the host is multi dim array, it will be different    
-    if(F90_ST_Has_Dope_Vector(Dst))
-  	    wnx = WN_Ldid(Pointer_type, 0, Dst, ST_type(Src));
-	else if(TY_kind(ST_type(Dst)) == KIND_ARRAY)
-		wnx = WN_Lda( Pointer_type, 0, Dst);
-	else if(TY_kind(ST_type(Dst)) == KIND_POINTER)
-  		wnx = WN_Ldid(Pointer_type, 0, Dst, ST_type(Dst));
-	else if(TY_kind(ST_type(Dst)) == KIND_SCALAR)
-		wnx = WN_Lda( Pointer_type, 0, Dst);
-  //if(ACC_Get_Array_TotalDim(wnx) > 1)
-  //	wnx = ACC_Load_MultiDimArray_StartAddr(wnx);
-  //wnx = WN_Lda( Pointer_type, 0, Dst);
-  WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-  
-  WN_kid(wn, 2) = WN_CreateParm(MTYPE_U4, wnSize, 
-		  Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE);
-  
-  WN_kid(wn, 3) = WN_CreateParm(MTYPE_U4, wnStart, 
-		  Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE);
-  
-  if(acc_AsyncExpr)
-  {
-  	WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
-  		  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
-  }
-  else 
-  	WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -2), 
-  		  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
-
-  
-	char* strname = (char *) alloca ( strlen(ST_name(Dst))+ strlen(ST_name(Src)) + 10);
-	sprintf ( strname, "%s : %s \0", ST_name(Dst), ST_name(Src));
-	WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
-	WN_kid(wn, 5) = WN_CreateParm(Pointer_type, wn_strname, 
-						 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
-
-  return wn;
-}
-
-static WN *
-Gen_DataH2D (ST *Src, ST *Dst, WN* wnSize, WN* wnStart) 
-{
-  WN * wn;
-  WN * wnx;
-  wn = WN_Create(OPC_VCALL, 6);
-  WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_DEVICEMEMIN);
-
-  WN_Set_Call_Non_Data_Mod(wn);
-  WN_Set_Call_Non_Data_Ref(wn);
-  WN_Set_Call_Non_Parm_Mod(wn);
-  WN_Set_Call_Non_Parm_Ref(wn);
-  WN_Set_Call_Parm_Ref(wn);
-  WN_linenum(wn) = acc_line_number;
-
-  if(F90_ST_Has_Dope_Vector(Src))
-  	  wnx = WN_Ldid(Pointer_type, 0, Src, ST_type(Dst));
-  else if(TY_kind(ST_type(Src)) == KIND_ARRAY)
-	  wnx = WN_Lda( Pointer_type, 0, Src);
-  else  if(TY_kind(ST_type(Src)) == KIND_POINTER)
-  	  wnx = WN_Ldid(Pointer_type, 0, Src, ST_type(Src));
-  else if(TY_kind(ST_type(Src)) == KIND_SCALAR)
-	  wnx = WN_Lda( Pointer_type, 0, Src);
-  //WN* multiArrayT;
-  //if(ACC_Get_Array_TotalDim(wnx) > 1)
-  //	multiArrayT = ACC_Load_MultiDimArray_StartAddr(wnx);
-  //WN* multiArrayT = ACC_Load_MultiDimArray_StartAddr(wnx);
-  //wnx = WN_Lda( Pointer_type, 0, Src);
-  WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-
-  
-  wnx = WN_Ldid(Pointer_type, 0, Dst, ST_type(Dst));
-
-  //wnx = WN_Lda( Pointer_type, 0, Dst);
-  WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wnx, 
-                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
-  
-  WN_kid(wn, 2) = WN_CreateParm(MTYPE_U4, wnSize, 
-		  Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE);
-  
-  WN_kid(wn, 3) = WN_CreateParm(MTYPE_U4, wnStart, 
-  		  Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE);
-  
-  if(acc_AsyncExpr)
-  {
-  	WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
-  		  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
-  }
-  else 
-  	WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -2), 
-  		  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
-  
-	char* strname = (char *) alloca ( strlen(ST_name(Src))+ strlen(ST_name(Dst)) + 10);
-	sprintf ( strname, "%s : %s \0", ST_name(Src), ST_name(Dst));
-	WN* wn_strname = WN_LdaString(strname,0, strlen(strname)+1);
-	WN_kid(wn, 5) = WN_CreateParm(Pointer_type, wn_strname, 
-						 		WN_ty(wn_strname), WN_PARM_BY_VALUE);
-
-  return wn;
-}
 
 /*
 Create a DST entry for a local variable in either the parent subprogram or
@@ -3546,253 +2268,6 @@ static ST* ACC_AnalysisForLoop()
 /* End the Content of wn_mp_dg.cxx.
 *  csc.
 */
-
-/* standardize do comp operations.
- * required by RTL.
- * LT -> LE, GT -> LE
- * csc.
- * must be called before Extract_Do_Info
- */
-
-static void
-ACC_Standardize_ForLoop (WN* do_tree)
-{
-  if (WN_operator(WN_end(do_tree)) == OPR_GE 
-      || WN_operator(WN_end(do_tree)) == OPR_LE )
-  {
-    // need to do nothing.
-    return;
-  }
-  else
-  {
-    WN_Upper_Bound_Standardize(do_tree, WN_end(do_tree), TRUE);
-  }
-}
-
-
-static WN* 
-WN_Integer_Cast(WN* tree, TYPE_ID to, TYPE_ID from)
-{
-  if (from != to)
-    return WN_CreateExp1(OPCODE_make_op(OPR_CVT, to, from), tree);
-  else
-    return tree;
-}
-
-
-/*
-* Extract do info for acc scheduling. 
-*/
-
-static void 
-ACC_Extract_Per_Level_Do_Info ( WN * do_tree, UINT32 level_id )
-{
-  // standardize do tree.
-  acc_test_stmt = WN_COPY_Tree(WN_end(do_tree));
-  ACC_Standardize_ForLoop(do_tree);
-
-  WN        *do_idname  = WN_index(do_tree);
-  ST        *do_id_st   = WN_st(do_idname);
-  WN_OFFSET  do_id_ofst = WN_offsetx(do_idname);
-  WN        *do_init;
-  WN        *do_limit;
-  WN        *do_stride;
-  WN		*doloop_body;
-  BOOL      was_kid0 = FALSE;
-
-  /* Extract mp scheduling info from do */
-
-  do_init = WN_kid0(WN_start(do_tree));
-  //WN_kid0(WN_start(do_tree)) = NULL;
-
-#ifdef KEY
-  {
-    // bug 5767: handle cvt
-    WN * kid0 = WN_kid0 (WN_end (do_tree));
-    if (WN_operator (kid0) == OPR_CVT)
-      kid0 = WN_kid0 (kid0);
-
-    WN * kid1 = WN_kid1 (WN_end (do_tree));
-    if (WN_operator (kid1) == OPR_CVT)
-      kid1 = WN_kid0 (kid1);
-
-    if (WN_operator (kid0) == OPR_LDID &&
-        WN_st (kid0) == do_id_st &&
-        WN_offsetx (kid0) == do_id_ofst)
-    { // kid0
-      was_kid0 = TRUE;
-      do_limit = WN_kid1 (WN_end (do_tree));
-      WN_kid1 (WN_end (do_tree)) = NULL;
-    }
-    else if (WN_operator (kid1) == OPR_LDID &&
-             WN_st (kid1) == do_id_st &&
-             WN_offsetx (kid1) == do_id_ofst)
-    { // kid1
-      do_limit = WN_kid0 (WN_end (do_tree));
-      WN_kid0 (WN_end (do_tree)) = NULL;
-    }
-    else
-    { // try again
-      WN_Upper_Bound_Standardize ( do_tree, WN_end(do_tree), TRUE );
-      // handle cvt
-      kid0 = WN_kid0 (WN_end (do_tree));
-      if (WN_operator (kid0) == OPR_CVT)
-        kid0 = WN_kid0 (kid0);
-
-      kid1 = WN_kid1 (WN_end (do_tree));
-      if (WN_operator (kid1) == OPR_CVT)
-        kid1 = WN_kid0 (kid1);
-
-      if (WN_operator (kid0) == OPR_LDID &&
-          WN_st (kid0) == do_id_st &&
-          WN_offsetx (kid0) == do_id_ofst)
-      { // kid0
-        was_kid0 = TRUE;
-        do_limit = WN_kid1 (WN_end (do_tree));
-        WN_kid1 (WN_end (do_tree)) = NULL;
-      }
-      else if (WN_operator (kid1) == OPR_LDID &&
-               WN_st (kid1) == do_id_st &&
-               WN_offsetx (kid1) == do_id_ofst)
-      { // kid1
-        do_limit = WN_kid0 (WN_end (do_tree));
-        WN_kid0 (WN_end (do_tree)) = NULL;
-      }
-      else // fail
-        Fail_FmtAssertion ( "malformed limit test in ACC forloop processing" );
-    }
-  }
-#else
-  if ((WN_operator(WN_kid0(WN_end(do_tree))) == OPR_LDID) &&
-      (WN_st(WN_kid0(WN_end(do_tree))) == do_id_st) &&
-      (WN_offsetx(WN_kid0(WN_end(do_tree))) == do_id_ofst)) {
-    was_kid0 = TRUE;
-    do_limit = WN_kid1(WN_end(do_tree));
-    WN_kid1(WN_end(do_tree)) = NULL;
-  } else if ((WN_operator(WN_kid1(WN_end(do_tree))) == OPR_LDID) &&
-	     (WN_st(WN_kid1(WN_end(do_tree))) == do_id_st) &&
-	     (WN_offsetx(WN_kid1(WN_end(do_tree))) == do_id_ofst)) {
-    do_limit = WN_kid0(WN_end(do_tree));
-    WN_kid0(WN_end(do_tree)) = NULL;
-  } else {
-    WN_Upper_Bound_Standardize ( do_tree, WN_end(do_tree), TRUE );
-    if ((WN_operator(WN_kid0(WN_end(do_tree))) == OPR_LDID) &&
-	(WN_st(WN_kid0(WN_end(do_tree))) == do_id_st) &&
-	(WN_offsetx(WN_kid0(WN_end(do_tree))) == do_id_ofst)) {
-      was_kid0 = TRUE;
-      do_limit = WN_kid1(WN_end(do_tree));
-      WN_kid1(WN_end(do_tree)) = NULL;
-    } else if ((WN_operator(WN_kid1(WN_end(do_tree))) == OPR_LDID) &&
-	       (WN_st(WN_kid1(WN_end(do_tree))) == do_id_st) &&
-	       (WN_offsetx(WN_kid1(WN_end(do_tree))) == do_id_ofst)) {
-      do_limit = WN_kid0(WN_end(do_tree));
-      WN_kid0(WN_end(do_tree)) = NULL;
-    } else {
-      Fail_FmtAssertion ( "malformed limit test in ACC processing" );
-    }
-  }
-#endif
-
-  if ((WN_operator(WN_kid0(WN_kid0(WN_step(do_tree)))) == OPR_LDID) &&
-      (WN_st(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_st) &&
-      (WN_offsetx(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_ofst))
-  {
-    do_stride = WN_COPY_Tree ( WN_kid1(WN_kid0(WN_step(do_tree))) );
-#ifdef KEY
-    if (WN_operator (WN_kid0 (WN_step (do_tree))) == OPR_SUB)
-    { // the loop goes down, don't miss '-' in (- non-const-stride)
-      OPCODE negop = OPCODE_make_op (OPR_NEG, WN_rtype (do_stride), MTYPE_V);
-      do_stride = WN_CreateExp1 (negop, do_stride);
-    }
-#endif // KEY
-  }
-  else
-    do_stride = WN_COPY_Tree ( WN_kid0(WN_kid0(WN_step(do_tree))) );
-
-  /* Generate mp scheduling expressions */
-  doloop_body = WN_do_body(do_tree);
-  acc_base_node.push_back(do_init);
-    // used by Rewrite_Do, need to be copied ?
-  acc_limit_node.push_back(WN_COPY_Tree( do_limit ));
-  acc_stride_node.push_back(do_stride);
-  acc_doloop_body = WN_do_body(do_tree);
-
-  TYPE_ID current_index_type = acc_forloop_index_type[level_id];
-  if (acc_collapse_count == 1) {
-    if (((WN_operator(WN_end(do_tree)) == OPR_LT) && was_kid0) ||
-        ((WN_operator(WN_end(do_tree)) == OPR_GT) && !was_kid0)) { 
-      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
-      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
-      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_COPY_Tree(do_stride));
-      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
-      WN* wn_exp2 = WN_Sub(current_index_type, wn_exp1, WN_Intconst(current_index_type, 1));
-      wn_exp2 = WN_Integer_Cast(wn_exp2, current_index_type, WN_rtype(wn_exp2));
-      WN* wn_exp3 = WN_Div(current_index_type, wn_exp2, WN_COPY_Tree(do_stride));
-      acc_ntrip_node = wn_exp3; 
-    } else if (((WN_operator(WN_end(do_tree)) == OPR_GT) && was_kid0) ||
-               ((WN_operator(WN_end(do_tree)) == OPR_LT) && !was_kid0)) { 
-      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
-      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
-      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_Intconst(current_index_type, 1));
-      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
-      WN* wn_exp2 = WN_Add(current_index_type, wn_exp1, WN_COPY_Tree(do_stride));
-      wn_exp2 = WN_Integer_Cast(wn_exp2, current_index_type, WN_rtype(wn_exp2));
-      WN* wn_exp3 = WN_Div(current_index_type, wn_exp2, WN_COPY_Tree(do_stride));
-      acc_ntrip_node = wn_exp3; 
-    } else { 
-      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
-      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
-      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_COPY_Tree(do_stride));
-      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
-      WN* wn_exp2 = WN_Div(current_index_type, wn_exp1, WN_COPY_Tree(do_stride));
-      acc_ntrip_node = wn_exp2; 
-    } 
-  }
-
-}
-
-/*
-* Extract do info for mp scheduling. 
-*/
-
-static void 
-ACC_Extract_Do_Info ( WN * do_tree )
-{
-  acc_base_node.clear();
-  acc_limit_node.clear();
-  acc_stride_node.clear();
-  acc_doloop_body = NULL;
-  for (UINT32 i = 0; i < acc_collapse_count; i++) {
-    ACC_Extract_Per_Level_Do_Info(do_tree, i);
-    do_tree = WN_first(WN_do_body(do_tree));
-  }
-}
-
-static void
-ACC_Extract_Index_Info ( WN* pdo_node )
-{
-  WN *prev_pdo = NULL;
-  acc_forloop_index_st.clear();
-  acc_forloop_index_type.clear();
-  for (UINT32 i = 0; i < acc_collapse_count; i++) {
-    if (WN_operator(pdo_node) != OPR_DO_LOOP) {
-      /* in case collapse count exceeds number of do loops */
-      acc_collapse_count = i;
-      pdo_node = prev_pdo;
-      break;
-    }
-    ST * tmp_do_index_st = WN_st(WN_index(pdo_node));
-    TYPE_ID tmp_do_index_type = TY_mtype(ST_type(tmp_do_index_st));
-    if (tmp_do_index_type == MTYPE_I1 || tmp_do_index_type == MTYPE_I2)
-      tmp_do_index_type = MTYPE_I4;
-    else if (tmp_do_index_type == MTYPE_U1 || tmp_do_index_type == MTYPE_U2)
-      tmp_do_index_type = MTYPE_U4;
-    acc_forloop_index_st.push_back(tmp_do_index_st);
-    acc_forloop_index_type.push_back(tmp_do_index_type);
-    prev_pdo = pdo_node;
-    pdo_node = WN_first(WN_do_body(pdo_node));
-  }
-}
 
 static WN* GenFinalReductionAlgorithm(ST* st_dbuffer, ST* st_dhost, 
 				ST* st_reduction_kernel_name, ST* st_num_of_element, UINT32 iTypesize)
@@ -7487,436 +5962,6 @@ ACC_Transform_MultiForLoop(KernelsRegionInfo* pKRInfo)
 	ACC_Pop_Some_Globals( );
 }
 
-static WN* ACC_Extract_Seq_Loops_Info(WN * tree )
-{
-	
-	WN        *cur_node;
-	WN        *first_node;
-	WN        *prev_node;
-	WN        *next_node;
-  	BOOL 	  is_region;
-	for (cur_node = WN_first(tree); cur_node; cur_node = next_node) 
-	{
-
-		prev_node = WN_prev(cur_node);
-		next_node = WN_next(cur_node);
-		//Process the loop region which is inside the kernel region
-		if ((is_region = (WN_opcode(cur_node) == OPC_REGION &&
-	                     WN_first(WN_region_pragmas(cur_node)) &&
-	                     WN_opcode(WN_first(
-		        WN_region_pragmas(cur_node))) == OPC_PRAGMA) ) &&
-	   		WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
-					WN_PRAGMA_ACC_LOOP_BEGIN) 
-		{				
-		  //this for loop is seq, ignore any clauses
-		  //stupid fortran will generate some trash code right before do-loop		  
-		  WN* wn_region_bdy = WN_COPY_Tree(WN_region_body(cur_node));
-		  WN* sequential_list = NULL;
-		  WN* pdo_node = WN_first(wn_region_bdy);
-		  //WN* sequential_tmp = NULL;
-		  while(WN_operator(pdo_node) != OPR_DO_LOOP)
-		  {
-		  	if(sequential_list == NULL)
-				sequential_list = WN_CreateBlock();
-		    WN_INSERT_BlockLast(sequential_list, WN_COPY_Tree(pdo_node));
-			pdo_node = WN_next(pdo_node);
-		  }
-		  WN* wn_doloop_body = ACC_Extract_Seq_Loops_Info(WN_do_body(pdo_node));
-		  WN_do_body(pdo_node) = wn_doloop_body;
-		  if(sequential_list != NULL)
-		  	WN_INSERT_BlockLast(sequential_list, pdo_node);
-		  else
-		  	sequential_list = pdo_node;
-	
-		  //WN* wn_new_body = ACC_Extract_Seq_Loops_Info(WN_do_body(wn_forstmt));
-		  //WN_do_body(wn_forstmt) = wn_new_body;
-		  WN_prev(sequential_list) = prev_node;
-		  WN_next(sequential_list) = next_node;
-		  
-		  if (WN_prev(cur_node) == NULL)
-		    WN_first(tree) = sequential_list;
-		  if (WN_next(cur_node) == NULL)
-		    WN_last(tree) = sequential_list;
-
-		  RID_Delete( Current_Map_Tab, cur_node );
-		  WN_DELETE_Tree(cur_node);
-		}
-	}
-
-	return tree;
-}
-
-/*Process and anlysis the loop during kernel region*/
-static void ACC_Extract_ACC_LoopNest_Info( WN * tree )
-{
-  INT32      i;
-  INT32      vsize;
-  WN        *wn;
-  WN        *wn1;
-  WN        *wn2;
-  WN        *cur_node;
-  WN        *first_node;
-  WN        *prev_node;
-  WN        *next_node;
-  WN        *pdo_node;
-  WN        *chunk_wn = NULL;
-  WN        *body_block;
-  WN        *while_block;
-  ST        *return_st;
-  WN_OFFSET  return_ofst;
-  PREG_NUM   rreg1, rreg2;
-  BOOL       while_seen = FALSE;
-  BOOL       is_acc;
-  BOOL is_region;
-  WN* acc_collapse;
-  WN* acc_gang;
-  WN* acc_worker;
-  WN* acc_vector;
-  BOOL isIndependent = FALSE;
-  BOOL isSeq = FALSE;
-  WN* acc_private;
-  INT32 acc_loopprivate_count = 0;
-  WN* acc_reduction;
-  INT32 acc_loopreduction_count = 0;
-
-  Is_True(acc_t == ACCP_LOOP_REGION, ("not inside a for loop"));
-  cur_node = WN_first(WN_region_pragmas(tree));
-  
-  /*FmtAssert (cur_node &&
-             WN_opcode(cur_node) == OPC_PRAGMA &&
-             WN_pragma(cur_node) == WN_PRAGMA_ACC_LOOP_BEGIN,
-             ("ACC LOOP pragma in kernel region: Unexpected first pragma node"));*/
-  is_acc = WN_pragma_acc(cur_node);
-
-  next_node = WN_next(cur_node);
-
-  FOR_LOOP_INFO forloopinfo;
-  BZERO ( &forloopinfo, sizeof(forloopinfo));
-  //acc_loopinfo.acc_forloop
-  while ((cur_node = next_node)) 
-  {
-
-    next_node = WN_next(cur_node);
-
-    if (((WN_opcode(cur_node) == OPC_PRAGMA) ||
-         (WN_opcode(cur_node) == OPC_XPRAGMA)) &&
-        (WN_pragmas[WN_pragma(cur_node)].users & PUSER_ACC)) 
-    {
-		switch (WN_pragma(cur_node)) 
-		{
-		  case WN_PRAGMA_ACC_CLAUSE_COLLAPSE:
-		    if (acc_collapse)
-		      WN_DELETE_Tree ( acc_collapse );
-		    acc_collapse = cur_node;
-			forloopinfo.acc_collapse = acc_collapse;
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_GANG:
-		    //WN_DELETE_Tree ( cur_node );
-			//forloopinfo.looptype = ACC_GANG;
-			if(forloopinfo.looptype == ACC_VECTOR)
-				forloopinfo.looptype = ACC_GANG_VECTOR;
-			
-			else if(forloopinfo.looptype == ACC_WORKER)				
-				forloopinfo.looptype = ACC_GANG_WORKER;
-			
-			else if(forloopinfo.looptype == ACC_WORKER_VECTOR)				
-				forloopinfo.looptype = ACC_GANG_WORKER_VECTOR;
-			
-			else
-				forloopinfo.looptype = ACC_GANG;
-			forloopinfo.gangs = cur_node;
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_WORKER:
-		    //WN_DELETE_Tree ( cur_node );		
-			
-			if(forloopinfo.looptype == ACC_VECTOR)				
-				forloopinfo.looptype = ACC_WORKER_VECTOR;
-			else if(forloopinfo.looptype == ACC_GANG)				
-				forloopinfo.looptype = ACC_GANG_WORKER;
-			else if(forloopinfo.looptype == ACC_GANG_VECTOR)				
-				forloopinfo.looptype = ACC_GANG_WORKER_VECTOR;
-			else
-				forloopinfo.looptype = ACC_WORKER;
-			
-			forloopinfo.workers = cur_node;
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_VECTOR:
-		    //WN_DELETE_Tree ( cur_node );
-			if(forloopinfo.looptype == ACC_GANG)
-				forloopinfo.looptype = ACC_GANG_VECTOR;
-			else if(forloopinfo.looptype == ACC_GANG_WORKER)				
-				forloopinfo.looptype = ACC_GANG_WORKER_VECTOR;
-			else if(forloopinfo.looptype == ACC_WORKER)				
-				forloopinfo.looptype = ACC_WORKER_VECTOR;
-			else
-				forloopinfo.looptype = ACC_VECTOR;
-			forloopinfo.vectors = cur_node;
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_SEQ:
-		    forloopinfo.isSeq = true;
-		    WN_DELETE_Tree ( cur_node );
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_INDEPENDENT:
-		    forloopinfo.isIndependent = true;
-		    WN_DELETE_Tree ( cur_node );	
-		    break;
-
-		  case WN_PRAGMA_ACC_CLAUSE_PRIVATE:
-		    for (wn = forloopinfo.acc_private; wn; wn = WN_next(wn))
-		      if (ACC_Identical_Pragmas(cur_node, wn))
-				break;
-			  
-		    if (wn == NULL) 
-			{
-		      WN_next(cur_node) = forloopinfo.acc_private;
-		      forloopinfo.acc_private = cur_node;
-		      ++forloopinfo.private_count;
-		    } 
-			else
-		      WN_Delete ( cur_node );
-		    break;		  
-				   
-		 case WN_PRAGMA_ACC_CLAUSE_DATA_LENGTH:
-		 case WN_PRAGMA_ACC_CLAUSE_DATA_START:
-		    break;		   
-			
-		  case WN_PRAGMA_ACC_CLAUSE_REDUCTION:
-		  	{
-				if (WN_opcode(cur_node) != OPC_PRAGMA &&
-	                WN_operator(WN_kid0(cur_node)) == OPR_ARRAY &&
-	                OPCODE_has_sym(WN_opcode(WN_kid0(WN_kid0(cur_node)))) == 0) 
-                {
-                	WN_DELETE_Tree ( cur_node );
-                } 
-			    else 
-				{
-					ACC_ReductionMap acc_reductionMap;
-					acc_reductionMap.acc_looplevel = (ACC_LOOP_LEVEL)acc_loopinfo.loopnum;
-					acc_reductionMap.hostName = WN_st(cur_node);
-					acc_reductionMap.ReductionOpr = (OPERATOR)WN_pragma_arg2(cur_node);
-	                //WN_next(cur_node) = forloopinfo.acc_reduction;
-	                forloopinfo.reductionmap.push_back(acc_reductionMap);
-		        	++forloopinfo.reduction_count;
-					acc_reduction_count ++;
-              	}
-		  	}
-		    break;
-			
-		  default:
-	         Fail_FmtAssertion ("out of context pragma (%s) in ACC {top-level pragma} processing",
-	                             WN_pragmas[WN_pragma(cur_node)].name);
-
-		}
-
-  } 
-
- }
-  
-#ifdef KEY
-  WN_DELETE_FromBlock (WN_region_pragmas(tree), cur_node);
-#else
-  WN_Delete ( cur_node );
-#endif
-  acc_collapse_count = 1;
-
-  /*while (cur_node = next_node) 
-  {
-
-    next_node = WN_next(cur_node);
-  }*/
-
-  body_block = WN_region_body(tree);
-  first_node = pdo_node = WN_first(body_block);
-  
-  WN* sequential_list = NULL;
-  //WN* sequential_tmp = NULL;
-  while(WN_operator(pdo_node) != OPR_DO_LOOP)
-  {
-  	if(sequential_list == NULL)
-		sequential_list = WN_CreateBlock();
-    WN_INSERT_BlockLast(sequential_list, WN_COPY_Tree(pdo_node));
-	pdo_node = WN_next(pdo_node);
-  }
-  
-  if(forloopinfo.isSeq == TRUE)
-  {
-    //store the whole loop stmt here if it is seq acc loop
-	WN* wn_doloop_body = ACC_Extract_Seq_Loops_Info(WN_do_body(pdo_node));
-	WN_do_body(pdo_node) = wn_doloop_body;
-	if(sequential_list != NULL)
-		WN_INSERT_BlockLast(sequential_list, WN_COPY_Tree(pdo_node));
-	else
-		sequential_list = pdo_node;
-  	forloopinfo.acc_loopbody = sequential_list;
-    acc_loopinfo.acc_forloop.push_back(forloopinfo);
-    acc_loopinfo.loopnum ++;
-	return;
-  }
-  
-  if (pdo_node) 
-  {
-  	  //for the stupid fortran, sometimes it happens in this way
-  	  //region acc loop
-  	  //   pragma block
-  	  //   region body
-  	  //	some sequential statement generated by compiler
-  	  //	do-loop statements
-  	  //   end of region body
-  	  //end of acc loop region
-  	  //so we need record the sequential statements
-	  prev_node = WN_prev(pdo_node);//At this time, it's not necessary
-	  if (prev_node) 
-	  {
-	        // add synchronization to sandwich code before PDO
-	      WN *code_before_pdo = WN_CreateBlock();
-	      WN_EXTRACT_ItemsFromBlock(body_block, first_node, prev_node);
-	      WN_first(code_before_pdo) = first_node;
-	      WN_last(code_before_pdo) = prev_node;
-	      WN_INSERT_BlockBefore(body_block, pdo_node, code_before_pdo);
-	      prev_node = WN_prev(pdo_node);
-	  }
-	  
-	  WN *code_after_pdo = NULL;  // BLOCK for sandwich code after PDO (if any)
-	  if (WN_next(pdo_node)) //Do something here, //At this time, it's not necessary
-	  {
-		  WN* next_node = WN_next(pdo_node);
-		  WN* last_node = WN_last(body_block);
-		  code_after_pdo = WN_CreateBlock();
-		  WN_EXTRACT_ItemsFromBlock(body_block, next_node, last_node);
-		  WN_first(code_after_pdo) = next_node;
-		  WN_last(code_after_pdo) = last_node;
-	  }
-	  
-	  WN_EXTRACT_FromBlock(body_block, pdo_node);
-
-	  /* Determine user's real do index and type. */
-	  ACC_Extract_Index_Info(pdo_node);
-	  
-	  forloopinfo.acc_index_st = acc_forloop_index_st[0];
-	  forloopinfo.acc_index_type = acc_forloop_index_type[0];
-	  
-	  /* Translate do statement itself. */
-	  ACC_Extract_Do_Info ( pdo_node );
-  
-	  forloopinfo.init = acc_base_node[0];
-	  forloopinfo.condition = acc_limit_node[0];
-	  forloopinfo.incr = acc_stride_node[0];
-	  forloopinfo.acc_loopbody = acc_doloop_body;
-	  forloopinfo.acc_test_stmt = acc_test_stmt;
-	  forloopinfo.wn_regionbody = WN_COPY_Tree(pdo_node);
-	  forloopinfo.wn_sequential_nodes = sequential_list;
-
-	  acc_loopinfo.acc_forloop.push_back(forloopinfo);
-	  acc_loopinfo.loopnum ++;
-
-	  //Traverse first.
-	  int loopcount = 0;
-	  int current_loop_level = acc_loopinfo.loopnum;
-	  WN* wn_handlist = NULL, *wn_cur_node; 
-	  //currently, only triple nested loop is supported.
-	  //if(acc_loopinfo.loopnum == 3)
-	  //	return;
-	  //WN* wn_afterhandlist = NULL
-	  for (cur_node = WN_first(acc_doloop_body); cur_node; cur_node = next_node) 
-	  {
-
-		prev_node = WN_prev(cur_node);
-		next_node = WN_next(cur_node);
-		//Process the loop region which is inside the kernel region
-		if ((is_region = (WN_opcode(cur_node) == OPC_REGION &&
-                             WN_first(WN_region_pragmas(cur_node)) &&
-                             WN_opcode(WN_first(
-			        WN_region_pragmas(cur_node))) == OPC_PRAGMA) ) &&
-	       WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
-						WN_PRAGMA_ACC_LOOP_BEGIN) 
-			{	
-				acc_loopinfo.acc_forloop[current_loop_level - 1].wn_prehand_nodes
-						= wn_handlist;
-				wn_handlist = NULL;
-				loopcount ++;
-				Is_True(loopcount == 1 && acc_loopinfo.loopnum <= 4, 
-								("no multi ACC loop in one ACC LOOP"));
-	  			ACC_Extract_ACC_LoopNest_Info(cur_node);
-			}
-			else if(WN_opcode(cur_node) != OPC_REGION_EXIT
-					&& WN_opcode(cur_node) != OPC_LABEL)
-			{
-				if(wn_handlist == NULL)
-				{
-					//wn_cur_node = wn_handlist = WN_COPY_Tree(cur_node);
-					wn_handlist = WN_CreateBlock();
-					wn_cur_node = WN_COPY_Tree(cur_node);
-					WN_next(wn_cur_node) = NULL;
-					WN_prev(wn_cur_node) = NULL;
-					WN_INSERT_BlockLast(wn_handlist, wn_cur_node);
-					//WN_next(wn_handlist) = NULL;
-					//WN_prev(wn_handlist) = NULL;
-				}
-				else
-				{
-					//wn_handlist = WN_COPY_Tree(cur_node);
-					//WN_next(wn_cur_node) = WN_COPY_Tree(cur_node);
-					//WN_prev(WN_next(wn_cur_node)) = wn_cur_node;
-					//wn_cur_node = WN_next(wn_cur_node);
-					//WN_next(wn_cur_node) = NULL;					
-					wn_cur_node = WN_COPY_Tree(cur_node);
-					WN_next(wn_cur_node) = NULL;
-					WN_prev(wn_cur_node) = NULL;
-					WN_INSERT_BlockLast(wn_handlist, wn_cur_node);
-				}
-			 }
-	  }
-	  
-	  acc_loopinfo.acc_forloop[current_loop_level - 1].wn_afterhand_nodes
-						= wn_handlist;
-	  
-	  if(acc_loopinfo.loopnum > current_loop_level
-	  	&& acc_loopinfo.acc_forloop[current_loop_level].isSeq == TRUE)
-	  {
-	  		WN* wn_newbody = NULL;
-			WN* wn_seqloop_stmt = acc_loopinfo.acc_forloop[current_loop_level].acc_loopbody;
-			
-			WN* wn_stmt_prehand = acc_loopinfo.acc_forloop[current_loop_level-1].wn_prehand_nodes;
-			WN* wn_stmt_afterhand = acc_loopinfo.acc_forloop[current_loop_level-1].wn_afterhand_nodes;
-
-			//if it is perfect nested loop, wn_stmt_prehand and wn_stmt_prehand should be null.
-			//if(wn_stmt_prehand || wn_stmt_prehand)
-			wn_newbody = WN_CreateBlock();
-			
-			if(wn_stmt_prehand)
-				WN_INSERT_BlockLast(wn_newbody, wn_stmt_prehand);
-			
-   			//if(wn_newbody)
-			WN_INSERT_BlockLast(wn_newbody, wn_seqloop_stmt);
-			//else 
-			//	wn_newbody = wn_seqloop_stmt;			
-			
-			if(wn_stmt_afterhand)
-				WN_INSERT_BlockLast(wn_newbody, wn_stmt_afterhand);
-
-			acc_loopinfo.acc_forloop[current_loop_level-1].acc_loopbody = wn_newbody;
-			//remove the seq loop info
-			acc_loopinfo.loopnum --;
-			
-			vector<FOR_LOOP_INFO>::iterator itor = 
-					acc_loopinfo.acc_forloop.begin() + acc_loopinfo.loopnum;
-			acc_loopinfo.acc_forloop.erase(itor);
-	  }
-	  //ACC_Extract_ACC_LoopNest_Info(pdo_node);
-	  //Here generate the kernel code
-      //WN *return_wn = ACC_Transform_ForLoop( pdo_node);
-	  //Begin outline the kernel function
-	  /////////////////////////////////////////////////
-	  //debug only
-	  //fdump_tree(stdout, return_wn);
-  }
-}
-
 /****************************************************************
 Setup the number of GANG and VECTOR, or maybe worker in the future
 *****************************************************************/
@@ -9430,110 +7475,6 @@ static void ACC_ProcessReduction_Parallel(ParallelRegionInfo* pPRInfo, WN* wn_re
 	}
 }
 
-static WN * 
-ACC_Walk_and_Replace_ACC_Loop_Seq (WN * tree)
-{
-  OPCODE op;
-  OPERATOR opr;
-  INT32 i;
-  WN *r;
-  WN *temp;
-  ST *old_sym;
-  WN_OFFSET old_offset;
-
-  /* Ignore NULL subtrees. */
-
-  if (tree == NULL)
-    return (tree);
-
-  /* Initialization. */
-
-  op = WN_opcode(tree);
-  opr = OPCODE_operator(op);
-
-  if ((WN_opcode(tree) == OPC_REGION &&
-			(WN_region_kind(tree) == REGION_KIND_ACC) &&
-						   WN_first(WN_region_pragmas(tree)) &&
-						   (WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_PRAGMA
-						   || WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_XPRAGMA) ) 
-			  && WN_pragma(WN_first(WN_region_pragmas(tree))) == WN_PRAGMA_ACC_LOOP_BEGIN)
-  {
-  	WN* pragma_block = WN_first(WN_region_pragmas(tree));
-    WN* cur_node = pragma_block;
-  	WN* next_node = WN_next(cur_node);
-	BOOL isSeq = FALSE;
-
-  	while ((cur_node = next_node)) 
-  	{
-    	next_node = WN_next(cur_node);
-
-    	if (((WN_opcode(cur_node) == OPC_PRAGMA) ||
-         (WN_opcode(cur_node) == OPC_XPRAGMA)) &&
-        (WN_pragmas[WN_pragma(cur_node)].users & PUSER_ACC)) 
-    	{
-			switch (WN_pragma(cur_node)) 
-			{
-
-			  case WN_PRAGMA_ACC_CLAUSE_SEQ:
-			    isSeq = TRUE;
-				{
-					WN* wn_region_bdy = WN_COPY_Tree(WN_region_body(tree));
-					wn_region_bdy = ACC_Walk_and_Replace_ACC_Loop_Seq(wn_region_bdy);
-					//RID_Delete( Current_Map_Tab, tree );
-					WN* acc_do_node = WN_first(wn_region_bdy);
-					//WN* sequential_tmp = NULL;
-					if(WN_operator(acc_do_node) != OPR_DO_LOOP)
-					{
-						Fail_FmtAssertion("ACC DO LOOP Region must include do loop(ACC_Walk_and_Replace_ACC_Loop_Seq)");
-					}
-					WN_prev(wn_region_bdy) = WN_prev(tree);
-					if(WN_prev(tree))
-						WN_next(WN_prev(tree)) = wn_region_bdy;
-					WN_next(wn_region_bdy) = WN_next(tree);
-					if(WN_next(tree))
-						WN_prev(WN_next(tree)) = wn_region_bdy;
-					
-		  			//WN_DELETE_Tree(tree);
-					tree = wn_region_bdy;	
-					return tree;
-					//op = WN_opcode(tree);
-					//opr = OPCODE_operator(op);
-		    	}
-			    break;  
-				
-			  default:
-		        break;
-			}
-  		} 
- 	 }  
-  }
-
-  if (op == OPC_BLOCK) 
-  {
-    r = WN_first(tree);
-    while (r) 
-	{ // localize each node in block
-      r = ACC_Walk_and_Replace_ACC_Loop_Seq (r);
-      if (WN_prev(r) == NULL)
-        WN_first(tree) = r;
-      if (WN_next(r) == NULL)
-        WN_last(tree) = r;
-
-      r = WN_next(r);
-      
-   }
-  }
-  else 
-  {
-    for (i=0; i < WN_kid_count(tree); i++)
-    {
-      WN_kid(tree, i) = ACC_Walk_and_Replace_ACC_Loop_Seq( WN_kid(tree, i));
-    }
-  }
-  return (tree);
-}   
-
-
 /*Including parallel construct region*/
 static void 
 Transform_ACC_Parallel_Block ( WN * tree, ParallelRegionInfo* pPRInfo, WN* wn_replace_block)
@@ -10083,6 +8024,7 @@ Transform_ACC_Kernel_Block ( WN * tree, KernelsRegionInfo* pKRInfo, WN* wn_repla
 			wn_prehandblock = NULL;
 			
 			kernel_tmp_licm_count = 0;
+			kernel_tmp_variable_count = 0;
 			ACC_Transform_MultiForLoop(pKRInfo);
 			//launch kernels
 			LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
@@ -10172,18 +8114,6 @@ ACC_Create_Local_VariableTab ( ACC_VAR_TABLE * vtab, ACC_VAR_TYPE vtype, ST* old
 }*/
 
 /****************************************************/
-/*this following  two functions will be used in ACC_Walk_and_Localize*/
-inline void ACC_WN_set_offsetx ( WN *wn, WN_OFFSET ofst )
-{
-  OPERATOR opr;
-  opr = WN_operator(wn);
-  if ((opr == OPR_PRAGMA) || (opr == OPR_XPRAGMA)) {
-    WN_pragma_arg1(wn) = ofst;
-  } else {
-    WN_offset(wn) = ofst;
-  }
-}
-
 
 
 static inline TYPE_ID Promote_Type(TYPE_ID mtype)
@@ -10635,8 +8565,22 @@ ACC_Walk_and_Localize (WN * tree)
 	//WN* wn_dimInOne = NULL;;
     old_sym = WN_st(wn_base);
 	ST* new_sym = NULL;
-	UINT32 esize = WN_element_size(tree);
-	TY_IDX ty = ACC_Get_ElementTYForMultiArray(WN_st(wn_base));
+	INT32 esize = WN_element_size(tree);
+	
+	if(esize < 0)
+	{
+		if(F90_ST_Has_Dope_Vector(old_sym))
+		{
+			FLD_HANDLE  fli ;
+			TY_IDX base_pointer_ty;
+			fli = TY_fld(Ty_Table[ST_type(old_sym)]);
+			base_pointer_ty = FLD_type(fli);
+			TY_IDX e_ty = TY_etype(TY_pointed(base_pointer_ty));
+			esize = TY_size(e_ty);
+		}
+		else
+			Fail_FmtAssertion ("Unknown array element in WalkandLocalize");
+	}
 	
 	map<ST*, ACC_VAR_TABLE>::iterator itor = acc_local_new_var_map.find(old_sym);
 	
@@ -10669,11 +8613,11 @@ ACC_Walk_and_Localize (WN * tree)
 					WN* wn_dim = WN_array_dim(tree, iii+1);
 					if(WN_rtype(wn_dim) != mtype_base_id)
 					{
-						wn_dim = WN_Integer_Cast(WN_COPY_Tree(wn_dim), mtype_base_id, WN_rtype(wn_dim));
+						wn_dim = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_dim), mtype_base_id, WN_rtype(wn_dim));
 					}
 					if(WN_rtype(wn_index) != mtype_base_id)
                                         {
-                                                wn_index = WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
+                                                wn_index = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
                                         }
 			   		wn_index = WN_Binary(OPR_MPY, 
 			   						mtype_base_id, 
@@ -10702,7 +8646,7 @@ ACC_Walk_and_Localize (WN * tree)
 			WN* wn_index = WN_array_index(tree, ii);
 			if(WN_rtype(wn_index) != mtype_base_id)
                         {
-                               wn_index = WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
+                               wn_index = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
                         }
 
 			if(wn_offset)
@@ -10715,7 +8659,7 @@ ACC_Walk_and_Localize (WN * tree)
 			wn_offset = WN_Binary(OPR_MPY, 
 						mtype_base_id, 
 						wn_offset, 
-						WN_Intconst(mtype_base_id, TY_size(ty)));
+						WN_Intconst(mtype_base_id, esize));
 			//wnx = WN_Lda( Pointer_type, 0, new_sym);
 			//Set_TY_align(ST_type(new_sym), 4);
 			//WN* wn_ldidbase = WN_Ldid(Pointer_type, 0, new_sym, ST_type(new_sym));
@@ -15712,31 +13656,6 @@ static WN* ACC_Process_DataRegion( WN * tree )
   return DRegion_replacement_block;  
 }
 
-
-/*  Compare two PRAGMA nodes or XPRAGMA trees for equality.  */
-
-static BOOL 
-ACC_Identical_Pragmas ( WN * wn1, WN * wn2 )
-{
-  INT32 i;
-
-  if ((WN_operator(wn1) != WN_operator(wn2)) ||
-      (WN_pragma(wn1) != WN_pragma(wn2)) ||
-      (WN_st(wn1) != WN_st(wn2)) ||
-      (WN_pragma_flags(wn1) != WN_pragma_flags(wn2)) ||
-      ((WN_operator(wn1) == OPR_PRAGMA) &&
-       (WN_pragma_arg1(wn1) != WN_pragma_arg1(wn2))) || 
-       (WN_pragma_arg2(wn1) != WN_pragma_arg2(wn2)) ||
-      (WN_kid_count(wn1) != WN_kid_count(wn2)))
-    return (FALSE);
-
-  for (i = 0; i < WN_kid_count(wn1); i++)
-    if (WN_ACC_Compare_Trees(WN_kid(wn1, i), WN_kid(wn2, i)) != 0)
-      return (FALSE);
-
-  return (TRUE);
-}
-
 /**
 reduction kernel parameters
 **/
@@ -18775,7 +16694,32 @@ ACC_Walk_and_Replace_Dope (WN * tree, BOOL bOffloadRegion, BOOL bInArray)
   }
   else if (opr == OPR_ARRAY && bOffloadRegion == TRUE) 
   {
-  		bInArray = TRUE;
+#define DOPE_DIM_OFFSET (48)
+#define DOPE_DIM_SIZE	(8)
+
+	WN* wn_base = WN_array_base(tree) ;
+    	ST* array_sym = WN_st(wn_base);
+	if(F90_ST_Has_Dope_Vector(array_sym)==TRUE)
+	{
+		int num_dim = WN_num_dim(tree);
+		for(int idim=0; idim<num_dim; idim++)
+		{				
+			WN* wn_dim = WN_array_dim(tree, idim);
+			ST* st_name = WN_st(wn_dim);
+			//double check
+			if(F90_ST_Has_Dope_Vector(st_name) == FALSE || array_sym != st_name)
+				Fail_FmtAssertion("Dope Structure includes unknow symbol!");
+			WN_OFFSET old_offset = WN_offset(wn_dim);
+			WN_OFFSET suppose_offset = DOPE_DIM_OFFSET + (num_dim - idim -1) 
+						* 3 * DOPE_DIM_SIZE + DOPE_DIM_SIZE;
+			if(old_offset != suppose_offset)
+			{//reset
+				WN_offset(wn_dim) = suppose_offset;
+			}
+		}
+	}
+
+  	bInArray = TRUE;
   }
   
 

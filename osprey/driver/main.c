@@ -156,11 +156,22 @@ extern char* nvcc_path;
 extern char* native_cmd;
 extern char* native_flags;
 extern char* native_path;
+extern char* cloc_cmd;
+extern char* cloc_path;
+extern boolean compiling_opencl;
 
 static void check_openacc_flags(int argc, char **argv)
 {
 	int i;
 
+	//setup the default first
+	nvcc_path = getenv("NVCCPATH");
+	if(nvcc_path && strlen(nvcc_path)>0)
+		compiling_cuda = TRUE;
+	cloc_path = getenv("CLOCPATH");
+	if(cloc_path && strlen(cloc_path)>0)
+		compiling_opencl = TRUE;
+		
     for (i = 0; i < argc; i++) 
 	{
 		if (argv[i])
@@ -211,8 +222,24 @@ static void check_openacc_flags(int argc, char **argv)
 					fprintf(stderr, "NVIDIA CUDA compiler should be provided with -nvccpath,PATH.\n");
 				}
 			}
+			else if(!strncmp(argv[i], "-clpath", 7))
+			{
+				compiling_opencl = TRUE;
+				if(argv[i][7] == ',')
+					cloc_path = argv[i] + 8;
+				else
+				{
+					cloc_path  = NULL;
+					fprintf(stderr, "OpenCL compiler should be provided with -clpath,PATH.\n");
+				}
+			}
 		}
     }
+	if(compiling_acc == FALSE)
+	{
+		compiling_opencl = FALSE;
+		compiling_cuda = FALSE;
+	}			
 }
 
 int 

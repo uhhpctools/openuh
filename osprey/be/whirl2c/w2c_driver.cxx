@@ -300,7 +300,7 @@ static const char *W2C_File_Extension[W2C_NUM_FILES] =
    ".w2c.loc",  /* .loc output file */
    ".w2c.cu",  /* .cu output file */
    ".w2c.cu.h",  /* .cu.h output file used by OpenACC */
-   ".w2c.cl",  /* .cu output file */
+   "_w2c.cl",  /* .cu output file */
    ".w2c.cl.h",  /* .cu.h output file used by OpenACC */
 #ifdef COMPILE_UPC
    ".global_data.c", /* initialization input file */
@@ -646,6 +646,12 @@ Open_W2c_Output_File(W2C_FILE_KIND kind)
                                                                 "#define __nv50_griddim_y get_num_groups(1)\n");
                         Write_String(W2C_File[kind], NULL/* No srcpos map */,
                                                                 "#define __nv50_griddim_z get_num_groups(2)\n");
+                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define __syncthreads() barrier(CLK_LOCAL_MEM_FENCE)\n");
+			Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define sinf(x) sin(x)\n");
+			Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                                "#define cosf(x) cos(x)\n");
 		 }
       }
    } /* if (!files_are_open) */

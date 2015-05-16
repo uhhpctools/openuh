@@ -569,10 +569,16 @@ BE_COM_PCH_CXX_SRCS = \
   wn_lower.cxx		\
   u64_lower_wn.cxx	\
   wn_mp.cxx		\
-  wn_acc.cxx	\
+  wn_acc_nvidia.cxx		\
   wn_acc_apu.cxx	\
+  wn_acc_common.cxx	\
+  wn_acc_offload_kernels_gen.cxx	\
+  wn_acc_collapse.cxx	\
   wn_acc_scalar_replacement.cxx \
+  wn_acc_loop_scheduling.cxx \
+  wn_acc_runtime.cxx	\
   wn_acc_untils.cxx	\
+  wn_acc_reduction.cxx	\
   wn_verifier.cxx       \
   wn_retype_expr.cxx	\
   wn_unroll.cxx	\

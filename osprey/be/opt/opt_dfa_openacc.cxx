@@ -333,7 +333,8 @@ static BOOL dfa_scan_is_global_var(ST* st_var)
     if(ST_sclass(st_var)==SCLASS_FSTATIC
 		|| ST_sclass(st_var)==SCLASS_EXTERN
 		|| ST_sclass(st_var)==SCLASS_UGLOBAL
-		|| ST_sclass(st_var)==SCLASS_DGLOBAL)
+		|| ST_sclass(st_var)==SCLASS_DGLOBAL
+		|| ST_sclass(st_var)==SCLASS_FORMAL_REF)
 		return TRUE;
 	return FALSE;
 }

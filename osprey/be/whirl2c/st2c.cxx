@@ -515,7 +515,16 @@ ST2C_basic_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
 	  //this is only for kernel shared array, because during the lower whirl, this type was declared as pointer
 	  //Actually, it is special array.
    	  if(isGPUKernelFunc && ST_is_ACC_shared_array(st) && TY_kind(tidx)==KIND_POINTER)
-	  	tidx = TY_pointed(tidx);
+  	  {
+  	  	  if(isGPUOpenCLKernelFunc && ST_acc_type_class(st)!=ST_ACC_TYPE_SHARED_ARRAY_FIXED)
+	  	  {
+	  	  	//for the opencl local memory, if it is not the fixed size, then it will be declared as pointer.
+	  	  	tidx = tidx;
+	  	  }
+		  else
+		  	tidx = TY_pointed(tidx);
+  	  }
+	  	
    }
    //TY_IDX tidx = ST_sym_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
    //
@@ -581,7 +590,8 @@ ST2C_Define_Preg(const char *name, TY_IDX ty, CONTEXT context)
    Set_Current_Indentation(PUinfo_local_decls_indent);
    Append_Token_String(decl_tokens, name);
    TY2C_translate(decl_tokens, ty, context);
-   Prepend_Token_String(decl_tokens, "register");
+   if(isGPUKernelFunc == FALSE)
+   		Prepend_Token_String(decl_tokens, "register");
    Append_Token_Special(decl_tokens, ';');
    Append_Indented_Newline(decl_tokens, 1);
    Append_And_Reclaim_Token_List(PUinfo_local_decls, &decl_tokens);
@@ -642,18 +652,45 @@ ST2C_decl_var(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
 	  	if(isGPUOpenCLKernelFunc)
 	  	{
 			//Append_Token_String(tokens, "extern");
-			Append_Token_String(tokens, "__local");
-	      	ST2C_basic_decl(tokens, st, context);  
-			Append_Token_Special(tokens, '[');
-			Append_Token_Special(tokens, ']');
+			//Set_ST_acc_type_class(acc_st_shared_memory, ST_ACC_TYPE_SHARED_ARRAY_FIXED);
+			if(ST_acc_type_class(st)==ST_ACC_TYPE_SHARED_ARRAY_FIXED)
+			{
+				UINT32 nlocalsize = ST_acc_shared_array_size(st);
+				char szchar[32];
+				sprintf(szchar, "%d", nlocalsize);
+				Append_Token_String(tokens, "__local");
+		      	ST2C_basic_decl(tokens, st, context);  
+				Append_Token_Special(tokens, '[');
+				Append_Token_String(tokens, szchar);
+				Append_Token_Special(tokens, ']');
+			}
+			else
+			{
+				Append_Token_String(tokens, "__local");
+		      	ST2C_basic_decl(tokens, st, context);  
+			}
 	  	}
-		else
+		else //CUDA
 		{
-			Append_Token_String(tokens, "extern");
-			Append_Token_String(tokens, "__shared__");
-	      	ST2C_basic_decl(tokens, st, context);  
-			Append_Token_Special(tokens, '[');
-			Append_Token_Special(tokens, ']');
+			if(ST_acc_type_class(st)==ST_ACC_TYPE_SHARED_ARRAY_FIXED)
+			{
+				UINT32 nlocalsize = ST_acc_shared_array_size(st);
+				char szchar[32];
+				sprintf(szchar, "%d", nlocalsize);
+				Append_Token_String(tokens, "__shared__");
+		      	ST2C_basic_decl(tokens, st, context);  
+				Append_Token_Special(tokens, '[');
+				Append_Token_String(tokens, szchar);
+				Append_Token_Special(tokens, ']');
+			}
+			else
+			{
+				Append_Token_String(tokens, "extern");
+				Append_Token_String(tokens, "__shared__");
+		      	ST2C_basic_decl(tokens, st, context);  
+				Append_Token_Special(tokens, '[');
+				Append_Token_Special(tokens, ']');
+			}
 		}
 	  }
 	  else if(isGPUKernelFunc && ST_is_ACC_shared_scalar(st))
