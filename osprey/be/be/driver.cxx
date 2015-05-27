@@ -1811,6 +1811,28 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 	if(isOpenACCRegion) return;
     if (!Run_wopt && !Run_cg) return;
 
+
+  /*
+   * The coarray lowering phase will translate coindexed array references to
+   * CAF runtime calls. This phase will eventually be pushed down to WOPT,
+   * after appropriate analysis/optimization for vectorization and
+   * latency-hiding.
+   */
+#if defined (_UH_COARRAYS)
+  if ( Enable_Coarray ) {
+      Set_Error_Phase( "Coarray Lowering" );
+      WN_Lower_Checkdump("Before Coarray Lowering", pu, 0);
+
+      pu = Coarray_Lower( current_pu, pu);
+      WN_Lower_Checkdump("After Coarray Lowering", pu, 0);
+
+      if ( Cur_PU_Feedback ) {
+        Cur_PU_Feedback->Verify("After Coarray Lowering");
+      }
+  }
+#endif
+
+ 
     /* TODO: Can we push this to a later back-end stage? */
 #if 1
 #if defined (_UH_COARRAYS)
@@ -2329,19 +2351,19 @@ Preprocess_PU (PU_Info *current_pu)
    * after appropriate analysis/optimization for vectorization and
    * latency-hiding.
    */
-#if defined (_UH_COARRAYS)
-  if ( Enable_Coarray ) {
-      Set_Error_Phase( "Coarray Lowering" );
-      WN_Lower_Checkdump("Before Coarray Lowering", pu, 0);
-
-      pu = Coarray_Lower( current_pu, pu);
-      WN_Lower_Checkdump("After Coarray Lowering", pu, 0);
-
-      if ( Cur_PU_Feedback ) {
-        Cur_PU_Feedback->Verify("After Coarray Lowering");
-      }
-  }
-#endif
+//#if defined (_UH_COARRAYS)
+//  if ( Enable_Coarray ) {
+//      Set_Error_Phase( "Coarray Lowering" );
+//      WN_Lower_Checkdump("Before Coarray Lowering", pu, 0);
+//
+//      pu = Coarray_Lower( current_pu, pu);
+//      WN_Lower_Checkdump("After Coarray Lowering", pu, 0);
+//
+//      if ( Cur_PU_Feedback ) {
+//        Cur_PU_Feedback->Verify("After Coarray Lowering");
+//      }
+//  }
+//#endif
 
   pu = Adjust_Opt_Level (current_pu, pu, ST_name(PU_Info_proc_sym(current_pu)));
 

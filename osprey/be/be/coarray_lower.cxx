@@ -32,7 +32,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #if ! defined(BUILD_OS_DARWIN)
-#include <elf.h>		    /* for wn.h */
+#include <elf.h>            /* for wn.h */
 #endif /* ! defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
@@ -165,67 +165,67 @@ static TY_IDX null_array_type;
 
 static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
      0,         0,      0,         0,     "",
-							/* FIOSTRUCT_NONE */
-     0, MTYPE_U4,      0, MTYPE_U8,	 "base_addr",
-							/* DV_BASE_PTR */
-     4, MTYPE_I4,      8, MTYPE_I8,	 "base_len",
-							/* DV_BASE_LEN */
+                            /* FIOSTRUCT_NONE */
+     0, MTYPE_U4,      0, MTYPE_U8,  "base_addr",
+                            /* DV_BASE_PTR */
+     4, MTYPE_I4,      8, MTYPE_I8,  "base_len",
+                            /* DV_BASE_LEN */
 #if 0
-     8, MTYPE_U8,      16, MTYPE_U8,	 "flag_info",
-							/* DV_FLAG_INFO */
+     8, MTYPE_U8,      16, MTYPE_U8,     "flag_info",
+                            /* DV_FLAG_INFO */
 #endif
      8, MTYPE_U4,      16, MTYPE_U4,     "assoc",
-							/* DV_ASSOC */
+                            /* DV_ASSOC */
      12, MTYPE_U4,     20, MTYPE_U4,     "num_dims",
-							/* DV_NUM_DIM */
-     16, MTYPE_U8,     24, MTYPE_U8,	 "type_len",
-							/* DV_TYPE_LEN */
-     24, MTYPE_U4,     32, MTYPE_U8,	 "orig_base",
-							/* DV_ORIG_BASE */
-     28, MTYPE_I4,     40, MTYPE_I8,	 "orig_size",
-							/* DV_ORIG_SIZE */
-     32, MTYPE_I4,     48, MTYPE_I8,	 "dim1_lb",
-							/* DV_DIM1_LB */
-     36, MTYPE_I4,     56, MTYPE_I8,	 "dim1_extent",
-							/* DV_DIM1_EXTENT */
-     40, MTYPE_I4,     64, MTYPE_I8,	 "dim1_stride",
-							/* DV_DIM1_STRIDE */
-     44, MTYPE_I4,     72, MTYPE_I8,	 "dim2_lb",
-							/* DV_DIM2_LB */
-     48, MTYPE_I4,     80, MTYPE_I8,	 "dim2_extent",
-							/* DV_DIM2_EXT */
-     52, MTYPE_I4,     88, MTYPE_I8,	 "dim2_stride",
-							/* DV_DIM2_STR */
-     56, MTYPE_I4,     96, MTYPE_I8,	 "dim3_lb",
-							/* DV_DIM3_LB */
-     60, MTYPE_I4,     104, MTYPE_I8,	 "dim3_extent",
-							/* DV_DIM3_EXT */
-     64, MTYPE_I4,     112, MTYPE_I8,	 "dim3_stride",
-							/* DV_DIM3_STR */
-     68, MTYPE_I4,     120, MTYPE_I8,	 "dim4_lb",
-							/* DV_DIM4_LB */
-     72, MTYPE_I4,     128, MTYPE_I8,	 "dim4_extent",
-							/* DV_DIM4_EXT */
-     76, MTYPE_I4,     136, MTYPE_I8,	 "dim4_stride",
-							/* DV_DIM4_STR */
-     80, MTYPE_I4,     144, MTYPE_I8,	 "dim5_lb",
-							/* DV_DIM5_LB */
-     84, MTYPE_I4,     152, MTYPE_I8,	 "dim5_extent",
-							/* DV_DIM5_EXT */
-     88, MTYPE_I4,     160, MTYPE_I8,	 "dim5_stride",
-							/* DV_DIM5_STR */
-     92, MTYPE_I4,     168, MTYPE_I8,	 "dim6_lb",
-							/* DV_DIM6_LB */
-     96, MTYPE_I4,     176, MTYPE_I8,	 "dim6_extent",
-							/* DV_DIM6_EXT */
-     100, MTYPE_I4,    184, MTYPE_I8,	 "dim6_stride",
-							/* DV_DIM6_STR */
-     104, MTYPE_I4,    192, MTYPE_I8,	 "dim7_lb",
-							/* DV_DIM7_LB */
-     108, MTYPE_I4,    200, MTYPE_I8,	 "dim7_extent",
-							/* DV_DIM7_EXT */
-     112, MTYPE_I4,    208, MTYPE_I8,	 "dim7_stride",
-							/* DV_DIM7_STR */
+                            /* DV_NUM_DIM */
+     16, MTYPE_U8,     24, MTYPE_U8,     "type_len",
+                            /* DV_TYPE_LEN */
+     24, MTYPE_U4,     32, MTYPE_U8,     "orig_base",
+                            /* DV_ORIG_BASE */
+     28, MTYPE_I4,     40, MTYPE_I8,     "orig_size",
+                            /* DV_ORIG_SIZE */
+     32, MTYPE_I4,     48, MTYPE_I8,     "dim1_lb",
+                            /* DV_DIM1_LB */
+     36, MTYPE_I4,     56, MTYPE_I8,     "dim1_extent",
+                            /* DV_DIM1_EXTENT */
+     40, MTYPE_I4,     64, MTYPE_I8,     "dim1_stride",
+                            /* DV_DIM1_STRIDE */
+     44, MTYPE_I4,     72, MTYPE_I8,     "dim2_lb",
+                            /* DV_DIM2_LB */
+     48, MTYPE_I4,     80, MTYPE_I8,     "dim2_extent",
+                            /* DV_DIM2_EXT */
+     52, MTYPE_I4,     88, MTYPE_I8,     "dim2_stride",
+                            /* DV_DIM2_STR */
+     56, MTYPE_I4,     96, MTYPE_I8,     "dim3_lb",
+                            /* DV_DIM3_LB */
+     60, MTYPE_I4,     104, MTYPE_I8,    "dim3_extent",
+                            /* DV_DIM3_EXT */
+     64, MTYPE_I4,     112, MTYPE_I8,    "dim3_stride",
+                            /* DV_DIM3_STR */
+     68, MTYPE_I4,     120, MTYPE_I8,    "dim4_lb",
+                            /* DV_DIM4_LB */
+     72, MTYPE_I4,     128, MTYPE_I8,    "dim4_extent",
+                            /* DV_DIM4_EXT */
+     76, MTYPE_I4,     136, MTYPE_I8,    "dim4_stride",
+                            /* DV_DIM4_STR */
+     80, MTYPE_I4,     144, MTYPE_I8,    "dim5_lb",
+                            /* DV_DIM5_LB */
+     84, MTYPE_I4,     152, MTYPE_I8,    "dim5_extent",
+                            /* DV_DIM5_EXT */
+     88, MTYPE_I4,     160, MTYPE_I8,    "dim5_stride",
+                            /* DV_DIM5_STR */
+     92, MTYPE_I4,     168, MTYPE_I8,    "dim6_lb",
+                            /* DV_DIM6_LB */
+     96, MTYPE_I4,     176, MTYPE_I8,    "dim6_extent",
+                            /* DV_DIM6_EXT */
+     100, MTYPE_I4,    184, MTYPE_I8,    "dim6_stride",
+                            /* DV_DIM6_STR */
+     104, MTYPE_I4,    192, MTYPE_I8,    "dim7_lb",
+                            /* DV_DIM7_LB */
+     108, MTYPE_I4,    200, MTYPE_I8,    "dim7_extent",
+                            /* DV_DIM7_EXT */
+     112, MTYPE_I4,    208, MTYPE_I8,    "dim7_stride",
+                            /* DV_DIM7_STR */
 };
 
 /***********************************************************************
@@ -481,7 +481,7 @@ inline WN *
 Generate_Param( WN *arg, UINT32 flag )
 {
   return WN_CreateParm( WN_rtype( arg ), arg,
-			MTYPE_To_TY( WN_rtype( arg ) ), flag );
+            MTYPE_To_TY( WN_rtype( arg ) ), flag );
 }
 
 
@@ -625,7 +625,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         }
     }
 
-    unfold_nested_cors_in_block(func_body);
+    //unfold_nested_cors_in_block(func_body);
 
 
     /* Pass 1: Traverse PU, searching for:
@@ -837,7 +837,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 coindexed_arr_ref = expr_is_coindexed(wn, &image, &coarray_type,
                                                       &direct_coarray_ref);
                 if (image == NULL) break;
-
+			/*	if ((WN_operator(wn) == OPR_ARRAY) && 
+					coindexed_arr_ref == direct_coarray_ref &&
+					!do_loop_start_node) break;
+*/
                 /* co-indexed expressions with vector subscripts are handled
                  * in Coarray Lowering */
                 if (is_vector_access(coindexed_arr_ref)) break;
@@ -1443,7 +1446,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
             continue;
 
         switch (WN_operator(wn)) {
-            case OPR_ARRAY:
+            //case OPR_ARRAY:
             case OPR_ARRSECTION:
                 coindexed_arr_ref = expr_is_coindexed(wn, &image, &coarray_type,
                                                       &direct_coarray_ref);
@@ -1705,6 +1708,11 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
 {
     WN *func_body;
 
+    /* */
+    BOOL do_loop_start_node = FALSE; 
+    BOOL do_loop_boundary_node = FALSE;
+    WN * do_loop_stmt_node = NULL;
+
     /* Create Parent Map for WHIRL tree */
     Caf_COR_Info_Map = WN_MAP_Create(&caf_pool);
     Caf_Parent_Map = WN_MAP_Create(&caf_pool);
@@ -1764,8 +1772,48 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
           stmt_node = wn;
           stmt_is_assignment = is_assignment_stmt(stmt_node);
           wn_arrayexp = NULL;
-          if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
+          if (WN_operator(parent) == OPR_BLOCK) {
+              blk_node = parent;
+          } else if (WN_operator(parent) == OPR_DO_LOOP &&
+                  WN_start(parent) == stmt_node) {
+              /* working on initialization statement of a do-loop. */
+              do_loop_start_node = TRUE;
+              do_loop_stmt_node = parent;
+          }else if (WN_operator(parent) == OPR_DO_LOOP &&
+                  WN_kid1(parent) == wn) {
+              /*working on the terminate condition node of a do-loop*/
+              do_loop_boundary_node =TRUE;
+              do_loop_stmt_node = parent;
+
+          } else if (WN_operator(parent) == OPR_DO_LOOP) {
+              /* no longer working on initialization statement of do-loop */
+              do_loop_start_node = FALSE;
+              do_loop_boundary_node = FALSE;
+          }
+
         }
+
+
+//      wn_arrayexp = NULL;
+//      if (WN_operator(parent) == OPR_BLOCK) {
+//          blk_node = parent;
+//      } else if (WN_operator(parent) == OPR_DO_LOOP &&
+//              WN_start(parent) == stmt_node) {
+//          /* working on initialization statement of a do-loop. */
+//          do_loop_start_node = TRUE;
+//          do_loop_stmt_node = parent;
+//      }else if (WN_operator(parent) == OPR_DO_LOOP &&
+//              WN_kid1(parent) == wn) {
+//          /*working on the terminate condition node of a do-loop*/
+//          do_loop_boundary_node =TRUE;
+//          do_loop_stmt_node = parent;
+//
+//      } else if (WN_operator(parent) == OPR_DO_LOOP) {
+//          /* no longer working on initialization statement of do-loop */
+//          do_loop_start_node = FALSE;
+//          do_loop_boundary_node = FALSE;
+//      }
+//
 
         /* stores most recently encountered ARRAYEXP in wn_arrayexp */
         if (WN_operator(wn) == OPR_ARRAYEXP)
@@ -1847,31 +1895,47 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         temp_wipre.Replace(replace_wn);
                         wipre = temp_wipre;
 
-                    } else if (is_load_operation(RHS_wn)) {
-                        while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
-                            RHS_wn = WN_kid0(RHS_wn);
-                        }
-                        if (WN_operator(RHS_wn) == OPR_LDID) {
-                            WN *new_RHS_wn;
-                            /* replace the LDID expression with an Iload to an
-                             * array ref */
-                            TY_IDX elem_ty = WN_ty(RHS_wn);
-                            new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
-                                    WN_offset(RHS_wn),
-                                    Make_Pointer_Type(elem_ty, FALSE),
-                                    make_array_ref(WN_st(RHS_wn)));
-                            WN_Delete(RHS_wn);
-                            WN_kid0(stmt_node) = new_RHS_wn;
-                        }
-                    } else {
-                    /* handle indirection ... */
-                    }
+					} else if (is_load_operation(RHS_wn)) {
+						while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
+							RHS_wn = WN_kid0(RHS_wn);
+						}
+						if (WN_operator(RHS_wn) == OPR_LDID) {
+							WN *new_RHS_wn;
+							/* replace the LDID expression with an Iload to an
+							 * array ref */
+							TY_IDX elem_ty = WN_ty(RHS_wn);
+							new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+									WN_offset(RHS_wn),
+									Make_Pointer_Type(elem_ty, FALSE),
+									make_array_ref(WN_st(RHS_wn)));
+							WN_Delete(RHS_wn);
+							WN_kid0(stmt_node) = new_RHS_wn;
+							RHS_wn = new_RHS_wn;
+						}else if (WN_operator(RHS_wn) == OPR_ILOAD) {
+							/* handle indirection ... */
+							/*If the RHS is a pointer/reference, maybe it is a dummy argument*/
+							/*Also it may be a scalar in coarray*/
+							WN *new_RHS_wn;
+							/* replace the ILOAD expression with an Iload
+							 * to an array ref */
+							TY_IDX elem_ty = WN_ty(RHS_wn);
+							new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+									WN_offset(RHS_wn),
+									Make_Pointer_Type(elem_ty, FALSE),
+									make_array_ref(WN_kid0(RHS_wn)) );
+							WN_Delete(RHS_wn);
+							WN_kid0(stmt_node) = new_RHS_wn;
+							RHS_wn = new_RHS_wn;
+						} else if (WN_operator(RHS_wn) == OPR_MLOAD) {
+							WN_kid0(RHS_wn) = make_array_ref(WN_kid0(RHS_wn));
+						} 
 
+						Parentize(RHS_wn);
+					}
+				} else if ( array_ref_on_RHS(coindexed_arr_ref, &elem_type) ) {
+					/* handle remote read */
 
-                } else if ( array_ref_on_RHS(coindexed_arr_ref, &elem_type) ) {
-                    /* handle remote read */
-
-                    if (elem_type == TY_IDX_ZERO) {
+					if (elem_type == TY_IDX_ZERO) {
                         /* if elem_type being accessed still can't be resolved,
                          * just use the coarray etype */
                         elem_type = Ty_Table[coarray_type].u2.etype;
@@ -1911,8 +1975,16 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         insert_wnx = Generate_Call_acquire_lcb(
                                 xfer_sz_node,
                                 WN_Lda(Pointer_type, 0, LCB_st));
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
-
+//                        WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
+                        
+                        /*handle the case where the stmt is in do-loop*/
+                        if (do_loop_start_node || do_loop_boundary_node) {
+                            WN_INSERT_BlockBefore(blk_node, do_loop_stmt_node, 
+                                        insert_wnx);
+                        } else {
+                            WN_INSERT_BlockBefore(blk_node, stmt_node, 
+                                                  insert_wnx);  
+                        }
                         /* create "normalized" assignment from remote coarray */
                         num_codim = coindexed_arr_ref == direct_coarray_ref ?
                                     get_coarray_corank(coarray_type) : 0;
@@ -1931,7 +2003,8 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         WN_Delete(coindexed_arr_ref);
                         temp_wipre.Replace(replace_wn);
                         wipre = temp_wipre;
-
+						
+						Set_LCB_Stmt(stmt_node);
                         /* call to release LCB */
                         insert_wnx = Generate_Call_release_lcb(
                                 WN_Lda(Pointer_type, 0, LCB_st));
@@ -2691,21 +2764,21 @@ static BOOL is_dope(const TY_IDX tyi)
  */
 static BOOL currentpu_ismain()
 {
-	ST *pu_st = Get_Current_PU_ST();
-	char *pu_name = ST_name(pu_st);
+    ST *pu_st = Get_Current_PU_ST();
+    char *pu_name = ST_name(pu_st);
 
-	switch (PU_src_lang(Get_Current_PU())) {
-		case PU_C_LANG:
-		case PU_CXX_LANG:
-			return strcmp( pu_name, "main") == 0;
-			break;
-		case PU_F90_LANG:
-		case PU_F77_LANG:
-			return strcmp( pu_name, "MAIN__") == 0;
-			break;
-		default:
-			FmtAssert (FALSE, ("Unknown source language type"));
-	}
+    switch (PU_src_lang(Get_Current_PU())) {
+        case PU_C_LANG:
+        case PU_CXX_LANG:
+            return strcmp( pu_name, "main") == 0;
+            break;
+        case PU_F90_LANG:
+        case PU_F77_LANG:
+            return strcmp( pu_name, "MAIN__") == 0;
+            break;
+        default:
+            FmtAssert (FALSE, ("Unknown source language type"));
+    }
 } /* currentpu_ismain */
 
 
@@ -3052,6 +3125,8 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
 
 
     WN *local_inner_array = get_innermost_array(local_ref);
+    if (!local_inner_array)
+        local_inner_array = local_ref;
     if (access == READ_DIRECT || access == WRITE_DIRECT) {
         WN *wp = local_inner_array;
         i = 0;
@@ -3140,7 +3215,10 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
 
         WN *local_ref_offset = WN_Intconst(Integer_type, 0);
 
-        if (WN_operator(WN_kid0(local_inner_array)) == OPR_LDA ||
+        if (WN_operator(local_inner_array) == OPR_LDID) {
+            ST* local_array_st = WN_st(local_inner_array);
+            local_array_is_lcb = ST_is_lcb_ptr(local_array_st);
+        } else if (WN_operator(WN_kid0(local_inner_array)) == OPR_LDA ||
             WN_operator(WN_kid0(local_inner_array)) == OPR_LDID) {
             ST* local_array_st = WN_st(WN_kid0(local_inner_array));
             local_array_is_lcb = ST_is_lcb_ptr(local_array_st);
@@ -3207,9 +3285,15 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
             }
         }
 
-        local_base_address = WN_Add(Pointer_type,
-                              WN_COPY_Tree(WN_kid0(local_inner_array)),
-                              local_ref_offset);
+        if (WN_operator(local_inner_array) == OPR_LDID) {
+            local_base_address = WN_Add(Pointer_type,
+                                  WN_COPY_Tree(local_inner_array),
+                                  local_ref_offset);
+        } else {
+            local_base_address = WN_Add(Pointer_type,
+                                  WN_COPY_Tree(WN_kid0(local_inner_array)),
+                                  local_ref_offset);
+        }
 
         /* fill in subscript strides */
         for (int i = 0; i < local_num_array_cpnts; i++) {
@@ -4151,7 +4235,7 @@ static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty)
 {
   WN *base_addr;
   ST *array_st;
-  INT8 rank, corank, totalrank;
+  INT8 rank, corank, totalrank, extrarank;
 
   if ((WN_operator(arr) != OPR_ARRAY) &&
       (WN_operator(arr) != OPR_ARRSECTION))
@@ -4190,11 +4274,15 @@ static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty)
   /* break if not cosubscripted */
   if (WN_kid_count(arr) == (1+2*rank))
     return 0;
-
+ /* If the array ref is promoted pointer */ 
+  if (WN_kid_count(arr) == 3 && WN_operator(WN_kid1(arr)) == OPR_INTCONST && 
+	WN_const_val(WN_kid1(arr)) == 0)
+	return 0;
   /* this is a image-selecting array reference. return expression that
    * computes selected image */
-
+  extrarank = (WN_kid_count(arr)-1)/2 - rank - corank;
   totalrank = rank + corank;
+  Is_True(1+2*totalrank <= WN_kid_count(arr),("Dimension mismatch for encountered coindexed array"));
 
   WN **wn_costr_m = (WN **)malloc(corank*sizeof(WN*));
   wn_costr_m[0] = WN_Intconst(Integer_type, 1);
@@ -4753,8 +4841,8 @@ static void handle_caf_call_stmts(
 static void
 dump_ty (TY_IDX ty_idx)
 {
-	TY& ty = Ty_Table[ty_idx];
-	ty.Print(stdout);
+    TY& ty = Ty_Table[ty_idx];
+    ty.Print(stdout);
 }
 
 static void uncoindex_expr(WN *expr)
