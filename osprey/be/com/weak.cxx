@@ -282,6 +282,7 @@ void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 const char * (*W2F_Get_Transformed_Src_Path_p)(void);
 BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
+BOOL (*W2F_Should_Before_CG_p)(void);
 void (*W2F_Translate_Istore_Lhs_p)(char *strbuf, UINT bufsize,
   WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty, TYPE_ID istore_mtype);
 void (*W2F_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize, 

@@ -625,7 +625,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         }
     }
 
-    //unfold_nested_cors_in_block(func_body);
+    unfold_nested_cors_in_block(func_body);
 
 
     /* Pass 1: Traverse PU, searching for:

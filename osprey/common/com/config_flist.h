@@ -140,6 +140,7 @@ typedef struct flist_flags {
    BOOL        emit_all_regions;/* Emit cmplr-generated regions */
    BOOL        emit_linedirs;   /* Emit preproc line-directives */
    BOOL        emit_nested_pus; /* Emit code for nested PUs */
+   BOOL        before_cg;       /* Invoke whirl2f right before CG */
    BOOL        emit_frequency;  /* Emit feedback frequency info */
    BOOL        emit_cgtag;      /* Tag loops with loop_info address */
    BOOL        emit_pcf;      /* force PCF spellings for pragmas */
@@ -182,6 +183,7 @@ extern FLIST_FLAGS *Current_FLIST;
 #define FLIST_emit_all_regions  Current_FLIST->emit_all_regions
 #define FLIST_emit_linedirs     Current_FLIST->emit_linedirs
 #define FLIST_emit_nested_pus   Current_FLIST->emit_nested_pus
+#define FLIST_before_cg         Current_FLIST->before_cg
 #define FLIST_emit_frequency    Current_FLIST->emit_frequency
 #define FLIST_emit_cgtag        Current_FLIST->emit_cgtag
 #define FLIST_emit_pcf          Current_FLIST->emit_pcf

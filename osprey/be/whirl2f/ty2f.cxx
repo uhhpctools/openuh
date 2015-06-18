@@ -1370,7 +1370,6 @@ TY2F_Get_Fld_Path(const TY_IDX struct_ty,
   TY & s_ty = Ty_Table[struct_ty] ;
   FLD_ITER fld_iter ;
   
-  
   ASSERT_DBG_FATAL(TY_kind(s_ty) == KIND_STRUCT,
 		   (DIAG_W2F_UNEXPECTED_TYPE_KIND, 
 		    TY_kind(s_ty),

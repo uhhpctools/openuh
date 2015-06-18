@@ -65,6 +65,7 @@ extern void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 extern void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern const char * (*W2F_Get_Transformed_Src_Path_p)(void);
 extern BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
+extern BOOL (*W2F_Should_Before_CG_p)(void);
 extern void (*W2F_Translate_Istore_Lhs_p)(char *strbuf, UINT bufsize,
   WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty, TYPE_ID istore_mtype);
 extern void (*W2F_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize, 
@@ -89,6 +90,7 @@ struct W2F_INIT
       W2F_Set_Frequency_Map_p = W2F_Set_Frequency_Map;
       W2F_Get_Transformed_Src_Path_p = W2F_Get_Transformed_Src_Path;
       W2F_Should_Emit_Nested_PUs_p = W2F_Should_Emit_Nested_PUs;
+      W2F_Should_Before_CG_p = W2F_Should_Before_CG;
       W2F_Translate_Istore_Lhs_p = W2F_Translate_Istore_Lhs;
       W2F_Translate_Stid_Lhs_p = W2F_Translate_Stid_Lhs;
       W2F_Translate_Wn_p = W2F_Translate_Wn;

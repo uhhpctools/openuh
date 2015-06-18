@@ -55,6 +55,7 @@ extern void (*W2F_Process_Command_Line_p)(INT phase_argc, const char *phase_argv
 extern void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 extern void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
+extern BOOL (*W2F_Should_Before_CG_p)(void);
 extern void (*W2F_Translate_Istore_Lhs_p)(char *strbuf, UINT bufsize,
   WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty, TYPE_ID istore_mtype);
 extern void (*W2F_Translate_Wn_p)(FILE *outfile, WN *wn);
@@ -70,6 +71,7 @@ extern void (*W2F_Translate_Wn_Str_p)(char *strbuf, UINT bufsize, WN *wn);
 #define W2F_Push_PU (*W2F_Push_PU_p)
 #define W2F_Set_Frequency_Map (*W2F_Set_Frequency_Map_p)
 #define W2F_Should_Emit_Nested_PUs (*W2F_Should_Emit_Nested_PUs_p)
+#define W2F_Should_Before_CG (*W2F_Should_Before_CG_p)
 #define W2F_Translate_Istore_Lhs (*W2F_Translate_Istore_Lhs_p)
 #define W2F_Translate_Wn (*W2F_Translate_Wn_p)
 #define W2F_Translate_Wn_Str (*W2F_Translate_Wn_Str_p)
@@ -86,6 +88,7 @@ extern void (*W2F_Translate_Wn_Str_p)(char *strbuf, UINT bufsize, WN *wn);
 #pragma weak W2F_Push_PU
 #pragma weak W2F_Set_Frequency_Map
 #pragma weak W2F_Should_Emit_Nested_PUs
+#define weak W2F_Should_Before_CG
 #pragma weak W2F_Translate_Istore_Lhs
 #pragma weak W2F_Translate_Wn
 #pragma weak W2F_Translate_Wn_Str

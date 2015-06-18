@@ -71,6 +71,7 @@ FLIST_FLAGS Flist_Flags =
    FALSE, /* emit_all_regions */
    FALSE, /* emit_linedirs */
    FALSE, /* emit_nested_pus */
+   FALSE, /* before_cg */
    FALSE, /* emit_frequency */
    FALSE, /* emit_cgtag */
    FALSE, /* emit_pcf  */
@@ -121,6 +122,9 @@ static OPTION_DESC Options_FLIST[] =
   { OVK_BOOL,	OV_SHY,	        FALSE, "emit_nested_pu", NULL,
        0, 0, 0, &FLF.emit_nested_pus,  NULL,
        "Emit nested PUs at file-level, i.e. out of context" },
+  { OVK_BOOL,	OV_SHY,	        FALSE, "before_cg", NULL,
+       0, 0, 0, &FLF.before_cg,  NULL,
+       "Invoke whirl2f right before CG, i.e. after WOPT" },
   { OVK_BOOL,	OV_SHY,	        FALSE, "emit_cgtag", NULL,
        0, 0, 0, &FLF.emit_cgtag,  NULL,
        "Emit tags for do-loops for correlation with CG output" },

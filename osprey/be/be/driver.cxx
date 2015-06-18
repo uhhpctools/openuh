@@ -996,11 +996,14 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
     }
 
     if (Run_w2f && !Run_w2fc_early) {
-	if (W2F_Should_Emit_Nested_PUs() || is_user_visible_pu) {
-	    if (Cur_PU_Feedback)
-		W2F_Set_Frequency_Map(WN_MAP_FEEDBACK);
-	    W2F_Outfile_Translate_Pu(pu);
-	}
+      // add -FLIST:before_cg to control whirl2f before CG after wopt
+      if (!W2F_Should_Before_CG()) { // the order of two IF matters here!
+        if (W2F_Should_Emit_Nested_PUs() || is_user_visible_pu) {
+          if (Cur_PU_Feedback)
+              W2F_Set_Frequency_Map(WN_MAP_FEEDBACK);
+          W2F_Outfile_Translate_Pu(pu);
+        }
+      }
     }
 
     /* only write .N file for PU, no need to replace region because
@@ -1257,6 +1260,19 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
                     W2C_Outfile_Translate_Pu(rwn, TRUE/*emit_global_decls*/);
                 else
                     W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+            }
+        }
+    }
+    /* enable whirl2f right before cg*/
+    if (Run_w2f && !Run_w2fc_early) {
+        if (W2F_Should_Before_CG()){
+            if (W2F_Should_Emit_Nested_PUs() || is_user_visible_pu) {
+                if (Cur_PU_Feedback)
+                    W2F_Set_Frequency_Map(WN_MAP_FEEDBACK);
+                if (Run_wopt)
+                    W2F_Outfile_Translate_Pu(rwn);
+                else
+                    W2F_Outfile_Translate_Pu(pu);
             }
         }
     }
@@ -1831,6 +1847,11 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
       }
   }
 #endif
+
+    /* First round output (.N file, w2c, w2f, etc.) */
+    Set_Error_Phase ( "Post LNO Processing" );
+    Post_LNO_Processing (current_pu, pu);
+    if (!Run_wopt && !Run_cg) return;
 
  
     /* TODO: Can we push this to a later back-end stage? */

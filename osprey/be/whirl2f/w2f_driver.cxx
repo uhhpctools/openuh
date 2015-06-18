@@ -163,6 +163,7 @@ BOOL   W2F_Emit_Prefetch = FALSE;   /* Emit comments for prefetches */
 BOOL   W2F_Emit_All_Regions = FALSE;/* Emit cmplr-generated regions */
 BOOL   W2F_Emit_Linedirs = FALSE;   /* Emit preproc line-directives */
 BOOL   W2F_Emit_Nested_PUs = FALSE; /* Emit code for nested PUs */
+BOOL   W2F_Before_CG = FALSE;       /* Invoke whirl2f before CG */
 BOOL   W2F_Emit_Frequency = FALSE;  /* Emit feedback frequency info */
 BOOL   W2F_Emit_Cgtag = FALSE;      /* Emit codegen tags for loop */
 BOOL   W2F_Emit_Pcf = FALSE;        /* Force Pcf pragmas wherever possible */
@@ -592,6 +593,12 @@ W2F_Should_Emit_Nested_PUs(void)
    return W2F_Emit_Nested_PUs;
 } /* W2F_Should_Emit_Nested_PUs */
 
+BOOL
+W2F_Should_Before_CG(void)
+{
+   return W2F_Before_CG;
+} /* W2F_Should_Before_CG */
+
 
 void
 W2F_Process_Command_Line (INT phase_argc, const char *phase_argv[],
@@ -618,6 +625,7 @@ W2F_Process_Command_Line (INT phase_argc, const char *phase_argv[],
     W2F_Emit_Linedirs = FLIST_emit_linedirs;
     W2F_Emit_All_Regions = FLIST_emit_all_regions;
     W2F_Emit_Nested_PUs = FLIST_emit_nested_pus;
+    W2F_Before_CG = FLIST_before_cg;
     W2F_Emit_Frequency = FLIST_emit_frequency;
     W2F_Emit_Cgtag = FLIST_emit_cgtag;
     W2F_Emit_Pcf = FLIST_emit_pcf;
@@ -946,6 +954,7 @@ W2F_Fini(void)
       W2F_Emit_All_Regions = FALSE;/* Emit cmplr-generated regions */
       W2F_Emit_Linedirs = FALSE;   /* Emit preproc line-directives */
       W2F_Emit_Nested_PUs = FALSE; /* Emit code for nested MP PUs */
+      W2F_Before_CG = FALSE;       /* Invoke whirl2f before CG */
       W2F_Emit_Frequency = FALSE;  /* Emit feedback frequency info */
       W2F_Line_Length = 0;         /* 'zero' means: use the default */
 
