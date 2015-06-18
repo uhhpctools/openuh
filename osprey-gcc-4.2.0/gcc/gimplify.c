@@ -4912,6 +4912,7 @@ gimplify_scan_acc_clauses (tree *list_p, tree *pre_p)
 	  case  ACC_CLAUSE_HOST:
 	  case  ACC_CLAUSE_DEVICE:
 	  case  ACC_CLAUSE_CONST:
+	  case  ACC_CLAUSE_WAIT:
 		remove = true;
 	  	break;
 

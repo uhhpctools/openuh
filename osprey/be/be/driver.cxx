@@ -2485,8 +2485,8 @@ Preorder_Process_PUs (PU_Info *current_pu)
   // register the back end's PREG table with the main PREG table so
   // they will grow together as PREGs are created.
   Scope_tab[CURRENT_SYMTAB].preg_tab->Register(Be_preg_tab);
-
-  WN_verifier(pu);
+  if(isOpenACCRegion == FALSE)
+  	WN_verifier(pu);
 
   Verify_SYMTAB (CURRENT_SYMTAB);
 

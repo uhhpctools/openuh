@@ -122,6 +122,8 @@ static void ACC_Fill_Each_Stride( )
 		wn_upper = acc_loop_upper_bound[i];
 		wn_newtrips = WN_Binary(OPR_SUB, acc_collapse_mtype, 
 						WN_COPY_Tree(wn_upper), WN_COPY_Tree(wn_lower));
+		wn_newtrips = WN_Binary(OPR_ADD, acc_collapse_mtype, 
+					wn_newtrips, WN_Intconst(acc_collapse_mtype, 1));
 		for(UINT32 j=i+1; j<collapse_count; j++)
 		{			
 			wn_lower = acc_loop_lower_bound[j];
@@ -264,4 +266,5 @@ void ACC_Rewrite_Collapsed_Do (WN* wn_start_block, WN* wn_indices_init_block)
 	acc_test_stmt = wn_newcond;
 
 }
+
 

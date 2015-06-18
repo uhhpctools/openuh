@@ -3,12 +3,15 @@
 #include "acc_data.h"
 
 static __acc_stack_impl* __pacc_stack = NULL;
+static __acc_stack_impl  async_stream[SNK_MAX_STREAMS];
 
 void __accr_stack_init()
-{
-	__pacc_stack = malloc(sizeof(__acc_stack_impl));
-	__pacc_stack->pnext = NULL;
-	__pacc_stack->pheader = NULL;
+{	
+	int i;
+	for(i=0; i<SNK_MAX_STREAMS; i++)
+	{
+		async_stream[i].pheader = NULL;
+	}
 }
 
 void __accr_stack_destroy()
@@ -34,13 +37,41 @@ void __accr_stack_pop()
 	free(oldtop);
 }
 
-void __accr_stack_pending_to_current_stack(void* pdevice, int bisReductionBuffer)
+void __accr_stack_pending_to_current_stack(void* pdevice, int bisReductionBuffer, int async)
 {
-	__acc_device_pointer* newdeviceptr = malloc(sizeof(__acc_device_pointer));
-	newdeviceptr->pdevice = pdevice;
-	newdeviceptr->bisreductionbuffer = bisReductionBuffer;
-	newdeviceptr->pnext = __pacc_stack->pheader;
-	__pacc_stack->pheader = newdeviceptr;
+	if(async < 0)
+	{
+		//no async
+		__acc_device_pointer* newdeviceptr = malloc(sizeof(__acc_device_pointer));
+		newdeviceptr->pdevice = pdevice;
+		newdeviceptr->bisreductionbuffer = bisReductionBuffer;
+		newdeviceptr->pnext = __pacc_stack->pheader;
+		__pacc_stack->pheader = newdeviceptr;
+	}
+	else
+	{
+		int istream = async%SNK_MAX_STREAMS;
+		__acc_device_pointer* newdeviceptr = malloc(sizeof(__acc_device_pointer));
+		newdeviceptr->pdevice = pdevice;
+		newdeviceptr->bisreductionbuffer = bisReductionBuffer;
+		newdeviceptr->pnext = async_stream[istream].pheader;
+		async_stream[istream].pheader = newdeviceptr;	
+	}
+}
+
+void __accr_stream_clear_device_ptr(int async)
+{
+	int istream = async%SNK_MAX_STREAMS;
+	__acc_device_pointer* pheader = async_stream[istream].pheader;
+	while(pheader!=NULL)
+	{
+		if(pheader->bisreductionbuffer)
+			__accr_free_reduction_buff(pheader->pdevice);
+		else
+			__accr_free_on_device(pheader->pdevice);
+		pheader = pheader->pnext;
+	}
+	async_stream[istream].pheader = NULL;
 }
 
 void __accr_stack_clear_device_ptr_in_current_stack()

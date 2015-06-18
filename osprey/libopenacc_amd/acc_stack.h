@@ -16,4 +16,10 @@ typedef struct __acc_stack_impl
 void __accr_stack_push();
 void __accr_stack_pending_to_current_stack();
 void __accr_stack_pop();
+void __accr_stack_init();
+void __accr_stream_clear_device_ptr(int async);
+void __accr_stack_pending_to_current_stack(void* pdevice, int bisReductionBuffer, int async);
+
+
+
 #endif

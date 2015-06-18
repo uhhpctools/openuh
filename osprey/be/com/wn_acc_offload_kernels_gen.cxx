@@ -259,6 +259,63 @@ static void ACC_Create_Private_Variables();
 static void ACC_Insert_Initial_Stmts(WN* replacement_block);
 static void ACC_Gen_Scalar_Variables_CopyOut_InOffload(WN* wn_replace_block);
 
+#define SET_P_MAP(x,t) WN_MAP_Set(f90_parent_map,(x),(void *) (t))
+#define GET_P_MAP(x) ((WN *) WN_MAP_Get(f90_parent_map,(x)))
+static MEM_POOL acc_f90_lower_pool;
+static BOOL isFirstCall = TRUE;
+
+static void acc_check_for_duplicates(WN *pu, const char *str)
+{
+   /* Set up a parent map */
+   static WN_MAP f90_parent_map;
+   WN_ITER *ti;
+   WN *w, *k, *p;
+   INT i;
+   BOOL found_dup = FALSE;
+
+   if(isFirstCall)
+   {
+		MEM_POOL_Initialize(&acc_f90_lower_pool,"ACC Offload Region Transformation", TRUE);
+		isFirstCall = FALSE;
+   }
+
+   f90_parent_map = WN_MAP_Create(&acc_f90_lower_pool);
+   
+   /* Walk everything */
+   ti = WN_WALK_TreeIter(pu);
+   while (ti) {
+      w = WN_ITER_wn(ti);
+      /* look at all the kids */
+      for (i=0; i < WN_kid_count(w) ; i++) {
+	 k = WN_kid(w,i);
+	 p = GET_P_MAP(k);
+	 if ((p != NULL) && (p != w)) {
+	    fprintf(TFile,"\n%s: Multiparented node p=%8p, w=%8p, k=%d\n",str,p,w,i);
+	    fprintf(TFile,"parent:\n"); fdump_tree(TFile,p);
+	    fprintf(TFile,"current:\n"); fdump_tree(TFile,w);
+	    
+	    // csc. 2002/11/14
+	    WN * temp_csc = GET_P_MAP(w);
+	    if( temp_csc != NULL ){
+		    fprintf(TFile, "current's parent:\n");
+		    fdump_tree(TFile, temp_csc );
+	    }
+	    
+	    fprintf(TFile,"multichild:\n"); fdump_tree(TFile,k);
+	    found_dup = TRUE;
+	 } else {
+	    SET_P_MAP(k,w);
+	 }
+      }
+      ti = WN_WALK_TreeNext(ti);
+   }
+   
+   WN_MAP_Delete(f90_parent_map);
+   if (found_dup) {
+      DevWarn(("Duplicate WHIRL nodes found %s\n"),str);
+   }
+}
+
 /*
 * When switching scope, use this call to save some global vars.
 * When the scope is switched back, use Pop_Some_Globals to restore them.
@@ -3043,18 +3100,12 @@ void ACC_Process_Clause_Pragma(WN * tree)
 					 WN_Delete ( wn_cur_node );
 				   break;
 
-				 case WN_PRAGMA_ACC_CLAUSE_WAIT:
-				   for (wn = acc_wait_nodes; wn; wn = WN_next(wn))
-					 if (ACC_Identical_Pragmas(wn_cur_node, wn))
-					 	
-				   if (wn == NULL) 
+				 case WN_PRAGMA_ACC_CLAUSE_WAIT:	
 				   {
 					 WN_next(wn_cur_node) = acc_wait_nodes;
 					 acc_wait_nodes = wn_cur_node;
 					 acc_wait_list.push_back(wn_cur_node);
 				   } 
-				   else
-					 WN_Delete ( wn_cur_node );
 				   break;
 				   
 				 case WN_PRAGMA_ACC_CLAUSE_PARM:
@@ -3127,27 +3178,21 @@ static WN* ACC_Generate_KernelParameters(WN* paramlist, void* pRegionInfo, BOOL 
 	KernelsRegionInfo* pKernelsRegionInfo;
 	WN* wn;
 	//Process scalar in/out variables first.
-	/*map<ST*, ACC_SCALAR_INOUT_INFO*>::iterator itor;// = acc_scalar_inout_nodes.begin();
-	for(itor = acc_map_scalar_inout.begin(); itor!=acc_map_scalar_inout.end(); itor++)
+
+	if(acc_target_arch == ACC_ARCH_TYPE_APU)
 	{
-		KernelParameter kparam;
-		ACC_SCALAR_INOUT_INFO* pInfo = itor->second;
-		kparam.st_host = pInfo->st_host;
-		kparam.st_device = pInfo->st_device_ptr_on_host;
-		acc_kernelLaunchParamList.push_back(kparam);
+		for(wn=paramlist; wn; wn=WN_next(wn))
+		{
+			ST* st_param = WN_st(wn);
+			KernelParameter kparam;
+			kparam.st_host = st_param;
+			kparam.st_device = NULL;
+			acc_kernelLaunchParamList.push_back(kparam);
+		}
 	}
-	
-	for(itor = acc_map_scalar_out.begin(); itor!=acc_map_scalar_out.end(); itor++)
-	{
-		KernelParameter kparam;
-		ACC_SCALAR_INOUT_INFO* pInfo = itor->second;
-		kparam.st_host = pInfo->st_host;
-		kparam.st_device = pInfo->st_device_ptr_on_host;
-		acc_kernelLaunchParamList.push_back(kparam);
-	}*/
 	///////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////
-	if(isKernelRegion)
+	else if(isKernelRegion)
 	{
 		pKernelsRegionInfo = (KernelsRegionInfo*)pRegionInfo;
 		//Get a pair list for kernel parameters.
@@ -4589,6 +4634,7 @@ WN* ACC_Process_ParallelRegion( WN * tree, WN* wn_cont)
     								parallelRegionInfo.acc_vector_length);
 	acc_kernel_functions_st.clear();
 	acc_top_level_loop_rdc.clear();
+	acc_shared_memory_for_reduction_block.clear();
 	//Generate the kernel launch function.
 	//WN_INSERT_BlockLast(acc_replace_block, LauchKernel(0));	
 	//Generate the data copy back function
@@ -5429,31 +5475,6 @@ WN* ACC_Process_DataRegion( WN * tree )
   return DRegion_replacement_block;  
 }
 
-/***************************************************************/
-/*  Process the contents of a parallel region.  
-  *  single GPU kernel will be generated in this region */
-/***************************************************************/
-void ACC_Handle_Parallel_Loops( WN* stmt_block, ParallelRegionInfo* pPRInfo, WN* wn_replace_block)
-{  	
-  stmt_block = ACC_Walk_and_Replace_ACC_Loop_Seq(stmt_block);
-  Identify_Loop_Scheduling(stmt_block, wn_replace_block, FALSE);
-  Transform_ACC_Parallel_Block(stmt_block, pPRInfo, wn_replace_block);
-} // Process_ACC_Region()
-
-
-
-/***************************************************************/
-/*  Process the contents of a kernels region.  
-  *  multi different kernels may include in this region */
-/***************************************************************/
-void ACC_Handle_Kernels_Loops( WN* stmt_block, KernelsRegionInfo* pKRInfo, WN* wn_replace_block)
-{	
-  stmt_block = ACC_Walk_and_Replace_ACC_Loop_Seq(stmt_block);
-  //Identify_Loop_Scheduling(stmt_block, wn_replace_block, TRUE);
-  Transform_ACC_Kernel_Block(stmt_block, pKRInfo, wn_replace_block);
-} // Process_ACC_Region()
-
-
 //no loops in the kernels region
 static WN *
 ACC_Linear_Stmts_Transformation_New(WN* wn_stmt, WN* wn_replacementlock)
@@ -5520,12 +5541,15 @@ static void ACC_Create_Private_Variables()
 		//the new private var is created during kernel parameter generation
 		//2. ACC_SCALAR_VAR_PRIVATE 2.1 the new private var is created during kernel parameter generation if it is reduction var
 		//							 2.2  else the new private var is going to created.
-		if(pVarInfo->acc_scalar_type == ACC_SCALAR_VAR_PRIVATE && pVarInfo->is_reduction== FALSE)
+		if(pVarInfo->acc_scalar_type == ACC_SCALAR_VAR_PRIVATE )
 		{
 			ST* st_private = pVarInfo->st_var;
 			TY_IDX index_ty = ST_type(st_private);
 		    ST* st_new_private = New_ST( CURRENT_SYMTAB );
-	    	sprintf ( szlocalname, "%s", ST_name(st_private));
+			if(pVarInfo->is_reduction== FALSE)
+	    		sprintf ( szlocalname, "%s", ST_name(st_private));
+			else
+				sprintf ( szlocalname, "_private_%s", ST_name(st_private));
 			ST_Init(st_new_private,
 		      Save_Str( szlocalname),
 		      CLASS_VAR,
@@ -5537,6 +5561,7 @@ static void ACC_Create_Private_Variables()
 			var.orig_st = st_private;
 			var.new_st = st_new_private;
 		    acc_local_new_var_map[st_private] = var;
+			pVarInfo->st_device_in_klocal = st_new_private;
 		}
 	}
 }
@@ -5684,7 +5709,8 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	//initialize the pre-process reduction variables
 	//all the reduction clauses appearing in acc_top_level_loop_rdc have to be 
 	//taken care during kernel_parameter generatation
-	acc_top_level_loop_rdc.clear();
+	acc_top_level_loop_rdc.clear();	
+	acc_additionalKernelLaunchParamList.clear();
 	//here is the preprocess:
 	//1. remove seq loop
 	//2. identify loop schedulings
@@ -5710,6 +5736,7 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	acc_psymtab = CURRENT_SYMTAB;
 	acc_ppuinfo = Current_PU_Info;
 	acc_pmaptab = Current_Map_Tab;
+	
 	//outline
 	ACC_Create_Outline_OffloadRegion();
 
@@ -5720,7 +5747,10 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	acc_loop_index_var.clear();
 	//////////////////////////////////////////////////////////////////////////////////////////////	
 	WN* wn_translated_offload_Region = ACC_Loop_Scheduling_Transformation_Gpu (tree, wn_parallel_block);
+	acc_check_for_duplicates(wn_translated_offload_Region, "before localize");
 	ACC_Walk_and_Localize(wn_translated_offload_Region);
+	acc_check_for_duplicates(wn_translated_offload_Region, "after localize");
+	WN_verifier(wn_translated_offload_Region);
 	WN_INSERT_BlockLast ( wn_parallel_block, wn_translated_offload_Region);
 	ACC_Gen_Scalar_Variables_CopyOut_InOffload(wn_parallel_block);
 	//////////////////////////////////////////////////////////////////////////////////////////////	
@@ -5814,7 +5844,11 @@ ACC_Transform_Single_Nested_Loop_for_Kernels(WN* tree)
 	//if there is some top-level reduction,
 	//the reduction initialization is coming first.
 	WN* wn_translated_loop = ACC_Loop_Scheduling_Transformation_Gpu (tree, wn_replacement_block);
-	ACC_Walk_and_Localize(wn_translated_loop);
+	
+	acc_check_for_duplicates(wn_translated_loop, "before localize");
+	ACC_Walk_and_Localize(wn_translated_loop);	
+	acc_check_for_duplicates(wn_translated_loop, "after localize");
+	WN_verifier(wn_translated_loop);
 	WN_INSERT_BlockLast ( wn_replacement_block, wn_translated_loop);
 	ACC_Gen_Scalar_Variables_CopyOut_InOffload(wn_replacement_block);
 	///////////////////////////////////////////////////////////////////////////	
@@ -5884,6 +5918,8 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 	       WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
 						WN_PRAGMA_ACC_LOOP_BEGIN) 
 		{
+			WN* toplogy = Gen_Set_Default_Toplogy();
+			WN_INSERT_BlockLast(wn_replace_block, toplogy);
 			//++num_constructs;
 			//generate kernel function
 			//This should be the first ACC LOOP

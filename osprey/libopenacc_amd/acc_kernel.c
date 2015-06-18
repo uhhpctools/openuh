@@ -1,5 +1,6 @@
 /**
  * Author: Rengan Xu
+ * Revised: Xiaonan Tian for AMD APU
  * University of Houston
  */
 
@@ -17,16 +18,10 @@ acc_hashmap* __accr_file_map = NULL;
 #define SNK_UNORDERED 0
 
 #include <stdint.h>
-typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
-
-typedef struct snk_task_s snk_task_t;
-struct snk_task_s {
-   hsa_signal_t signal ;
-   snk_task_t* next;
-};
 
 typedef struct snk_lparm_s snk_lparm_t;
-struct snk_lparm_s {
+struct snk_lparm_s 
+{
    int ndim;                  /* default = 1 */
    size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */
    size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
@@ -44,48 +39,63 @@ struct snk_lparm_s {
 
 static snk_lparm_t launch_params;
 
-void __accr_init_launch_params(void** plaunch_params)
+void __accr_init_launch_params(void** plaunch_params, int async_expr)
 {
-        launch_params.ndim = 3;
-        launch_params.gdims[0] = gangs[0] * vectors[0];
-        launch_params.gdims[1] = gangs[1] * vectors[1];
-        launch_params.gdims[2] = gangs[2] * vectors[2];
+    launch_params.ndim = 3;
+    launch_params.gdims[0] = gangs[0] * vectors[0];
+    launch_params.gdims[1] = gangs[1] * vectors[1];
+    launch_params.gdims[2] = gangs[2] * vectors[2];
 
-        launch_params.ldims[0] = vectors[0];
-        launch_params.ldims[1] = vectors[1];
-        launch_params.ldims[2] = vectors[2];
-	launch_params.stream=-1;
-	launch_params.barrier=SNK_UNORDERED;
-	launch_params.acquire_fence_scope=2;
-	launch_params.release_fence_scope=2;
-	launch_params.requires=NULL;
-	launch_params.needs=NULL;
+    launch_params.ldims[0] = vectors[0];
+    launch_params.ldims[1] = vectors[1];
+    launch_params.ldims[2] = vectors[2];
+	launch_params.stream = async_expr%SNK_MAX_STREAMS;
+	launch_params.barrier = SNK_UNORDERED;
+	launch_params.acquire_fence_scope = 2;
+	launch_params.release_fence_scope = 2;
+	launch_params.requires = NULL;
+	launch_params.needs = NULL;
+
+	if(launch_params.gdims[1] == 1 && launch_params.gdims[2] == 1)
+	{
+		launch_params.ndim = 1;
+		launch_params.ldims[1] = 0;
+		launch_params.ldims[2] = 0;
+		launch_params.gdims[1] = 0;
+		launch_params.gdims[2] = 0;
+	}
+	else if(launch_params.gdims[2] == 1)
+	{
+		launch_params.ndim = 2;
+		launch_params.ldims[2] = 0;
+		launch_params.gdims[2] = 0;
+	}
 
         *plaunch_params = &launch_params;
 }
 
-void __accr_init_launch_reduction_params(void** plaunch_params, unsigned int* pblock_size)
+void __accr_init_launch_reduction_params(void** plaunch_params, unsigned int* pblock_size , int async_expr)
 {
-        launch_params.ndim = 3;
-		gangs[0] = 1;
-		gangs[1] = 1;
-		gangs[2] = 1;
-		vectors[0] = 256;
-		vectors[1] = 1;
-		vectors[2] = 1;
-        launch_params.gdims[0] = gangs[0] * vectors[0];
-        launch_params.gdims[1] = gangs[1] * vectors[1];
-        launch_params.gdims[2] = gangs[2] * vectors[2];
+    launch_params.ndim = 1;
+	gangs[0] = 1;
+	gangs[1] = 0;
+	gangs[2] = 0;
+	vectors[0] = 256;
+	vectors[1] = 0;
+	vectors[2] = 0;
+    launch_params.gdims[0] = gangs[0] * vectors[0];
+    launch_params.gdims[1] = gangs[1] * vectors[1];
+    launch_params.gdims[2] = gangs[2] * vectors[2];
 
-        launch_params.ldims[0] = vectors[0];
-        launch_params.ldims[1] = vectors[1];
-        launch_params.ldims[2] = vectors[2];
-	launch_params.stream=-1;
-	launch_params.barrier=SNK_UNORDERED;
-	launch_params.acquire_fence_scope=2;
-	launch_params.release_fence_scope=2;
-	launch_params.requires=NULL;
-	launch_params.needs=NULL;
+    launch_params.ldims[0] = vectors[0];
+    launch_params.ldims[1] = vectors[1];
+    launch_params.ldims[2] = vectors[2];
+	launch_params.stream = async_expr%SNK_MAX_STREAMS;
+	launch_params.barrier = SNK_UNORDERED;
+	launch_params.acquire_fence_scope = 2;
+	launch_params.release_fence_scope = 2;
+	launch_params.requires = NULL;
+	launch_params.needs = NULL;
 
         *plaunch_params = &launch_params;
 		*pblock_size = (unsigned int)vectors[0];
@@ -164,11 +174,11 @@ void __accr_set_vector_num_z(int z)
 
 void __accr_set_default_gang_vector(void)
 {
-	gangs[0] = 192;
+	gangs[0] = 1;
 	gangs[1] = 1;
 	gangs[2] = 1;
 
-	vectors[0] = 128;
+	vectors[0] = 256;
 	vectors[1] = 1;
 	vectors[2] = 1;
 	

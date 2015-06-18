@@ -1,5 +1,6 @@
 /**
  * Author: Rengan Xu
+ * Revised: Xiaonan Tian for AMD APU
  * University of Houston
  */
 
@@ -35,6 +36,7 @@ void acc_init_(acc_device_t* device_type)
 void acc_init(acc_device_t device_type)
 {
 	/*To do: add the support for different accel types */
+	__accr_stack_init();
 }
 
 int acc_get_num_devices_(acc_device_t* device_type);

@@ -541,7 +541,7 @@ TY_IDX accruntime_ty = TY_IDX_ZERO;
  {
 	 WN * wn;
 	 WN* wnx;
-	 wn = WN_Create(OPC_VCALL, 2);	 
+	 wn = WN_Create(OPC_VCALL, 3);	 
 	 WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_STACK_PENDING_TO_CURRENT_STACK);
    
 	 WN_Set_Call_Non_Data_Mod(wn);
@@ -556,6 +556,15 @@ TY_IDX accruntime_ty = TY_IDX_ZERO;
 	 WN_kid(wn, 1) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, bIsReduction), 
 			   Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
  
+	if(acc_AsyncExpr)
+	{
+	 	WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
+		   Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	}
+	else 
+	 	WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -2), 
+		   Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+
 	 
 	 return wn;
  }
@@ -1887,7 +1896,7 @@ WN* ACC_Gen_Dim_Init_Call(ST* st_dim)
 
 	//Then launch the kernel module
 	//create whirl CALL
-	wn = WN_Create(OPC_VCALL, 1 );
+	wn = WN_Create(OPC_VCALL, 2 );
 	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_INIT_LAUNCH_PARAMS);
 
 	WN_Set_Call_Non_Data_Mod(wn);
@@ -1900,6 +1909,14 @@ WN* ACC_Gen_Dim_Init_Call(ST* st_dim)
 	wnx = WN_Lda( Pointer_type, 0, st_dim);
 	WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
 					 WN_ty(wnx), WN_PARM_BY_REFERENCE);
+	if(acc_AsyncExpr)
+	{
+		WN_kid(wn, 1) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
+	   		Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	}
+	else 
+		WN_kid(wn, 1) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -1), 
+	   		Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
 	return wn;
 }
 
@@ -1914,7 +1931,7 @@ WN* ACC_Gen_Reduction_Dim_Init_Call(ST* st_dim, ST* st_blocksize)
 
 	//Then launch the kernel module
 	//create whirl CALL
-	wn = WN_Create(OPC_VCALL, 2 );
+	wn = WN_Create(OPC_VCALL, 3 );
 	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_INIT_LAUNCH_RED_PARAMS);
 
 	WN_Set_Call_Non_Data_Mod(wn);
@@ -1932,6 +1949,14 @@ WN* ACC_Gen_Reduction_Dim_Init_Call(ST* st_dim, ST* st_blocksize)
 	wnx = WN_Lda( Pointer_type, 0, st_blocksize);
 	WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wnx, 
 					 WN_ty(wnx), WN_PARM_BY_REFERENCE);
+	if(acc_AsyncExpr)
+	{
+		WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
+	   		Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	}
+	else 
+		WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -1), 
+	   		Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
 	return wn;
 }
 

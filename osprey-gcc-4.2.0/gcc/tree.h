@@ -445,6 +445,36 @@ enum acc_clause_code
   
   /* OpenACC clause: */
   ACC_CLAUSE_DEVICE,
+
+  /* OpenACC Clause */  
+  ACC_CLAUSE_WAIT,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_DELETE,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_DEVICE_TYPE,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_DEFAULT,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_AUTO,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_TILE,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_READ,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_WRITE,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_UPDATE,
+  
+  /* OpenACC Clause */  
+  ACC_CLAUSE_CAPTURE,
   
   /* OpenACC const clause: UH extension*/
   ACC_CLAUSE_CONST

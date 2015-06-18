@@ -10025,6 +10025,11 @@ CONTINUE:
 				acc_create_int_expr_pragma(list_idx2, ACC_Context_Wait);	\
 				list_idx2 = IL_NEXT_LIST_IDX(list_idx2);					\
 			}																\
+		}																	\
+		else if(IL_FLD(list_array_acc[OPEN_ACC_WAIT_IDX]) == CN_Tbl_Idx 	\
+			|| IL_FLD(list_array_acc[OPEN_ACC_WAIT_IDX]) == IR_Tbl_Idx 		\
+			|| IL_FLD(list_array_acc[OPEN_ACC_WAIT_IDX]) == AT_Tbl_Idx) {	\
+			acc_create_int_expr_pragma(list_array_acc[OPEN_ACC_WAIT_IDX], ACC_Context_Wait);		\
 		}
 
 #define IF_CLAUSE_PROCESSING()				\		
@@ -14228,11 +14233,15 @@ static void acc_create_int_expr_pragma(int	 il_clause_idx,
 														ACC_CONTEXT_TYPE acc_int_expr_context_type)
 {
 	int intexp_index = IL_IDX(il_clause_idx);
-	if(IL_FLD(il_clause_idx) == CN_Tbl_Idx)
+	if(IL_FLD(il_clause_idx) == IR_Tbl_Idx)
+	{
+		cvrt_exp_to_pdg(intexp_index, IR_Tbl_Idx);		
+		fei_acc_create_int_exp_pragma(acc_int_expr_context_type);
+	}
+	else if(IL_FLD(il_clause_idx) == CN_Tbl_Idx)
 	{
 		cvrt_exp_to_pdg(intexp_index, CN_Tbl_Idx);		
 		fei_acc_create_int_exp_pragma(acc_int_expr_context_type);
-		//extern void fei_acc_create_int_exp_pragma(INT32 context)
 	}
 	else if(IL_FLD(il_clause_idx) == AT_Tbl_Idx)
 	{

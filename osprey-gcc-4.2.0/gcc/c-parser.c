@@ -265,6 +265,7 @@ typedef enum pragma_oacc_clause {
   PRAGMA_OACC_CLAUSE_FIRST_PRIVATE,
   //For Int Expression
   PRAGMA_OACC_CLAUSE_INTEXP,
+  PRAGMA_OACC_CLAUSE_WAIT,
   //const clause, definte read-only pointer. 
   //This is UH extension
   PRAGMA_OACC_CLAUSE_CONST
@@ -1091,6 +1092,7 @@ static void c_parser_omp_barrier (c_parser *);
 static void c_parser_omp_flush (c_parser *);
 static void c_parser_omp_taskwait (c_parser *);
 
+static tree c_parser_acc_single_variable(c_parser *parser);
 static void c_parser_oacc_construct (c_parser *parser);
 static void c_parser_oacc_routine (c_parser *parser);
 
@@ -6898,6 +6900,8 @@ c_parser_oacc_clause_name (c_parser *parser)
 		case 'w':
 		  if (!strcmp ("worker", p))
 		    result = PRAGMA_OACC_CLAUSE_WORKER;
+		  else if(!strcmp ("wait", p))
+		  	result = PRAGMA_OACC_CLAUSE_WAIT;
 		  break;
 		}
     }
@@ -7004,7 +7008,7 @@ static tree c_parser_acc_single_variable(c_parser *parser)
   //if (c_parser_next_token_is_not (parser, CPP_NAME)
   //    || c_parser_peek_token (parser)->id_kind != C_ID_ID)
   //{
-  	  tree t = c_parser_expression (parser).value;      
+  	  tree t = c_parser_expr_no_commas (parser, NULL).value;      
 
       if (!INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	  {
@@ -8588,6 +8592,49 @@ c_parser_acc_clause_IntOrNoParam_exp (c_parser *parser, enum acc_clause_code kin
 }
 
 
+/*openACC: 
+Wait int-expr parse
+This function hasn't been finished yet.*/
+
+static tree
+c_parser_acc_clause_wait_exp (c_parser *parser, tree list)
+{
+    if (c_parser_next_token_is(parser, CPP_OPEN_PAREN))
+    {    
+         tree wait_steam, c, t;
+	     c_parser_consume_token (parser);
+		 
+		 while(c_parser_next_token_is_not (parser, CPP_CLOSE_PAREN))
+	 	 {	 		
+			 t = c_parser_acc_single_variable(parser);
+			 
+			 c = build_acc_clause (ACC_CLAUSE_WAIT);
+			 ACC_CLAUSE_INT_EXPR (c, ACC_CLAUSE_WAIT) = t;
+			 ACC_CLAUSE_CHAIN (c) = list;
+			 list = c;
+
+			 if (c_parser_next_token_is_not (parser, CPP_COMMA))
+				break;
+
+      		 c_parser_consume_token (parser);
+	 	 }
+
+      	 c_parser_skip_until_found (parser, CPP_CLOSE_PAREN, "expected %<)%>");    
+
+    }
+    else //No Parameters
+  	{
+  		tree c;
+		c = build_acc_clause (ACC_CLAUSE_WAIT);
+		ACC_CLAUSE_INT_EXPR (c, ACC_CLAUSE_WAIT) = build_int_cst (NULL_TREE, 0);
+		ACC_CLAUSE_CHAIN (c) = list;
+      	list = c;
+  	}
+
+  return list; 
+}
+
+
 /*OpenACC:No Parameter clause
 clause
 PRAGMA_OACC_CLAUSE_SEQ,
@@ -8730,7 +8777,7 @@ c_parser_acc_clause_if (c_parser *parser, tree list)
 		( (1u << PRAGMA_OACC_CLAUSE_INTEXP))
 
 static tree
-c_parser_acc_all_clauses (c_parser *parser, unsigned int mask,
+c_parser_acc_all_clauses (c_parser *parser, unsigned long mask,
 			  const char *where)
 {
   tree clauses = NULL;
@@ -8749,12 +8796,16 @@ c_parser_acc_all_clauses (c_parser *parser, unsigned int mask,
 	  }
 	  else if(mask == OACC_WAIT_CONSTRUCT_MASK)
 	  {
-	  	//No clause keyword
-	  	c_kind = PRAGMA_OACC_CLAUSE_INTEXP;
+	  	//No clause keyword 
+	  	c_kind = PRAGMA_OACC_CLAUSE_WAIT;
 	  }
 
       switch (c_kind)
 	{
+	case PRAGMA_OACC_CLAUSE_WAIT:
+	  clauses = c_parser_acc_clause_wait_exp(parser, clauses);
+	  c_name = "wait";
+		break;
 	case PRAGMA_OACC_CLAUSE_FIRST_PRIVATE:
 	  clauses = c_parser_acc_data_clause(parser, ACC_CLAUSE_FIRST_PRIVATE, clauses);
 	  c_name = "firstprivate";
@@ -9193,14 +9244,15 @@ static tree c_parser_oacc_declare(c_parser *parser)
 	| (1u << PRAGMA_OACC_CLAUSE_CONST)	\
 	| (1u << PRAGMA_OACC_CLAUSE_REDUCTION)			\
 	| (1u << PRAGMA_OACC_CLAUSE_FIRST_PRIVATE)	\
-	| (1u << PRAGMA_OACC_CLAUSE_PRIVATE))
+	| (1u << PRAGMA_OACC_CLAUSE_PRIVATE)	\
+	| (1u << PRAGMA_OACC_CLAUSE_WAIT))
 
 static tree c_parser_oacc_parallel(c_parser *parser)
 {  
   enum pragma_kind p_kind = PRAGMA_ACC_PARALLEL;
   const char *p_name = "#pragma acc parallel";
   tree stmt, clauses, par_clause, ws_clause, block;
-  unsigned int mask = OACC_PARALLEL_CONSTRUCT_MASK;
+  unsigned long mask = OACC_PARALLEL_CONSTRUCT_MASK;
   if (c_parser_next_token_is (parser, CPP_NAME))
   {
       const char *p = IDENTIFIER_POINTER (c_parser_peek_token (parser)->value);
@@ -9256,7 +9308,8 @@ static tree c_parser_oacc_parallel(c_parser *parser)
 	| (1u << PRAGMA_OACC_CLAUSE_IF)			\
 	| (1u << PRAGMA_OACC_CLAUSE_ASYNC)	\
 	| (1u << PRAGMA_OACC_CLAUSE_PARAM)	\
-	| (1u << PRAGMA_OACC_CLAUSE_CONST))
+	| (1u << PRAGMA_OACC_CLAUSE_CONST)	\
+	| (1u << PRAGMA_OACC_CLAUSE_WAIT))
 
 
 static tree c_parser_oacc_kernels(c_parser *parser)
@@ -9264,7 +9317,7 @@ static tree c_parser_oacc_kernels(c_parser *parser)
 	enum pragma_kind p_kind = PRAGMA_ACC_KERNELS;
 	const char *p_name = "#pragma acc kernels";
 	tree stmt, clauses, par_clause, ws_clause, block, forblock;
-	unsigned int mask = OACC_KERNEL_CONSTRUCT_MASK;
+	unsigned long mask = OACC_KERNEL_CONSTRUCT_MASK;
 	if (c_parser_next_token_is (parser, CPP_NAME))
 	{
 		const char *p = IDENTIFIER_POINTER (c_parser_peek_token (parser)->value);
@@ -9417,7 +9470,8 @@ static tree c_parser_oacc_cache(c_parser *parser)
 	( (1u << PRAGMA_OACC_CLAUSE_HOST) 					\
 	| (1u << PRAGMA_OACC_CLAUSE_DEVICE)			\
 	| (1u << PRAGMA_OACC_CLAUSE_IF)			\
-	| (1u << PRAGMA_OACC_CLAUSE_ASYNC))
+	| (1u << PRAGMA_OACC_CLAUSE_ASYNC)		\
+	| (1u << PRAGMA_OACC_CLAUSE_WAIT))
 
 static tree c_parser_oacc_update(c_parser *parser)
 {		

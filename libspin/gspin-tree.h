@@ -2610,6 +2610,36 @@ typedef enum gs_acc_clause_code
   /* OpenACC clause: */
   GS_ACC_CLAUSE_DEVICE,
 
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_WAIT,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_DELETE,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_DEVICE_TYPE,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_DEFAULT,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_AUTO,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_TILE,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_READ,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_WRITE,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_UPDATE,
+  
+  /* OpenACC Clause */  
+  GS_ACC_CLAUSE_CAPTURE,
+
   /*OpenACC const clause*/
   GS_ACC_CLAUSE_CONST
 }gs_acc_clause_code_t;

@@ -3008,7 +3008,9 @@ void ACC_ProcessReduction_Inside_offloadRegion(WN* wn_replace_block,
 		  SCLASS_AUTO,
 		  EXPORT_LOCAL,
 		  ty_array);
-		Set_ST_ACC_shared_array(local_array_red);
+		//only the opencl kernel requires pointer address space identification
+		if(acc_target_arch == ACC_ARCH_TYPE_APU)
+			Set_ST_ACC_shared_array(local_array_red);
 
 		WN* wn_base = WN_Ldid(Pointer_type, 0, acc_st_shared_memory, 
 					ST_type(acc_st_shared_memory));
@@ -3125,10 +3127,17 @@ void ACC_ProcessReduction_Inside_offloadRegion(WN* wn_replace_block,
 		//definitely in 3-level nested loops
 		//among workers, if reduction stmt is in inner body, the reduction will be in this gang/block
 		//shared memory	
+		ST* st_host = pReductionmap->hostName;
+		if(acc_offload_scalar_management_tab.find(st_host) == acc_offload_scalar_management_tab.end())
+			Fail_FmtAssertion("cannot find reduction var in acc_offload_scalar_management_tab.");
+		ACC_SCALAR_VAR_INFO* pVarInfo = acc_offload_scalar_management_tab[st_host];
+		pReductionmap->st_private_var = pVarInfo->st_device_in_klocal;
 		ST* st_reduction_private_var = pReductionmap->st_private_var;
 		//////////////////////////////////////////////////////////////////////////////////
 		TY_IDX ty_red = ST_type(pReductionmap->hostName);
 		TYPE_ID typeID = TY_mtype(ty_red);
+		pReductionmap->wn_private_var = WN_Ldid(TY_mtype(ST_type(st_reduction_private_var)),
+                                        0, st_reduction_private_var, ST_type(st_reduction_private_var));
 		//////////////////////////////////////////////////////////////////////////////////
 		ACC_Save_Reduction_Backup_Value(pReductionmap);
 		///////////////////////////////////////////////////////////////////////////////////
@@ -3168,11 +3177,18 @@ void ACC_ProcessReduction_Inside_offloadRegion(WN* wn_replace_block,
 	{
 		//among workers, if reduction stmt is in inner body, the reduction will be in this gang/block
 		//shared memory	
+		ST* st_host = pReductionmap->hostName;
+		if(acc_offload_scalar_management_tab.find(st_host) == acc_offload_scalar_management_tab.end())
+			Fail_FmtAssertion("cannot find reduction var in acc_offload_scalar_management_tab.");
+		ACC_SCALAR_VAR_INFO* pVarInfo = acc_offload_scalar_management_tab[st_host];
+		pReductionmap->st_private_var = pVarInfo->st_device_in_klocal;
 		ST* st_reduction_private_var = pReductionmap->st_private_var;
 		//////////////////////////////////////////////////////////////////////////////////
 		//acc_global_memory_for_reduction_block
 		TY_IDX ty_red = ST_type(pReductionmap->hostName);
 		TYPE_ID typeID = TY_mtype(ty_red);
+		pReductionmap->wn_private_var = WN_Ldid(TY_mtype(ST_type(st_reduction_private_var)),
+                                        0, st_reduction_private_var, ST_type(st_reduction_private_var));
 		ACC_Save_Reduction_Backup_Value(pReductionmap);
 		///////////////////////////////////////////////////////////////////////////////////	
 		ACC_Generate_Reductin_Index_for_Vector(pReductionmap);

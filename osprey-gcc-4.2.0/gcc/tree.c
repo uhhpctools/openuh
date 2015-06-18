@@ -9905,6 +9905,7 @@ gcc_acc_clause_code2gs_occ (enum acc_clause_code c)
     case ACC_CLAUSE_INDEPENDENT: return GS_ACC_CLAUSE_INDEPENDENT;
     case ACC_CLAUSE_HOST: return GS_ACC_CLAUSE_HOST;
     case ACC_CLAUSE_DEVICE: return GS_ACC_CLAUSE_DEVICE;
+    case ACC_CLAUSE_WAIT: return GS_ACC_CLAUSE_WAIT;
     case ACC_CLAUSE_CONST: return GS_ACC_CLAUSE_CONST;
   }
   gcc_assert (0);
@@ -12200,6 +12201,7 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 					break;
 				  
                 case ACC_CLAUSE_INTEXP:
+				case ACC_CLAUSE_WAIT:
                 case ACC_CLAUSE_NUM_GANGS:
                 case ACC_CLAUSE_NUM_WORKERS:
                 case ACC_CLAUSE_VECTOR_LENGTH:

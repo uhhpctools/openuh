@@ -6401,7 +6401,12 @@ static void open_acc_int_exp_clauses_semantics(int list_idx)
 		}
 
 		//if it is CN_Tbl_Idx, leave it as CN
-		if(OPND_FLD(opnd) != CN_Tbl_Idx)
+		if(OPND_FLD(opnd) == IR_Tbl_Idx)
+		{
+			IL_FLD(list_idx) = IR_Tbl_Idx;
+	        COPY_OPND(IL_OPND(list_idx), opnd);
+		}
+		else if(OPND_FLD(opnd) != CN_Tbl_Idx)
 		{
 			IL_FLD(list_idx) = AT_Tbl_Idx;
 			idx = create_tmp_asg(&opnd,

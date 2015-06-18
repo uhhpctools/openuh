@@ -9139,6 +9139,7 @@ c_finish_acc_clauses (tree clauses)
 	  break;
 
 	case ACC_CLAUSE_IF:
+	case ACC_CLAUSE_WAIT:
 	case ACC_CLAUSE_ASYNC:
 	case ACC_CLAUSE_COLLAPSE:
 	case ACC_CLAUSE_GANG:

@@ -1,12 +1,134 @@
 /**
  * Author: Rengan Xu
+ * Revised: Xiaonan Tian for AMD APU
  * University of Houston
  */
 #include "acc_data.h"
 
 vector param_list;
 acc_hashmap* map = NULL;
-int MODULE_BASE;
+
+/************************************************************************************************************
+************************************************************************************************************/
+
+int MODULE_BASE = SNK_MAX_STREAMS;
+
+hsa_queue_t* Stream_CommandQ[SNK_MAX_STREAMS];
+static int			SNK_NextTaskId = 0 ;
+
+static uint16_t header(hsa_packet_type_t type) 
+{
+   uint16_t header = type << HSA_PACKET_HEADER_TYPE;
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+   return header;
+}
+
+static void barrier_sync(int stream_num, snk_task_t *dep_task_list) 
+{
+    /* This routine will wait for all dependent packets to complete
+       irrespective of their queue number. This will put a barrier packet in the
+       stream belonging to the current packet.
+     */
+
+    if(stream_num < 0 || dep_task_list == NULL) return;
+
+    hsa_queue_t *queue = Stream_CommandQ[stream_num];
+    int dep_task_count = 0;
+    snk_task_t *head = dep_task_list;
+    while(head != NULL) {
+        dep_task_count++;
+        head = head->next;
+    }
+
+    /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that
+       the HSA barrier packet can support today
+     */
+    snk_task_t *tasks = dep_task_list;
+    hsa_signal_t signal;
+    hsa_signal_create(1, 0, NULL, &signal);
+    const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 5;
+    /* round up */
+    int barrier_pkt_count = (dep_task_count + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
+    int barrier_pkt_id = 0;
+    for(barrier_pkt_id = 0; barrier_pkt_id < barrier_pkt_count; barrier_pkt_id++) {
+        /* Obtain the write index for the command queue for this stream.  */
+        uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+        const uint32_t queueMask = queue->size - 1;
+
+        /* Define the barrier packet to be at the calculated queue index address.  */
+        hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
+        memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
+        barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+        barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+        barrier->header |= 0 << HSA_PACKET_HEADER_BARRIER;
+        barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE;
+
+        /* populate all dep_signals */
+        int dep_signal_id = 0;
+        for(dep_signal_id = 0; dep_signal_id < HSA_BARRIER_MAX_DEPENDENT_TASKS; dep_signal_id++) {
+            if(tasks != NULL) {
+                /* fill out the barrier packet and ring doorbell */
+                barrier->dep_signal[dep_signal_id] = tasks->signal;
+                tasks = tasks->next;
+            }
+        }
+        if(tasks == NULL) {
+            /* reached the end of task list */
+            barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
+            barrier->completion_signal = signal;
+        }
+        /* Increment write index and ring doorbell to dispatch the kernel.  */
+        hsa_queue_store_write_index_relaxed(queue, index+1);
+        hsa_signal_store_relaxed(queue->doorbell_signal, index);
+		//printf("barrier pkt submitted: %d\n", barrier_pkt_id);
+    }
+
+    /* Wait on completion signal til kernel is finished.  */
+    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+
+    hsa_signal_destroy(signal);
+}
+
+static void stream_sync(int stream_num) 
+{
+    /* This is a user-callable function that puts a barrier packet into a queue where
+       all former dispatch packets were put on the queue for asynchronous asynchrnous
+       executions. This routine will wait for all packets to complete on this queue.
+    */
+
+    hsa_queue_t *queue = Stream_CommandQ[stream_num];
+
+    hsa_signal_t signal;
+    hsa_signal_create(1, 0, NULL, &signal);
+
+    /* Obtain the write index for the command queue for this stream.  */
+    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+    const uint32_t queueMask = queue->size - 1;
+
+    /* Define the barrier packet to be at the calculated queue index address.  */
+    hsa_barrier_or_packet_t* barrier = &(((hsa_barrier_or_packet_t*)(queue->base_address))[index&queueMask]);
+    memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+    barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
+    barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE;
+    barrier->completion_signal = signal;
+
+    /* Increment write index and ring doorbell to dispatch the kernel.  */
+    hsa_queue_store_write_index_relaxed(queue, index+1);
+    hsa_signal_store_relaxed(queue->doorbell_signal, index);
+
+    /* Wait on completion signal til kernel is finished.  */
+    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+
+    hsa_signal_destroy(signal);
+
+}
+
+/************************************************************************************************************
+************************************************************************************************************/
+
 
 static int __accr_remove_device_from_hashmap(void* pDevice, char* strVarname);
 
@@ -227,15 +349,28 @@ void __accr_update_host_variable_async(void* pHost,
 
 void __accr_wait_stream(int async_expr)
 {
+	int stream_pos;
+    stream_pos = async_expr % MODULE_BASE;
+	stream_sync(stream_pos);
+	__accr_stream_clear_device_ptr(stream_pos);
 }
 
 void __accr_wait_all_streams(void)
 {
-	DEBUG(("Waiting for all streams"));
+	int pos;
+    for(pos=0; pos<MODULE_BASE; pos++)
+    {
+       stream_sync(pos);
+	   __accr_stream_clear_device_ptr(pos);
+    }
 }
 
 void __accr_wait_some_or_all_stream(int async_expr)
 {
+	if(async_expr < 0)
+        __accr_wait_all_streams();
+    else
+        __accr_wait_stream(async_expr);
 }
 
 void __accr_destroy_all_streams(void)

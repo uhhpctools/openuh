@@ -122,39 +122,79 @@ static void Load_Kernel_Parameters(WN* wn_kernel_call)
 	{
 		ST* hostST = acc_kernelLaunchParamList[i].st_host;
 		//in case of deviceptr, the host st is NULL.
-		hostST = hostST ? hostST : acc_kernelLaunchParamList[i].st_device;
 		TY_IDX ty = ST_type(hostST);
 		TY_KIND kind = TY_kind(ty);//ST_name(old_st)
 		TYPE_ID typeID;
 		if(kind == KIND_POINTER || 
 			kind == KIND_ARRAY ||
-			(kind == KIND_STRUCT && F90_ST_Has_Dope_Vector(hostST)) ||
-			(kind == KIND_SCALAR && acc_kernelLaunchParamList[i].st_device!=NULL))
-		{		
-			//wnx = WN_Lda( Pointer_type, 0, acc_kernelLaunchParamList[i].st_device);
-			wnx = WN_Ldid(Pointer_type, 0, acc_kernelLaunchParamList[i].st_device, 
-							ST_type(acc_kernelLaunchParamList[i].st_device));
-			//First, pointer
-		    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(Pointer_type, wnx, 
-		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+			(kind == KIND_STRUCT && F90_ST_Has_Dope_Vector(hostST)))
+		{					
+		   if(F90_ST_Has_Dope_Vector(hostST))
+		   {
+			   TY_IDX ty_element = ACC_GetDopeElementType(hostST);
+			   TY_IDX pty = MTYPE_To_TY(TY_mtype(ty_element));			   
+		   	   TY_IDX ty_p = Make_Pointer_Type(pty);
+			   
+			   wnx = WN_Ldid(Pointer_type, 0, hostST, ty_p);
+		   }
+		   else if(kind == KIND_ARRAY)
+		   {		   	   
+			   wnx = WN_Lda( Pointer_type, 0, hostST);
+		   }
+		   else if(kind == KIND_POINTER)
+		   {		   	   
+			   TY_IDX pty = TY_pointed(ty);
+			   BOOL isArray = FALSE;
+			   if(TY_kind(pty) == KIND_ARRAY)
+			   {
+					//it is an dynamic array
+					pty = ACC_GetArrayElemType(pty);
+					isArray = TRUE;
+			   }
+			   pty = MTYPE_To_TY(TY_mtype(pty));
+		   	   TY_IDX ty_p = Make_Pointer_Type(pty);
+			   wnx = WN_Ldid(Pointer_type, 0, hostST, ty_p);
+		   }			
 
+		   //First, pointer
+		   WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(Pointer_type, wnx, 
+		                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
 			
 		}
-		else if(kind == KIND_SCALAR && acc_kernelLaunchParamList[i].st_device == NULL)
+		else if(kind == KIND_SCALAR)
 		{
-			ST* old_st = acc_kernelLaunchParamList[i].st_host;
-			map<ST*, ACC_ReductionMap>::iterator itor = acc_reduction_tab_map.find(old_st);	
-			//find the symbol in the reduction, then ignore it in the parameters.
-			if(itor != acc_reduction_tab_map.end())
-				continue;
-			//////////////////////////////////////////////////
-			
-			//wnx = WN_Lda( Pointer_type, 0, old_st);
-			wnx = WN_Ldid(TY_mtype(ST_type(old_st)), 
-					0, old_st, ST_type(old_st));
-			//First, pointer
-		    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(TY_mtype(ST_type(old_st)), wnx, 
-		                       WN_ty(wnx), WN_PARM_BY_VALUE);
+			ST* old_st = hostST;
+			if(acc_offload_scalar_management_tab.find(old_st) == acc_offload_scalar_management_tab.end())
+										 Fail_FmtAssertion("cannot find var in acc_offload_scalar_management_tab.");
+			ACC_SCALAR_VAR_INFO* pVarInfo = acc_offload_scalar_management_tab[old_st];
+			//new_ty, new_st are used to local variable
+			//ty_param, st_param are used for parameter.
+			//They may be different in ACC_SCALAR_VAR_INOUT and ACC_SCALAR_VAR_OUT cases			
+			if(!pVarInfo)
+				Fail_FmtAssertion("cannot find var in acc_offload_scalar_management_tab.");
+			else if(pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_PRIVATE)
+				Fail_FmtAssertion("A private var should not appear in kernel parameters.");
+			else if(pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_IN)
+			{
+				//wnx = WN_Lda( Pointer_type, 0, old_st);
+				wnx = WN_Ldid(TY_mtype(ST_type(old_st)), 
+						0, old_st, ST_type(old_st));
+				//First, pointer
+			    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(TY_mtype(ST_type(old_st)), wnx, 
+			                       WN_ty(wnx), WN_PARM_BY_VALUE);
+			}
+			else if(pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_INOUT
+				|| pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_OUT
+				||	pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_CREATE
+				||	pVarInfo->acc_scalar_type ==ACC_SCALAR_VAR_PRESENT)
+			{
+				wnx = WN_Lda( Pointer_type, 0, old_st);
+				//First, pointer
+			    WN_kid(wn_kernel_call, iarg_no) = WN_CreateParm(Pointer_type, wnx, 
+			                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+			}
+			else
+				Fail_FmtAssertion("Unclassified variables appears in kernel parameters.");
 		}
 		else
 		{

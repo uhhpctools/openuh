@@ -1,5 +1,6 @@
 /**
  * Author: Rengan Xu
+ * Revised: Xiaonan Tian for AMD APU
  * University of Houston
  */
 
@@ -14,9 +15,20 @@
 #include "acc_log.h"
 #include "vector.h"
 #include "acc_hashmap.h"
+#include "acc_stack.h"
+#include "hsa.h"
+#include "hsa_ext_finalize.h"
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+
+#define SNK_MAX_STREAMS 8
+
+typedef struct snk_task_s snk_task_t;
+struct snk_task_s {
+   hsa_signal_t signal ;
+   snk_task_t* next;
+};
 
 
 typedef enum

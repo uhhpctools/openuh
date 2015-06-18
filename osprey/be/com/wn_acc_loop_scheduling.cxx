@@ -198,10 +198,11 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
   WN *temp;
   ST *old_sym;
   WN_OFFSET old_offset;
-  ACC_LOOP_TYPE looptype;
+  ACC_LOOP_TYPE looptype = ACC_NONE_SPECIFIED;
   WN* wn_gang = NULL;
   WN* wn_vector = NULL;
   BOOL hasLoopInside = FALSE;
+  BOOL temp_hasLoopInside = FALSE;
 
   /* Ignore NULL subtrees. */
 
@@ -341,50 +342,50 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Z(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier2.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Z(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier2.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -400,42 +401,42 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier2.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Z(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -482,42 +483,42 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier2.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Z(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -541,34 +542,34 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier2.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -611,34 +612,34 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier2.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier2.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -702,34 +703,34 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 				//setup topology
 				//set gangs
 				WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-				if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+				if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 						&& WN_const_val(wnGangsNumExpr)>1) 
-						|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+						|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 				{
 					WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 					WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 				}
 				wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-				if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+				if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 						&& WN_const_val(wnGangsNumExpr)>1) 
-						|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+						|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 				{
 					WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 					WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 				}
 				//set vector
 				WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-				if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+				if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 						&& WN_const_val(wnVectorsNumExpr)>1) 
-						|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+						|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 				{
 					WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 					WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 				}
 				wnVectorsNumExpr = WN_kid0(acc_loop_identifier2.wn_vector);
-				if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+				if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 						&& WN_const_val(wnVectorsNumExpr)>1) 
-						|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+						|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 				{
 					WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 					WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -748,8 +749,10 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 	 else
 	 {
 	 	//for the nested loop depth are less or equal to 2, keep seeking more loopnest level
-	 	hasLoopInside = hasLoopInside || 
-	 					Identify_ACC_Kernels_Loop_Scheduling (wn_region_bdy, replace_block);
+	 	//hasLoopInside = hasLoopInside || 
+	 	//				Identify_ACC_Kernels_Loop_Scheduling (wn_region_bdy, replace_block);
+	 	temp_hasLoopInside = Identify_ACC_Kernels_Loop_Scheduling (wn_region_bdy, replace_block);
+        hasLoopInside = temp_hasLoopInside || hasLoopInside;
 		//if there is no more loops
 		if(hasLoopInside == FALSE)
 		{
@@ -806,18 +809,18 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -885,10 +888,10 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					}
 					//level 1
 					if(acc_loop_identifier1.wn_gang)
-						WN_pragma(acc_loop_identifier1.wn_gang) = WN_PRAGMA_ACC_CLAUSE_GANG_Y;
+						WN_pragma(acc_loop_identifier1.wn_gang) = WN_PRAGMA_ACC_CLAUSE_GANG_X;
 					else
 					{
-						wn_node = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_GANG_Y, (ST*)NULL, 1);	
+						wn_node = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_GANG_X, (ST*)NULL, 1);	
 						WN_kid0(wn_node) = WN_Intconst(MTYPE_U4, 1);
 						acc_loop_identifier1.wn_gang = wn_node;
 						WN_INSERT_BlockLast(WN_region_pragmas(tree), acc_loop_identifier1.wn_gang);
@@ -896,11 +899,11 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					}
 
 					if(acc_loop_identifier1.wn_vector)
-						WN_pragma(acc_loop_identifier1.wn_vector) = WN_PRAGMA_ACC_CLAUSE_VECTOR_Y;
+						WN_pragma(acc_loop_identifier1.wn_vector) = WN_PRAGMA_ACC_CLAUSE_VECTOR_X;
 					else
 					{
-						wn_node = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_Y, (ST*)NULL, 1);	
-						WN_kid0(wn_node) = WN_Intconst(MTYPE_U4, 1);
+						wn_node = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_X, (ST*)NULL, 1);	
+						WN_kid0(wn_node) = WN_Intconst(MTYPE_U4, 64);
 						acc_loop_identifier1.wn_vector = wn_node;
 						WN_INSERT_BlockLast(WN_region_pragmas(tree), acc_loop_identifier1.wn_vector);
 						acc_loop_identifier1.bCreateVector = TRUE;
@@ -909,34 +912,34 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
 					//setup topology
 					//set gangs
 					WN* wnGangsNumExpr = WN_kid0(acc_loop_identifier0.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_Y(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					wnGangsNumExpr = WN_kid0(acc_loop_identifier1.wn_gang);
-					if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnGangsNumExpr)>1) 
-							|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_gangs_set);
 					}
 					//set vector
 					WN* wnVectorsNumExpr = WN_kid0(acc_loop_identifier0.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_Y(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
 					}
 					wnVectorsNumExpr = WN_kid0(acc_loop_identifier1.wn_vector);
-					if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
+					if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
 							&& WN_const_val(wnVectorsNumExpr)>1) 
-							|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+							|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 					{
 						WN* wn_vector_sets = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 						WN_INSERT_BlockLast(replace_block, wn_vector_sets);
@@ -976,7 +979,9 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
     r = WN_first(tree);
     while (r) 
 	{ // localize each node in block
-      hasLoopInside = hasLoopInside || Identify_ACC_Kernels_Loop_Scheduling (r, replace_block);
+      //hasLoopInside = hasLoopInside || Identify_ACC_Kernels_Loop_Scheduling (r, replace_block);
+      temp_hasLoopInside = Identify_ACC_Kernels_Loop_Scheduling (r, replace_block);
+      hasLoopInside = temp_hasLoopInside || hasLoopInside;
       r = WN_next(r);
       
    }
@@ -985,7 +990,9 @@ static BOOL Identify_ACC_Kernels_Loop_Scheduling ( WN * tree, WN* replace_block)
   {
     for (i=0; i < WN_kid_count(tree); i++)
     {
-      hasLoopInside = hasLoopInside || Identify_ACC_Kernels_Loop_Scheduling( WN_kid(tree, i), replace_block);
+      //hasLoopInside = hasLoopInside || Identify_ACC_Kernels_Loop_Scheduling( WN_kid(tree, i), replace_block);
+      temp_hasLoopInside = Identify_ACC_Kernels_Loop_Scheduling (WN_kid(tree, i), replace_block);
+      hasLoopInside = temp_hasLoopInside || hasLoopInside;
     }
   }
   return (hasLoopInside);
@@ -1001,7 +1008,7 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
   WN *temp;
   ST *old_sym;
   WN_OFFSET old_offset;
-  ACC_LOOP_TYPE looptype;
+  ACC_LOOP_TYPE looptype = ACC_NONE_SPECIFIED;
   WN* wn_gang = NULL;
   WN* wn_worker = NULL;
   WN* wn_vector = NULL;
@@ -1011,6 +1018,7 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
   BOOL bCreateVector = TRUE;
   ////////////////////////////////////////////////////////
   BOOL hasLoopInside = FALSE;
+  BOOL temp_hasLoopInside = FALSE;
 
   /* Ignore NULL subtrees. */
 
@@ -1148,6 +1156,7 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
 		{
 			wn_node = WN_CreatePragma(WN_PRAGMA_ACC_CLAUSE_VECTOR_X, (ST_IDX)NULL, 0, 0);
 			acc_loop_identifier2.wn_vector = wn_node;
+			WN_INSERT_BlockLast(pragma_block, acc_loop_identifier2.wn_vector);
 		}
 		
 		//WN_INSERT_BlockLast(pragma_block, acc_loop_identifier2.wn_vector);
@@ -1162,7 +1171,9 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
 	 else
 	 {
 	 	//for the nested loop depth are less or equal to 2, keep seeking more loopnest level
-	 	hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling (wn_region_bdy);
+	 	//hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling (wn_region_bdy);
+	    temp_hasLoopInside = Identify_ACC_Parallel_Loop_Scheduling (wn_region_bdy);  
+	 	hasLoopInside = temp_hasLoopInside || hasLoopInside ;
 		//if there is no more loops
 		if(hasLoopInside == FALSE)
 		{
@@ -1329,7 +1340,9 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
     r = WN_first(tree);
     while (r) 
 	{ // traverse each node in block
-      hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling (r);
+      //hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling (r);
+      temp_hasLoopInside = Identify_ACC_Parallel_Loop_Scheduling (r);  
+      hasLoopInside = temp_hasLoopInside || hasLoopInside ;
       r = WN_next(r);      
     }
   }
@@ -1337,7 +1350,9 @@ static BOOL Identify_ACC_Parallel_Loop_Scheduling ( WN * tree)
   {
     for (i=0; i < WN_kid_count(tree); i++)
     {
-      hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling( WN_kid(tree, i));
+      //hasLoopInside = hasLoopInside || Identify_ACC_Parallel_Loop_Scheduling( WN_kid(tree, i));
+      temp_hasLoopInside = Identify_ACC_Parallel_Loop_Scheduling( WN_kid(tree, i));  
+      hasLoopInside = temp_hasLoopInside || hasLoopInside; 
     }
   }
   return (hasLoopInside);
@@ -1374,9 +1389,9 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 	if(gangs_num)
 	{
 		wnGangsNumExpr = WN_kid0(gangs_num);			
-		if((WN_opcode(wnGangsNumExpr) == OPC_I4INTCONST 
+		if((WN_operator(wnGangsNumExpr) == OPR_INTCONST 
 						&& WN_const_val(wnGangsNumExpr) != 0) 
-						|| (WN_opcode(wnGangsNumExpr) != OPC_I4INTCONST))
+						|| (WN_operator(wnGangsNumExpr) != OPR_INTCONST))
 		{
 			WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_gangs_set);
@@ -1385,9 +1400,9 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 	if(workers_num)
 	{
 		wnWorkersNumExpr = WN_kid0(workers_num);
-		if((WN_opcode(wnWorkersNumExpr) == OPC_I4INTCONST 
-						&& WN_const_val(wnWorkersNumExpr) != 0) 
-						|| (WN_opcode(wnWorkersNumExpr) != OPC_I4INTCONST))
+		if((WN_operator(wnWorkersNumExpr) == OPR_INTCONST 
+						&& WN_const_val(wnWorkersNumExpr) != 0 ) 
+						|| (WN_operator(wnWorkersNumExpr) != OPR_INTCONST))
 		{
 			WN* wn_workers_set = Gen_Set_Vector_Num_Y(wnWorkersNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_workers_set);
@@ -1396,9 +1411,9 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 	if(vectors_length)
 	{
 		wnVectorsNumExpr = WN_kid0(vectors_length);
-		if((WN_opcode(wnVectorsNumExpr) == OPC_I4INTCONST 
-						&& WN_const_val(wnVectorsNumExpr) != 0) 
-						|| (WN_opcode(wnVectorsNumExpr) != OPC_I4INTCONST))
+		if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
+						&& WN_const_val(wnVectorsNumExpr) > 1 ) 
+						|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 		{
 			WN* wn_vectors_set = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_vectors_set);
@@ -1471,7 +1486,7 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 				switch (WN_pragma(cur_node)) 
 				{				
 				  case WN_PRAGMA_ACC_CLAUSE_COLLAPSE:
-					 acc_collapse_count = WN_pragma_arg1(cur_node);
+					 acc_collapse_count = WN_const_val(WN_kid0(cur_node));
 					 break;
  
 				  case WN_PRAGMA_ACC_CLAUSE_GANG_X:
@@ -1553,7 +1568,7 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 	      //wn_prev_node = WN_prev(wn_pdo_node);
 	    }
 		
-	    WN* wn_next_node = WN_prev(wn_pdo_node);//At this time, it's not necessary
+	    WN* wn_next_node = WN_next(wn_pdo_node);//At this time, it's not necessary
 	    WN* code_after_pdo = NULL;
 	    if (wn_next_node) {
 	      WN* wn_last_node = WN_last(wn_region_bdy);
@@ -1891,7 +1906,21 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 		}
 		if(code_after_pdo)
 			WN_INSERT_BlockLast(wn_region_bdy, code_after_pdo);
-		tree = wn_region_bdy;
+
+        WN *tree_prev_node = WN_prev(tree);
+        WN *tree_next_node = WN_next(tree);
+		
+        if(tree_prev_node)
+        {
+            WN_prev(wn_region_bdy) = tree_prev_node;
+            WN_next(tree_prev_node) = wn_region_bdy;
+        }
+        if(tree_next_node)
+        {
+            WN_next(wn_region_bdy) =  tree_next_node;
+            WN_prev(tree_next_node) = wn_region_bdy;
+        }
+        tree = wn_region_bdy;
 
 		//the original acc_collapse_count was changed 
 		//in the recursive Loop_Scheduking_Transformation

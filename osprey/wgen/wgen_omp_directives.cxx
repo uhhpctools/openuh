@@ -2131,6 +2131,11 @@ static void WGEN_process_acc_clause (gs_t clauses, WN * region = 0)
   WN * wn = NULL;
   switch (gs_acc_clause_code(clauses))
   {
+    case GS_ACC_CLAUSE_WAIT:
+      wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_WAIT, (ST_IDX) NULL, 1);
+	  WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_decl(clauses));
+      break;
+	  
     case GS_ACC_CLAUSE_IF:
       wn = WN_CreateXpragma(WN_PRAGMA_ACC_CLAUSE_IF, (ST_IDX) NULL, 1);
       WN_kid0(wn) = WGEN_Expand_Expr (gs_acc_clause_if_expr(clauses));
