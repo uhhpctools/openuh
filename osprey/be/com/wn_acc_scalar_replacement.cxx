@@ -399,7 +399,7 @@ static void ACC_Dump_Array_Ref(WN* wn_array_addr)
 			
 }
 
-static void ACC_Parse_Feedback_Register_Info()
+static void ACC_Parse_Feedback_Register_Info_nvidia()
 {
 	string line;
   	ifstream feedbackfile ("./.accfeedback.txt");
@@ -427,6 +427,52 @@ static void ACC_Parse_Feedback_Register_Info()
 	        found1 = line.find("Used")+5;
 	        found2 = line.find("registers");
 	        string strRegisterNum = line.substr(found1, found2-found1);
+			reg_info.strkernel = strKernelname;
+			reg_info.iregister_num = strtol(strRegisterNum.c_str(), NULL, 10);
+			acc_registes_feedback_info.push_back(reg_info);	        
+	      }
+    }
+    feedbackfile.close();
+  }
+}
+
+static void ACC_Parse_Feedback_Register_Info_apu()
+{
+	string line;
+  	ifstream feedbackfile ("./.accfeedback.txt");
+ 	size_t found;
+
+	acc_registes_feedback_info.clear();
+	
+  	if (feedbackfile.is_open())
+  	{
+    	while ( getline (feedbackfile,line) )
+    	{
+	      found = line.find("Post-finalization statistics for kernel");
+
+	      if(found != string::npos)
+	      {
+	        size_t found1 = line.find(":", found);
+	        size_t found2 = line.length()-1;
+			//trim the space at the end
+			while(isspace(line[found2]))
+			{
+				line[found2]='\000';
+				found2 --;
+			}
+			//plus 2 means skip ':' and white space
+			found1 += 2;
+	        string strKernelname = line.substr(found1, found2-found1+1);
+			acc_kernel_reg_info_feedback reg_info;
+	        //cout << strKernelname << '\n';
+
+			//scalar register information which is ignored at this time
+	        getline (feedbackfile,line);
+			//vector register information which we care at this moment
+	        getline (feedbackfile,line);
+	        found1 = line.find(":");
+	        found2 = line.length();
+	        string strRegisterNum = line.substr(found1+1, found2-found1);
 			reg_info.strkernel = strKernelname;
 			reg_info.iregister_num = strtol(strRegisterNum.c_str(), NULL, 10);
 			acc_registes_feedback_info.push_back(reg_info);	        
@@ -938,7 +984,11 @@ void ACC_Scalar_Replacement_Algorithm(WN* tree, ST* st_kernel)
 		
 		if(Enable_UHACCFeedback>=ACC_REGISTER_FEEDBACK_PHASE1)
 		{
-			ACC_Parse_Feedback_Register_Info();
+			if(acc_target_arch == ACC_ARCH_TYPE_NVIDIA)
+				ACC_Parse_Feedback_Register_Info_nvidia();
+			else if(acc_target_arch == ACC_ARCH_TYPE_APU)
+				ACC_Parse_Feedback_Register_Info_apu();
+			
 			UINT32 kernel_register = ACC_Kernels_Used_Register_Num(st_kernel);
 			if(kernel_register >= MAX_REGISTERS_ALLOWED_PER_KERNEL)
 			{

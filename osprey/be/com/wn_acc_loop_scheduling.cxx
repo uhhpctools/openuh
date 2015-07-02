@@ -1885,11 +1885,14 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 		while(RDIdx < reductionmap.size())
 		{
 			ACC_ReductionMap* pReductionMap = reductionmap[RDIdx];
-			WN_INSERT_BlockLast( wn_region_bdy,  pReductionMap->wn_assignment2localArray);
 			//Call inner local reduction
 			////////////////////////////////////////////////////////////////////////////////
 			if(pReductionMap->local_reduction_fun)
 			{
+				//assign to an local array statement is only necessary
+				//when the local reduction is required.
+				//it means the local reduction function is not NULL.
+				WN_INSERT_BlockLast( wn_region_bdy,  pReductionMap->wn_assignment2localArray);
 				WN* wn_call = Gen_Sync_Threads();
 				WN_INSERT_BlockLast( wn_region_bdy,  wn_call);
 				wn_call = ACC_Gen_Call_Local_Reduction(pReductionMap->local_reduction_fun, 

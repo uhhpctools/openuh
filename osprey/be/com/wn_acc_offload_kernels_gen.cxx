@@ -5501,9 +5501,8 @@ ACC_Linear_Stmts_Transformation_New(WN* wn_stmt, WN* wn_replacementlock)
 	ACC_Gen_Scalar_Variables_CopyOut_InOffload(wn_offload_block);
    	WN_INSERT_BlockLast ( acc_parallel_func, wn_offload_block );
 	/* Transfer any mappings for nodes moved from parent to parallel function */
-
-	//ACC_Transfer_Maps ( acc_pmaptab, acc_cmaptab, acc_parallel_func, 
-	//	  PU_Info_regions_ptr(Current_PU_Info) );
+	ACC_Transfer_Maps ( acc_pmaptab, acc_cmaptab, acc_parallel_func, 
+		  PU_Info_regions_ptr(Current_PU_Info) );
 
 	/* Create a new dependence graph for the child  and move all the 
 	 appropriate vertices from the parent to the child graph */
@@ -5757,6 +5756,9 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	//////////////////////////////////////////////////////////////////////////////////////////////
    	WN_INSERT_BlockLast ( acc_parallel_func, wn_parallel_block );
 	/* Transfer any mappings for nodes moved from parent to parallel function */
+	ACC_Transfer_Maps ( acc_pmaptab, acc_cmaptab, acc_parallel_func, 
+		  PU_Info_regions_ptr(Current_PU_Info) );
+	
 	/* Restore parent information. */
 
 	CURRENT_SYMTAB = acc_psymtab;
@@ -5854,9 +5856,8 @@ ACC_Transform_Single_Nested_Loop_for_Kernels(WN* tree)
 	///////////////////////////////////////////////////////////////////////////	
    	WN_INSERT_BlockLast ( acc_parallel_func, wn_replacement_block );
 	/* Transfer any mappings for nodes moved from parent to parallel function */
-
-	//ACC_Transfer_Maps ( acc_pmaptab, acc_cmaptab, acc_parallel_func, 
-	//	  PU_Info_regions_ptr(Current_PU_Info) );
+	ACC_Transfer_Maps ( acc_pmaptab, acc_cmaptab, acc_parallel_func, 
+		  PU_Info_regions_ptr(Current_PU_Info) );
 
 	/* Create a new dependence graph for the child  and move all the 
 	 appropriate vertices from the parent to the child graph */

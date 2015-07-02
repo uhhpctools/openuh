@@ -1765,6 +1765,8 @@ add_file_args (string_list_t *args, phases_t index)
 		}
 		if(keep_flag)
 		   add_string(args, "-k");	
+		if(acc_feedback)
+			add_string(args, "-kstats");
 		add_string(args, "-c");
 		add_string(args, "-noglobs");
 		{
@@ -1801,6 +1803,11 @@ add_file_args (string_list_t *args, phases_t index)
 		}
 		cl_obj_file_path = strdup(buf);
 		//add_string(args, buf);
+		if(acc_feedback)
+		{
+			add_string(args, ">");
+			add_string(args, "./.accfeedback.txt");
+		}
 		break;
 		
 	case P_be:
@@ -3970,34 +3977,29 @@ run_compiler (int argc, char *argv[])
 				if(file != NULL)
 				{
 					fclose(file);
-					if(!cloc_path)					
+					if(cloc_path)	
+					{
+						char* full_path =concat_strings(cloc_path, get_phase_name(P_cloc));
+						cloc_args = init_string_list();
+						add_file_args (cloc_args, P_cloc);
+						run_phase (P_cloc, full_path, cloc_args);
+
+						//feedback
+						if(acc_feedback==TRUE && accfeedback_phase<2)
+						{
+							//accfeedback_phase = 0: analysis the register usage without scalar replacement
+							//accfeedback_phase = 1: analysis the register usage with scalar replacement 
+							//					     and determine the threads setup
+							accfeedback_phase ++;
+							goto acc_feedback_startpoint;
+						}
+					}
+					else
 					{
 						fprintf(stderr, "AMD OPENCL compiler should be provided with -clpath,PATH.\n");
-						cloc_path = "";
 					}
-					char* full_path =concat_strings(cloc_path, get_phase_name(P_cloc));
-					cloc_args = init_string_list();
-					add_file_args (cloc_args, P_cloc);
-					run_phase (P_cloc, full_path, cloc_args);
+					
 				}
-
-				/*sprintf(buf, "%s_w2c.o", pname);
-				file = fopen(buf, "r"); 
-				if(acc_feedback==TRUE && cloc_path != NULL && accfeedback_phase<2 && file != NULL)
-				{
-					//accfeedback_phase = 0: analysis the register usage without scalar replacement
-					//accfeedback_phase = 1: analysis the register usage with scalar replacement 
-					//					     and determine the threads setup
-					string_list_t *nvptxas_args;
-					fclose(file);
-					//the ptxas is in the same folder as nvcc
-					char* full_path =concat_strings(cloc_path, get_phase_name(P_nvptxas));
-					nvptxas_args = init_string_list();
-					add_file_args (nvptxas_args, P_nvptxas);
-					run_phase (P_nvptxas, full_path, nvptxas_args);
-					accfeedback_phase ++;
-					goto acc_feedback_startpoint;
-				}*/
 			}
 			else if(phase_order[i] == P_gas && cl_obj_file_path != NULL)
 			{
