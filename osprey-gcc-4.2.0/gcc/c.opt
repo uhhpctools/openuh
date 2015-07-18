@@ -724,6 +724,10 @@ fthreadsafe-statics
 C++ ObjC++
 -fno-threadsafe-statics	Do not generate thread-safe code for initializing local statics
 
+fuma
+C Var(flag_accuma)
+Enable Unified Memory Architecture when OpenACC is enabled 
+
 funsigned-bitfields
 C ObjC C++ ObjC++
 When \"signed\" or \"unsigned\" is not given make the bitfield unsigned

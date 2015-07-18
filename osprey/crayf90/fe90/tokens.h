@@ -659,8 +659,10 @@ enum	token_values {
 		Tok_Open_Acc_Dir_Enddata,			/* End of Data					  */
 		Tok_Open_Acc_Dir_Endhost_Data, 		/* end of host_data				  */
 		Tok_Open_Acc_Dir_Endkernels,		/* End of kernels 					  */
+		Tok_Open_Acc_Dir_Endkernels_Loop,	/* End of kernels 	Loop				  */
 		Tok_Open_Acc_Dir_Endloop, 			/* End of loop	  */
 		Tok_Open_Acc_Dir_Endparallel, 		/* End of parallel 		 */ 
+		Tok_Open_Acc_Dir_Endparallel_Loop, 	/* End of parallel Loop	 */ 
 		Tok_Open_Acc_Dir_Enter_Data,		/* Enter_data, ACC2.0			  */
 		Tok_Open_Acc_Dir_Exit_Data,			/* RUNTIME, ACC2.0					  */
 		Tok_Open_Acc_Dir_Firstprivate, 		/* First Private				  */
@@ -670,6 +672,7 @@ enum	token_values {
 		Tok_Open_Acc_Dir_If,				/* If					  */
 		Tok_Open_Acc_Dir_Independent,		/* independent 				  */
 		Tok_Open_Acc_Dir_Kernels,			/* Kernels 				  */
+		Tok_Open_Acc_Dir_Kernels_Loop,		/* Kernels Loop				  */
 		Tok_Open_Acc_Dir_Link, 				/* link	  */
 		Tok_Open_Acc_Dir_Loop, 				/* Loop	  */
 		Tok_Open_Acc_Dir_None,				/* Default (none)  ACC 2.0	  */
@@ -678,6 +681,7 @@ enum	token_values {
 		Tok_Open_Acc_Dir_Num_Gangs,			/* num gangs			  */
 		Tok_Open_Acc_Dir_Num_Workers, 		/* Num of workers */
 		Tok_Open_Acc_Dir_Parallel, 			/* Parallel					  */
+		Tok_Open_Acc_Dir_Parallel_Loop, 	/* Parallel Loop				  */
 		Tok_Open_Acc_Dir_Pcopy,				/* Pcopy					  */
 		Tok_Open_Acc_Dir_Pcopyin,			/* Pcopyin					  */
 		Tok_Open_Acc_Dir_Pcopyout,			/* Pcopyout					  */

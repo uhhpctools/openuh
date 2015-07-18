@@ -271,6 +271,23 @@ WN* ACC_Launch_HSA_Kernel(int index, WN* wn_replace_block)
 	return wn;
 }
 
+
+static void ACC_Delete_All_RID(RID* p_rid)
+{
+  	RID *rtmp;
+ 	rtmp=RID_first_kid(p_rid);
+ 
+	while (rtmp) 
+	{
+		RID* rtmp_next = RID_next(rtmp);
+		ACC_Delete_All_RID(rtmp);
+		rtmp = rtmp_next;
+	}
+	WN* wh_node = p_rid->rwn;
+	RID_Delete ( Current_Map_Tab, wh_node);
+}
+
+
 WN * 
 lower_acc_apu ( WN * block, WN * node, LOWER_ACTIONS actions )
 {
@@ -633,8 +650,8 @@ lower_acc_apu ( WN * block, WN * node, LOWER_ACTIONS actions )
   else
 	  return_nodes = wn_cont_nodes;
 
-	WN_Delete (wn_replace_block );
-    
+	WN_Delete (wn_replace_block );    
+    ACC_Delete_All_RID ( REGION_get_rid(node) );
     return (return_nodes);
 }
 

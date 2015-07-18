@@ -7465,6 +7465,10 @@ static void dump_ir_ntry(FILE 	*out_file,
             IR_OPR(idx) == Endkernels_Open_Acc_Opr ||
             IR_OPR(idx) == Parallel_Open_Acc_Opr ||
             IR_OPR(idx) == Endparallel_Open_Acc_Opr ||
+            IR_OPR(idx) == Kernels_Loop_Open_Acc_Opr ||
+            IR_OPR(idx) == Endkernels_Loop_Open_Acc_Opr ||
+            IR_OPR(idx) == Parallel_Loop_Open_Acc_Opr ||
+            IR_OPR(idx) == Endparallel_Loop_Open_Acc_Opr ||
             IR_OPR(idx) == Loop_Open_Acc_Opr ||
             IR_OPR(idx) == Endloop_Open_Acc_Opr ||
             IR_OPR(idx) == Enter_Data_Open_Acc_Opr ||

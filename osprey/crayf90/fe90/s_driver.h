@@ -232,8 +232,12 @@
 									/* Open_ACC_End_Host_Data_Stmt */
                           directive_stmt_semantics,					
 									/* Open_ACC_End_Kernels_Stmt */
+                          directive_stmt_semantics,					
+									/* Open_ACC_End_Kernels_Loop_Stmt */
                           directive_stmt_semantics,				 
 									/* Open_ACC_End_Parallel_Stmt */
+                          directive_stmt_semantics,				 
+									/* Open_ACC_End_Parallel_Loop_Stmt */
                           directive_stmt_semantics,				 
 									/* Open_ACC_End_Loop_Stmt */
                           forall_semantics,             /* Forall_Cstrct_Stmt */

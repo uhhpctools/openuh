@@ -983,6 +983,8 @@ I-xall		;	FTN	ffe	self
         "enable the multiprocessing directives (same as -mp)"
 -acc     toggle(&acckind,NORMAL_ACC100);      FTN,Cc,CPP  ffe,cfe,CPP,wgen,be     self
         "enable the accelerator directives"
+-fuma    toggle(&acckind,NORMAL_ACC100);      FTN,Cc,CPP  ffe,cfe,CPP,wgen,be    "-fuma" 
+        "specify the accelerator unified memory architecture"
 -fopenacc           ;      FTN,Cc,CPP ffe -acc
         "enable the accelerator directives (same as -acc)"
 -s2s    toggle(&acckind,NORMAL_ACC100);      ALL wgen,be   "-s2s"

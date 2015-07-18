@@ -2910,6 +2910,16 @@ static void end_do_blk(boolean	err_call)
                POP_BLK_STK;
                CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
             }
+		    else if (CURR_BLK == Open_Acc_Kernels_Loop_Blk) {
+			 //no !$acc kernels loop directive
+             POP_BLK_STK;
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Kernels_Loop_Region);
+            }
+		    else if (CURR_BLK == Open_Acc_Parallel_Loop_Blk) {
+			 //no !$acc parallel loop directive
+             POP_BLK_STK;
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Parallel_Loop_Region);
+            }
 
             goto EXIT;
          }
@@ -2976,6 +2986,16 @@ static void end_do_blk(boolean	err_call)
 		             POP_BLK_STK;
 		             CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
 		          }
+				  else if (CURR_BLK == Open_Acc_Kernels_Loop_Blk) {
+					//no !$acc kernels loop directive
+					 POP_BLK_STK;
+					 CLEAR_DIRECTIVE_STATE(Open_Acc_Kernels_Loop_Region);
+				  }
+				  else if (CURR_BLK == Open_Acc_Parallel_Loop_Blk) {
+					//no !$acc parallel loop directive
+					 POP_BLK_STK;
+					 CLEAR_DIRECTIVE_STATE(Open_Acc_Parallel_Loop_Region);
+				  }
                }
             }
             else if (unlabeled_do_idx == NULL_IDX) {
@@ -3031,6 +3051,16 @@ static void end_do_blk(boolean	err_call)
 			 //no !$acc loop directive
              POP_BLK_STK;
              CLEAR_DIRECTIVE_STATE(Open_Acc_Loop_Region);
+            }
+		    else if (CURR_BLK == Open_Acc_Kernels_Loop_Blk) {
+			 //no !$acc kernels loop directive
+             POP_BLK_STK;
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Kernels_Loop_Region);
+            }
+		    else if (CURR_BLK == Open_Acc_Parallel_Loop_Blk) {
+			 //no !$acc parallel loop directive
+             POP_BLK_STK;
+             CLEAR_DIRECTIVE_STATE(Open_Acc_Parallel_Loop_Region);
             }
          }
       }
@@ -6277,6 +6307,94 @@ void end_open_acc_loop_blk(boolean  err_call)
 
 }  /* end_open_acc_loop_blk */
 
+
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_kernels_loop_blk(boolean  err_call)
+{
+   TRACE (Func_Entry, "end_open_acc_kernels_loop_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Kernels_Loop_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Kernels_Loop_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Kernels_Loop_Blk) {
+         /* point to the parallel directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_kernels_loop_blk", NULL);
+
+   return;
+}
+
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_acc_parallel_loop_blk(boolean  err_call)
+{
+   TRACE (Func_Entry, "end_open_acc_parallel_loop_blk", NULL);
+
+   if (! err_call) {
+
+      if (STMT_CANT_BE_IN_BLK(Open_ACC_End_Parallel_Loop_Stmt, CURR_BLK)) {
+         blk_match_err(Open_Acc_Parallel_Loop_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Acc_Parallel_Loop_Blk) {
+         /* point to the parallel loop directive */
+         IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+         IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+         POP_BLK_STK;
+      }
+   }
+   else {
+      POP_BLK_STK;
+   }
+
+   TRACE (Func_Exit, "end_open_acc_parallel_loop_blk", NULL);
+
+   return;
+}
 
 #ifdef _UH_COARRAYS
 /******************************************************************************\

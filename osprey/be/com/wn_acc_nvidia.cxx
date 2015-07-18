@@ -374,6 +374,76 @@ WN* ACC_LaunchKernel_nvidia (int index, WN* wn_replace_block, BOOL bParallel)
 	return wn;
 }
 
+/****************************************************/
+WN* ACC_LaunchKernelEx_nvidia (int index, WN* wn_replace_block, BOOL bParallel)
+{	
+	WN * wn;
+	WN * wnx;
+	WN * l;
+	//int iParm = device_copyout.size() + device_copyin.size() + acc_parms_count;
+	UINT32 i = 0;
+	int parm_id = 0;
+	//make the kernels parameters ready first
+	Push_Kernel_Parameters(wn_replace_block, bParallel);
+
+	//Then launch the kernel module
+	//create whirl CALL
+	wn = WN_Create(OPC_VCALL, 5 );
+	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_LAUNCHKERNEL_EX);
+
+	WN_Set_Call_IS_KERNEL_LAUNCH(wn);
+	WN_Set_Call_Non_Data_Mod(wn);
+	WN_Set_Call_Non_Data_Ref(wn);
+	WN_Set_Call_Non_Parm_Mod(wn);
+	WN_Set_Call_Non_Parm_Ref(wn);
+	WN_Set_Call_Parm_Ref(wn);
+	WN_linenum(wn) = acc_line_number;
+	//which kernel function
+	char* kernelname = ST_name(acc_kernel_functions_st[index]);
+	WN* wn_kernelname = WN_LdaString(kernelname,0, strlen(kernelname)+1);
+	WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wn_kernelname, 
+						 		WN_ty(wn_kernelname), WN_PARM_BY_VALUE);
+	//which PTX file	
+	char szPTXArrayName[256];
+    char* srcfname = Last_Pathname_Component(Src_File_Name); 
+    char* ptxfname = New_Extension ( srcfname, ".w2c.ptx"); 
+	ptxfname[strlen(ptxfname)-8] = '\0';
+	sprintf(szPTXArrayName, "__acc_%s_ptx_p", ptxfname);
+	WN* wn_ptxname = WN_LdaString(szPTXArrayName,0, strlen(szPTXArrayName)+1);
+	WN_kid(wn, 1) = WN_CreateParm(Pointer_type, wn_ptxname, 
+						 		WN_ty(wn_ptxname), WN_PARM_BY_VALUE);
+	//////////////////////////////////////////////////////////////////////////
+	TY_IDX ty = Be_Type_Tbl(MTYPE_I1);//Make_Array_Type(TY_mtype(ty), 1, 1024);
+	TY_IDX ty_array = Make_Pointer_Type(MTYPE_To_TY(TY_mtype(ty)));
+	ST* st_ptxbuffer = New_ST(GLOBAL_SYMTAB); 
+	ST_Init(st_ptxbuffer,
+	  Save_Str( szPTXArrayName),
+	  CLASS_VAR,
+	  SCLASS_EXTERN,
+	  EXPORT_PREEMPTIBLE,
+	  ty_array);
+	WN* wn_ptxbuffer = WN_Ldid(Pointer_type, 0, st_ptxbuffer, ST_type(st_ptxbuffer));	
+	WN_kid(wn, 2) = WN_CreateParm(Pointer_type, wn_ptxbuffer, 
+						 		WN_ty(wn_ptxbuffer), WN_PARM_BY_VALUE);
+
+	//register number
+	WN_kid(wn, 3) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, MAX_REGISTERS_ALLOWED_PER_KERNEL), 
+			  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	//wnx = WN_Lda( Pointer_type, 0, st_hmem);
+	//////////////////////////////////////////////////////////////////////////	
+	if(acc_AsyncExpr)
+	{
+		WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_COPY_Tree(acc_AsyncExpr), 
+			  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	}
+	else 
+		WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, -2), 
+			  Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+	WN_INSERT_BlockLast(wn_replace_block, wn);
+	return wn;
+}
+
+
 WN * 
 lower_acc_nvidia ( WN * block, WN * node, LOWER_ACTIONS actions )
 {

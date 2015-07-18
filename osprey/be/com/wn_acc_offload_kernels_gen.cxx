@@ -178,6 +178,9 @@ ST *glbl_gridDim_x;
 ST *glbl_gridDim_y;
 ST *glbl_gridDim_z;
 
+ST *st_glbl_threadIdx_gid_x = NULL;
+ST *st_glbl_threadDim_gbl_x = NULL;
+
 WN* threadidx;
 WN* threadidy;
 WN* threadidz;
@@ -193,6 +196,9 @@ WN* blockdimz;
 WN* griddimx;
 WN* griddimy;
 WN* griddimz;
+
+WN* wn_threadid_gid_x = NULL;
+WN* wn_thread_global_width = NULL;
 
 
 INT32 acc_region_num = 1;	 // MP region number within parent PU
@@ -643,6 +649,31 @@ void ACC_Gen_Predefined_Variables()
 	  EXPORT_LOCAL,
 	  Be_Type_Tbl(MTYPE_U4));
 
+	if(acc_target_arch == ACC_ARCH_TYPE_APU)
+	{
+		st_glbl_threadIdx_gid_x = New_ST(CURRENT_SYMTAB); 
+		ST_Init(st_glbl_threadIdx_gid_x,
+		  Save_Str( "__apu_threadIdx_gid_x"),
+		  CLASS_VAR,
+		  SCLASS_FORMAL,
+		  EXPORT_LOCAL,
+		  Be_Type_Tbl(MTYPE_U4));
+
+		st_glbl_threadDim_gbl_x= New_ST(CURRENT_SYMTAB); 
+		ST_Init(st_glbl_threadDim_gbl_x,
+		  Save_Str( "__apu_threadDim_gbl_x"),
+		  CLASS_VAR,
+		  SCLASS_FORMAL,
+		  EXPORT_LOCAL,
+		  Be_Type_Tbl(MTYPE_U4));
+
+		
+		wn_threadid_gid_x = WN_Ldid(TY_mtype(ST_type(st_glbl_threadIdx_gid_x)),
+		                                0, st_glbl_threadIdx_gid_x, ST_type(st_glbl_threadIdx_gid_x));
+		wn_thread_global_width = WN_Ldid(TY_mtype(ST_type(st_glbl_threadDim_gbl_x)),
+		                                0, st_glbl_threadDim_gbl_x, ST_type(st_glbl_threadDim_gbl_x));
+	}
+
 
 	threadidx = WN_Ldid(TY_mtype(ST_type(glbl_threadIdx_x)),
 	                                    0, glbl_threadIdx_x, ST_type(glbl_threadIdx_x));
@@ -670,7 +701,7 @@ void ACC_Gen_Predefined_Variables()
 	griddimy = WN_Ldid(TY_mtype(ST_type(glbl_gridDim_y)),
 	                                0, glbl_gridDim_y, ST_type(glbl_gridDim_y));
 	griddimz = WN_Ldid(TY_mtype(ST_type(glbl_gridDim_z)),
-	                                0, glbl_gridDim_z, ST_type(glbl_gridDim_z));
+	                                0, glbl_gridDim_z, ST_type(glbl_gridDim_z));	
 }
 
 
@@ -5765,6 +5796,10 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	Current_PU_Info = acc_ppuinfo;
 	Current_pu = &Current_PU_Info_pu();
 	Current_Map_Tab = acc_pmaptab;
+	//reset tag	
+	acc_set_gangs = FALSE;
+	acc_set_workers = FALSE;
+	acc_set_vector_length = FALSE;
 
 	//begin launch the kernel
 	///////////////////////////////////////////////////////////////////////////////////////////////
@@ -5772,7 +5807,7 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	if(acc_target_arch == ACC_ARCH_TYPE_APU)
 		ACC_Launch_HSA_Kernel(0, wn_replace_block);
 	else
-		ACC_LaunchKernel_nvidia(0, wn_replace_block, TRUE);
+		ACC_LaunchKernelEx_nvidia(0, wn_replace_block, TRUE);
 	//LaunchKernel(0, wn_replace_block, TRUE);
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	//launch final reduction global reduction operations
@@ -5935,7 +5970,7 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 				if(acc_target_arch == ACC_ARCH_TYPE_APU)
 					ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 				else
-					ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+					ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
 				//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 				wn_prehandblock = NULL;
 			}
@@ -5957,14 +5992,12 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 			if(acc_target_arch == ACC_ARCH_TYPE_APU)
 				ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 			else
-				ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+				ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
 			//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 
 			WN_Delete ( WN_region_pragmas(cur_node) );
 			WN_DELETE_Tree ( WN_region_exits(cur_node) );
-			RID_Delete ( Current_Map_Tab, cur_node );
-			WN_Delete ( cur_node );
-			//WN_Delete ( wn );
+			//WN_Delete ( cur_node );
     	} 
 		else //non-loop stmts in the kernels
 		{
@@ -5986,7 +6019,7 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 		if(acc_target_arch == ACC_ARCH_TYPE_APU)
 			ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 		else
-			ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+			ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
 		//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 		wn_prehandblock = NULL;
 	}

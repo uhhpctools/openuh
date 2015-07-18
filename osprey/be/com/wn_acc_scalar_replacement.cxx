@@ -321,8 +321,8 @@ bool SortByArrayRefCount(const acc_array_ref_info &lhs, const acc_array_ref_info
 static vector_array_ref_info acc_array_ref_analysis_vector;
 static FILE *curr_output_fp = stdout;
 static INT32 ARRAY_ELEMENT_SCALARIZATION_THRESHOLD_DEFAULT=32;
-static INT32 MAX_REGISTERS_ALLOWED_PER_KERNEL=128; //this value is used by feedback
 static INT32 acc_aray_element_registers_num_left = 0;
+INT32 MAX_REGISTERS_ALLOWED_PER_KERNEL=128; //this value is used by feedback
 
 static void ACC_Dump_Array_Ref_Index(WN* wn_index)
 {
@@ -1001,10 +1001,12 @@ void ACC_Scalar_Replacement_Algorithm(WN* tree, ST* st_kernel)
 		}
 		else //if(Enable_UHACCFeedback == ACC_REGISTER_FEEDBACK_NONE)
 		{
-			if(Enable_UHACCRegNum < 0)
-				reg_num_threshold = ARRAY_ELEMENT_SCALARIZATION_THRESHOLD_DEFAULT;
-			else
-				reg_num_threshold = Enable_UHACCRegNum;
+			//if(Enable_UHACCRegNum < 0)
+			//	reg_num_threshold = ARRAY_ELEMENT_SCALARIZATION_THRESHOLD_DEFAULT;
+			//else
+			//	reg_num_threshold = Enable_UHACCRegNum;
+			MAX_REGISTERS_ALLOWED_PER_KERNEL = Enable_UHACCRegNum;
+			
 		}
 	   	if(reg_num_threshold > 0)
 	   		ACC_Loop_Invariant_Code_Motion_Level1(tree, reg_num_threshold);

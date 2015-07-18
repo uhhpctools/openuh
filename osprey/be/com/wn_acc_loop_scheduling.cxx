@@ -1374,6 +1374,9 @@ void Identify_Loop_Scheduling(WN* tree, WN* replace_block, BOOL bIsKernels)
 		Identify_ACC_Parallel_Loop_Scheduling(tree);
 }
 
+BOOL acc_set_gangs = FALSE;
+BOOL acc_set_workers = FALSE;
+BOOL acc_set_vector_length = FALSE;
 
 void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers, 
  									WN* wn_vector_length, WN* replace_block)
@@ -1395,6 +1398,7 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 		{
 			WN* wn_gangs_set = Gen_Set_Gangs_Num_X(wnGangsNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_gangs_set);
+			acc_set_gangs = TRUE;
 		}
 	}
 	if(workers_num)
@@ -1406,7 +1410,8 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 		{
 			WN* wn_workers_set = Gen_Set_Vector_Num_Y(wnWorkersNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_workers_set);
-		}
+			acc_set_workers = TRUE;
+		}		
 	}
 	if(vectors_length)
 	{
@@ -1417,6 +1422,7 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 		{
 			WN* wn_vectors_set = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
 			WN_INSERT_BlockLast(replace_block, wn_vectors_set);
+			acc_set_vector_length = TRUE;
 		}
 	}
 }
@@ -1742,9 +1748,31 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 	   				SCLASS_AUTO, EXPORT_LOCAL, Be_Type_Tbl(MTYPE_U4));
 	   WN* wn_index = WN_Ldid(TY_mtype(ST_type(acc_index_st)), 0, 
 									acc_index_st, ST_type(acc_index_st));
-	   
+	   //there is a special case in AMD platform
+	   //when there is only one level loop 
+	   //num_worker is not specified
+	   //no reduction, because reduction algorithm uses local memory which is using local id to identify the data affinity
+	   //we will use get_global_id to get the thread identification
+	   if(reductionmap.size()==0 && acc_target_arch==ACC_ARCH_TYPE_APU && acc_set_workers==FALSE && bIsInnestLoop && bIsTopLoop)
+	   {	   	
+   			//init value			
+			wn_index_init0 = WN_COPY_Tree(wn_threadid_gid_x);
+			wn_index_init0 = WN_Binary(OPR_ADD, 
+	   									TY_mtype(ST_type(acc_index_st)), 
+	   									WN_COPY_Tree(wn_init), 
+	   									wn_index_init0);
+			wn_index_init0 = WN_Stid(TY_mtype(ST_type(acc_index_st)), 0, 
+   										acc_index_st, ST_type(acc_index_st), 
+   										wn_index_init0);
+			//stride
+			wn_index_step1 = WN_COPY_Tree(wn_thread_global_width);
+			wn_index_step1 = WN_Binary(OPR_ADD, TY_mtype(ST_type(acc_index_st)), 
+								WN_COPY_Tree(wn_index), wn_index_step1);
+		    wn_index_step0 = WN_Stid(TY_mtype(ST_type(acc_index_st)), 0, 
+							acc_index_st, ST_type(acc_index_st), wn_index_step1);
+	   }
 	   //if gang clause appears
-	   if(wn_gang_id)
+	   else if(wn_gang_id)
 	   {
 	   		if(wn_vector_id)
 	   		{

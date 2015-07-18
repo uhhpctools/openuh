@@ -459,6 +459,8 @@ class  ARRAY_DIRECTED_GRAPH16 :
   WN_MAP _map;
   DEP_GRAPH_TYPE  _type;
   MEM_POOL *_pool;
+  //if we need identify the input data dependence edge
+  BOOL _identify_input_dep;
 public:
 
 
@@ -480,8 +482,12 @@ public:
     _map=map;
     _type = type;
     _pool = NULL;
+	_identify_input_dep = FALSE;
   }
 
+  void Set_Input_Dep() { _identify_input_dep = TRUE; }
+  void Reset_Input_Dep()  { _identify_input_dep = FALSE; }
+  
   MEM_POOL *Pool() { return _pool; }
 
   void Erase_Graph();
@@ -660,6 +666,10 @@ public:
 		      BOOL s1_lex_before_s2, BOOL pos_only=FALSE);
   BOOL Add_Edge_Equals(WN *ref1, const DOLOOP_STACK *s1,
 		      WN *ref2, const DOLOOP_STACK *s2);
+  //for scalar replacement
+  BOOL Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
+		WN *ref2, const DOLOOP_STACK *s2,
+		BOOL s1_lex_before_s2, BOOL use_bounds=TRUE);
 
   DEPV_ARRAY *Depv_Array(EINDEX16 edge) {
     Is_True(_type==DEPV_ARRAY_ARRAY_GRAPH,

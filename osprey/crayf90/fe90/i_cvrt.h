@@ -1317,7 +1317,7 @@ extern void  fei_endtask_open_mp          ( void );
 extern void  fei_endparallelsections_open_mp( void );
 extern void  fei_parallel_kernels_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
 extern void  fei_enter_exit_data_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
-extern void  fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);
+extern void  fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id, INT32 isCombining);
 extern void  fei_data_open_acc();
 extern void  fei_host_data_open_acc();
 extern void  fei_cache_update_wait_declare_open_acc(ACC_CONTEXT_DIR acc_context_directive_id);

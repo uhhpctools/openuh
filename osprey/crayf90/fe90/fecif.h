@@ -230,8 +230,10 @@ cif_stmt_type	mapped_stmt_type[] =
 						CIF_Not_Exact,       /* Open_ACC_End_Atomic_Stmt */				 
 						CIF_Not_Exact,       /* Open_ACC_End_Data_Stmt */				 
 						CIF_Not_Exact,       /* Open_ACC_End_Host_Data_Stmt */			 
-						CIF_Not_Exact,       /* Open_ACC_End_Kernels_Stmt */			 
-						CIF_Not_Exact,       /* Open_ACC_End_Parallel_Stmt */			 
+						CIF_Not_Exact,       /* Open_ACC_End_Kernels_Stmt */		 
+						CIF_Not_Exact,       /* Open_ACC_End_Kernels_Loop_Stmt */					 
+						CIF_Not_Exact,       /* Open_ACC_End_Parallel_Stmt */					 
+						CIF_Not_Exact,       /* Open_ACC_End_Parallel_Loop_Stmt */			 
 						CIF_Not_Exact,       /* Open_ACC_End_Loop_Stmt */	
 
 			CIF_Forall_Stmt,      /* Forall_Stmt */

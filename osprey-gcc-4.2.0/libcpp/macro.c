@@ -1147,6 +1147,81 @@ cpp_get_token (cpp_reader *pfile)
   return result;
 }
 
+
+/*similar to cpp_get_token_acc_dir
+but only for acc directive*/
+const cpp_token *
+cpp_get_token_acc_dir (cpp_reader *pfile)
+{
+  const cpp_token *result;
+
+  for (;;)
+    {
+      cpp_hashnode *node;
+      cpp_context *context = pfile->context;
+
+      /* Context->prev == 0 <=> base context.  */
+      if (!context->prev)
+	result = _cpp_lex_token (pfile);
+      else if (FIRST (context).token != LAST (context).token)
+	{
+	  if (context->direct_p)
+	    result = FIRST (context).token++;
+	  else
+	    result = *FIRST (context).ptoken++;
+
+	  if (result->flags & PASTE_LEFT)
+	    {
+	      paste_all_tokens (pfile, result);
+	      if (pfile->state.in_directive)
+		continue;
+	      return padding_token (pfile, result);
+	    }
+	}
+      else
+	{
+	  _cpp_pop_context (pfile);
+	  if (pfile->state.in_directive)
+	    continue;
+	  return &pfile->avoid_paste;
+	}
+
+      if (pfile->state.in_directive && result->type == CPP_COMMENT)
+	continue;
+
+      if (result->type != CPP_NAME)
+	break;
+
+      node = result->val.node;
+
+      if (node->type != NT_MACRO || (result->flags & NO_EXPAND))
+	break;
+
+      if (!(node->flags & NODE_DISABLED))
+	{
+	  if ( enter_macro_context (pfile, node))
+	    {
+	      return padding_token (pfile, result);
+	    }
+	}
+      else
+	{
+	  /* Flag this token as always unexpandable.  FIXME: move this
+	     to collect_args()?.  */
+	  cpp_token *t = _cpp_temp_token (pfile);
+	  t->type = result->type;
+	  t->flags = result->flags | NO_EXPAND;
+	  t->val = result->val;
+	  result = t;
+	}
+
+      break;
+    }
+
+  return result;
+}
+
+
 /* Returns true if we're expanding an object-like macro that was
    defined in a system header.  Just checks the macro at the top of
    the stack.  Used for diagnostic suppression.  */

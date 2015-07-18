@@ -160,7 +160,8 @@ BOOL is_pcreate_tmp_created = FALSE;
    "__accr_data_exit_delete",
    "__accr_free_reduction_buff",
    "__accr_init_launch_params",
-   "__accr_init_launch_reduction_params"
+   "__accr_init_launch_reduction_params",
+   "__accr_launchkernelex"
  };
  
  
@@ -221,7 +222,8 @@ BOOL is_pcreate_tmp_created = FALSE;
    ST_IDX_ZERO,  /*ACCR_DATA_EXIT_DELETE*/
    ST_IDX_ZERO,  /*ACCR_FREE_REDUCTION_BUFF*/
    ST_IDX_ZERO,  /*ACCR_INIT_LAUNCH_PARAMS*/
-   ST_IDX_ZERO	 /*ACCR_INIT_LAUNCH_RED_PARAMS*/
+   ST_IDX_ZERO,	 /*ACCR_INIT_LAUNCH_RED_PARAMS*/
+   ST_IDX_ZERO   /*ACCR_LAUNCHKERNEL_EX*/
  };
  
 // Generic type for parallel runtime routines

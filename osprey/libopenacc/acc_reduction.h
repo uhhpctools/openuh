@@ -22,7 +22,9 @@ extern double benchmarkReduce(int n, int numThreads, int numBlcoks,
 					   double* h_odata, double* d_idata, double* d_odata);
 
 //extern double run_reduction(double *h_idata, int size, int whichKernel);
-//extern void __accr_final_reduction_algorithm(double* result, double *d_idata, int type);
-extern void __accr_final_reduction_algorithm(void* result, void *d_idata, char* kernel_name, char* kernel_filename, unsigned int size, unsigned int type_size);
+extern void __accr_final_reduction_algorithm(void* device_result, void *d_idata, char* kernel_name, 
+                                char* szKernelLib, char* szKernelPtx, unsigned int size, 
+                                unsigned int type_size);
+
 
 #endif

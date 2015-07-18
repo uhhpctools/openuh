@@ -541,7 +541,9 @@ Phase_Init (void)
         Vho_Init ();
     if (Run_w2c)
 	{
-		if(run_ACCS2S)
+		//if source2source is enabled, init the normal
+		//if openacc is disabled and w2c is true, it means user enabling normal emit_nested_pu flag.
+		if(run_ACCS2S || !Enable_UHACC)
 			W2C_Outfile_Init (TRUE);
 		else
 			W2C_Outfile_Init_OpenACC(TRUE);
@@ -1704,8 +1706,7 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
     BOOL need_options_pop = FALSE;
 
 	//basically, this is for fortran dope processing before DFA
-	if((PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG) 
-			&& hasOpenACCRegion)
+	if(hasOpenACCRegion)
 	{
 		pu = VH_OpenACC_Lower(pu, LOWER_ACC_VH);
 	}

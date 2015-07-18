@@ -543,8 +543,10 @@ void		(*stmt_parsers[]) () = {
 				parse_directive_stmt,	/* Open_ACC_End_Atomic_Stmt*/ 					 
 				parse_directive_stmt,	/* Open_ACC_End_Data_Stmt */					 
 				parse_directive_stmt,	/* Open_ACC_End_Host_Data_Stmt */					 
-				parse_directive_stmt,	/* Open_ACC_End_Kernels_Stmt */				 
-				parse_directive_stmt,	/* Open_ACC_End_Parallel_Stmt */			 
+				parse_directive_stmt,	/* Open_ACC_End_Kernels_Stmt */					 
+				parse_directive_stmt,	/* Open_ACC_End_Kernels_Loop_Stmt */				 
+				parse_directive_stmt,	/* Open_ACC_End_Parallel_Stmt */				 
+				parse_directive_stmt,	/* Open_ACC_End_Parallel_Loop_Stmt */			 
 				parse_directive_stmt,	/* Open_ACC_End_Loop_Stmt */
 				
 				parse_forall,		/* Forall_Cstrct_Stmt */
@@ -663,7 +665,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -720,7 +724,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -777,7 +783,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -833,7 +841,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -892,7 +902,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -956,7 +968,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
@@ -1027,7 +1041,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1083,7 +1099,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1145,7 +1163,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1202,7 +1222,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1276,7 +1298,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1332,7 +1356,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1391,7 +1417,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1449,7 +1477,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1505,7 +1535,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1569,7 +1601,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -1643,7 +1677,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1699,7 +1735,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1755,7 +1793,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1817,7 +1857,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
@@ -1878,7 +1920,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1934,7 +1978,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -1998,7 +2044,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
@@ -2056,7 +2104,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2112,7 +2162,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2172,7 +2224,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -2228,7 +2282,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |    
@@ -2283,7 +2339,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2347,7 +2405,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2487,7 +2547,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2550,7 +2612,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2728,7 +2792,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2792,7 +2858,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2853,7 +2921,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2915,7 +2985,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -2980,7 +3052,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Derived_Type_Blk) | 
@@ -3043,7 +3117,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3107,7 +3183,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3170,7 +3248,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3229,7 +3309,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3290,7 +3372,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3355,7 +3439,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |   
@@ -3416,7 +3502,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3601,7 +3689,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3813,7 +3903,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3876,7 +3968,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -3939,7 +4033,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -4036,7 +4132,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
@@ -4462,7 +4560,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4526,7 +4626,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4590,7 +4692,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4654,7 +4758,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4718,7 +4824,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4785,7 +4893,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4848,7 +4958,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4912,7 +5024,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -4971,7 +5085,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -5035,7 +5151,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -5099,7 +5217,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -5162,7 +5282,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
                                 (ONE << Contains_Blk) |
                                 (ONE << Interface_Blk) |
@@ -5840,7 +5962,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
@@ -5899,7 +6023,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Atomic_Blk) |
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
@@ -5958,7 +6084,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Atomic_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
@@ -6018,6 +6146,67 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
+                                (ONE << Open_Acc_Loop_Blk) |
+									(ONE << Contains_Blk) |
+									(ONE << Interface_Blk) |
+									(ONE << Derived_Type_Blk) |
+					(ONE << Enum_Blk)),
+				
+				/*****	Open_ACC_End_Kernels_Loop_Stmt  *****/
+				
+								   ((ONE << Unknown_Blk) |
+									(ONE << Blockdata_Blk) |
+									(ONE << Module_Blk) |
+									(ONE << Program_Blk) |
+									(ONE << Function_Blk) |
+									(ONE << Subroutine_Blk) |
+									(ONE << Internal_Blk) |
+									(ONE << Module_Proc_Blk) |
+									(ONE << Interface_Body_Blk) |
+					(ONE << Forall_Blk) |
+									(ONE << If_Blk) |
+									(ONE << If_Then_Blk) |
+									(ONE << If_Else_If_Blk) |
+									(ONE << If_Else_Blk) |
+									(ONE << Do_Blk) |
+									(ONE << Select_Blk) |
+									(ONE << Case_Blk) |
+									(ONE << Where_Then_Blk) |
+									(ONE << Where_Else_Blk) |
+					(ONE << Where_Else_Mask_Blk) |
+									(ONE << Parallel_Blk) |
+									(ONE << SGI_Parallel_Blk) |
+									(ONE << Doall_Blk) |
+					(ONE << Wait_Blk) |
+									(ONE << SGI_Doacross_Blk) |
+									(ONE << SGI_Parallel_Do_Blk) |
+									(ONE << Do_Parallel_Blk) |
+									(ONE << SGI_Pdo_Blk) |
+									(ONE << Guard_Blk) |
+									(ONE << SGI_Critical_Section_Blk) |
+									(ONE << Parallel_Case_Blk) |
+									(ONE << SGI_Psection_Blk) |
+									(ONE << SGI_Section_Blk) |
+									(ONE << SGI_Single_Process_Blk) |
+									(ONE << SGI_Region_Blk) |
+									(ONE << Open_Mp_Do_Blk) |
+									(ONE << Open_Mp_Parallel_Sections_Blk) |
+									(ONE << Open_Mp_Sections_Blk) |
+									(ONE << Open_Mp_Section_Blk) |
+									(ONE << Open_Mp_Single_Blk) |
+									(ONE << Open_Mp_Parallel_Do_Blk) |
+									(ONE << Open_Mp_Master_Blk) |
+									(ONE << Open_Mp_Critical_Blk) |
+									(ONE << Open_Mp_Ordered_Blk) |
+									(ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
+									(ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+									(ONE << Open_Mp_Task_Blk) |
+                                (ONE << Open_Acc_Atomic_Blk) |
+                                (ONE << Open_Acc_Host_Data_Blk) |
+                                (ONE << Open_Acc_Data_Blk) |
+                                (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
@@ -6077,6 +6266,67 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
+                                (ONE << Open_Acc_Loop_Blk) |
+									(ONE << Contains_Blk) |
+									(ONE << Interface_Blk) |
+									(ONE << Derived_Type_Blk) |
+					(ONE << Enum_Blk)),
+				
+				/*****	Open_ACC_End_Parallel_Loop_Stmt  *****/
+				
+								   ((ONE << Unknown_Blk) |
+									(ONE << Blockdata_Blk) |
+									(ONE << Module_Blk) |
+									(ONE << Program_Blk) |
+									(ONE << Function_Blk) |
+									(ONE << Subroutine_Blk) |
+									(ONE << Internal_Blk) |
+									(ONE << Module_Proc_Blk) |
+									(ONE << Interface_Body_Blk) |
+					(ONE << Forall_Blk) |
+									(ONE << If_Blk) |
+									(ONE << If_Then_Blk) |
+									(ONE << If_Else_If_Blk) |
+									(ONE << If_Else_Blk) |
+									(ONE << Do_Blk) |
+									(ONE << Select_Blk) |
+									(ONE << Case_Blk) |
+									(ONE << Where_Then_Blk) |
+									(ONE << Where_Else_Blk) |
+					(ONE << Where_Else_Mask_Blk) |
+									(ONE << Parallel_Blk) |
+									(ONE << SGI_Parallel_Blk) |
+									(ONE << Doall_Blk) |
+					(ONE << Wait_Blk) |
+									(ONE << SGI_Doacross_Blk) |
+									(ONE << SGI_Parallel_Do_Blk) |
+									(ONE << Do_Parallel_Blk) |
+									(ONE << SGI_Pdo_Blk) |
+									(ONE << Guard_Blk) |
+									(ONE << SGI_Critical_Section_Blk) |
+									(ONE << Parallel_Case_Blk) |
+									(ONE << SGI_Psection_Blk) |
+									(ONE << SGI_Section_Blk) |
+									(ONE << SGI_Single_Process_Blk) |
+									(ONE << SGI_Region_Blk) |
+									(ONE << Open_Mp_Do_Blk) |
+									(ONE << Open_Mp_Parallel_Sections_Blk) |
+									(ONE << Open_Mp_Sections_Blk) |
+									(ONE << Open_Mp_Section_Blk) |
+									(ONE << Open_Mp_Single_Blk) |
+									(ONE << Open_Mp_Parallel_Do_Blk) |
+									(ONE << Open_Mp_Master_Blk) |
+									(ONE << Open_Mp_Critical_Blk) |
+									(ONE << Open_Mp_Ordered_Blk) |
+									(ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
+									(ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+									(ONE << Open_Mp_Task_Blk) |
+                                (ONE << Open_Acc_Atomic_Blk) |
+                                (ONE << Open_Acc_Host_Data_Blk) |
+                                (ONE << Open_Acc_Data_Blk) |
+                                (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
@@ -6136,7 +6386,9 @@ long long     stmt_in_blk [] = {
                                 (ONE << Open_Acc_Host_Data_Blk) |
                                 (ONE << Open_Acc_Data_Blk) |
                                 (ONE << Open_Acc_Kernels_Blk) |
+                                (ONE << Open_Acc_Kernels_Loop_Blk) |
                                 (ONE << Open_Acc_Parallel_Blk) |
+                                (ONE << Open_Acc_Parallel_Loop_Blk) |
 									(ONE << Contains_Blk) |
 									(ONE << Interface_Blk) |
 									(ONE << Derived_Type_Blk) |
@@ -7272,9 +7524,13 @@ stmt_category_type	stmt_top_cat [] = {
 							Executable_Stmt_Cat, 
 						/* Open_ACC_End_Host_Data_Stmt*/					 
 							Executable_Stmt_Cat, 
-						/* Open_ACC_End_Kernels_Stmt*/					 
+						/* Open_ACC_End_Kernels_Stmt*/				 
 							Executable_Stmt_Cat, 
-						/* Open_ACC_End_Parallel_Stmt*/		 
+						/* Open_ACC_End_Kernels_Loop_Stmt*/					 
+							Executable_Stmt_Cat, 
+						/* Open_ACC_End_Parallel_Stmt*/				 
+							Executable_Stmt_Cat, 
+						/* Open_ACC_End_Parallel_Loop_Stmt*/			 
 							Executable_Stmt_Cat, 
 						/* Open_ACC_End_Loop_Stmt*/
 

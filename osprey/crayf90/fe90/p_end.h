@@ -143,7 +143,9 @@ void		(*end_blocks[]) () = {
 		/*Open_Acc_Data_Blk*/end_open_acc_data_blk,
 		/*Open_Acc_Host_Data_Blk*/end_open_acc_host_data_blk,
 		/*Open_Acc_Kernels_Blk*/end_open_acc_kernels_blk,
+		/*Open_Acc_Kernels_loop_Blk*/end_open_acc_kernels_loop_blk,
 		/*Open_Acc_Parallel_Blk*/end_open_acc_parallel_blk,
+		/*Open_Acc_Parallel_loop_Blk*/end_open_acc_parallel_loop_blk,
 		/*Open_Acc_Loop_Blk*/end_open_acc_loop_blk,
 		/* Derived_Type_Blk	*/	end_type_blk,
 #ifdef KEY /* Bug 10572 */

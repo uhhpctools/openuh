@@ -1079,6 +1079,45 @@ DOLOOP_STACK *stack, BOOL rebuild, BOOL skip_bad)
     }
   }
 
+  // Now every write vrs every read
+  if (_type == DEPV_ARRAY_ARRAY_GRAPH && _identify_input_dep == TRUE) {
+	  for (i=0; i<reads->Elements(); i++) {
+	    //for (INT j=0; j<reads->Elements(); j++) {
+	      ST *base1 = reads->Bottom_nth(i)->ST_Base;
+	    //  ST *base2 = reads->Bottom_nth(j)->ST_Base;
+	      //if (!base1 || !base2 || (base1 == base2)) {
+	        REFERENCE_ITER iter1(reads->Bottom_nth(i));
+	        for (REFERENCE_NODE *n1=iter1.First(); !iter1.Is_Empty(); 
+						n1=iter1.Next()) {
+	          VINDEX16 v1=Get_Vertex(n1->Wn);
+		  if (v1) {
+	            REFERENCE_ITER iter2;
+				iter2.Init(n1);
+	            for (REFERENCE_NODE *n2=iter2.First();!iter2.Is_Empty();
+								n2=iter2.Next()) {
+	              VINDEX16 v2=Get_Vertex(n2->Wn);
+		      if (v2) {
+	                if (rebuild) {
+	                  EINDEX16 e=Get_Edge(v1,v2);
+		          if (e)
+		            Delete_Edge(e);
+	                  e=Get_Edge(v2,v1);
+		          if (e)
+		            Delete_Edge(e);
+		        }
+		        if (!Add_Edge_InputDep(n1->Wn,n1->Stack,n2->Wn,n2->Stack,
+				n1->Statement_Number < n2->Statement_Number)) {
+		          return(0);
+	                }
+		      }
+	            }
+	          }
+	        }
+	      //}
+	    //}
+	  }
+  }
+
   // reset permutations
   for (i=0; i<Permutation_Arrays->Elements(); i++) {
     Permutation_Arrays->Bottom_nth(i)._is_good = FALSE;
@@ -1723,6 +1762,267 @@ BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge(WN *ref1, const DOLOOP_STACK *s1,
       }
     }
     MEM_POOL_Pop(&DEP_local_pool);
+  }
+  return(TRUE);
+}
+
+BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
+		WN *ref2, const DOLOOP_STACK *s2,
+		BOOL s1_lex_before_s2, BOOL use_bounds)
+{
+  OPCODE op1 = WN_opcode(ref1);
+  OPCODE op2 = WN_opcode(ref2);
+  OPERATOR oper1 = OPCODE_operator(op1);
+  OPERATOR oper2 = OPCODE_operator(op2);
+  Is_True(oper1 != OPR_ARRAY, ("ref 1 is an array in Add_Edge\n"));
+  Is_True(oper2 != OPR_ARRAY, ("ref 2 is an array in Add_Edge\n"));
+  if (!OPCODE_is_load(op1) && !OPCODE_is_store(op1) && !OPCODE_is_call(op1)) {
+	return Add_Edge_Stars(ref1,s1,ref2,s2,s1_lex_before_s2);
+  }
+  if (!OPCODE_is_load(op2) && !OPCODE_is_store(op2) && !OPCODE_is_call(op2)) {
+	return Add_Edge_Stars(ref1,s1,ref2,s2,s1_lex_before_s2);
+  }
+  if ((oper1 == OPR_LDID) || (oper1 == OPR_STID) || 
+	  (oper2 == OPR_LDID) || (oper2 == OPR_STID)) {
+	return Add_Edge_Stars(ref1,s1,ref2,s2,s1_lex_before_s2);
+  }
+
+  if (OPCODE_is_call(op1)) {
+	if (Do_Loop_Is_Concurrent_Call(Enclosing_Do_Loop(ref1))) {
+	  if (s1_lex_before_s2) {
+		return Add_Edge_Equals(ref1,s1,ref2,s2);
+	  } else {
+		return Add_Edge_Equals(ref2,s2,ref1,s1);
+	  }
+	} else if (!Has_Call_Info(ref1)) {
+	  return Add_Edge_Stars(ref1,s1,ref2,s2,s1_lex_before_s2);
+	}
+  } else if (OPCODE_is_call(op2)) {
+	if (Do_Loop_Is_Concurrent_Call(Enclosing_Do_Loop(ref2))) {
+	  if (s1_lex_before_s2) {
+		return Add_Edge_Equals(ref1,s1,ref2,s2);
+	  } else {
+		return Add_Edge_Equals(ref2,s2,ref1,s1);
+	  }
+	} else if (!Has_Call_Info(ref2)) {
+	  return Add_Edge_Stars(ref1,s1,ref2,s2,s1_lex_before_s2);
+	}
+  }
+
+  WN *addr1=NULL,*addr2=NULL;
+  if (!OPCODE_is_call(op1) ) {
+	addr1 = (OPCODE_is_store(op1) ? (WN_kid1(ref1)) : (WN_kid0(ref1))) ;
+  }
+  if (!OPCODE_is_call(op2)) {
+	addr2 = (OPCODE_is_store(op2) ? (WN_kid1(ref2)) : (WN_kid0(ref2))) ;
+  }
+
+  BOOL is_ivdep = FALSE;
+  BOOL concurrent_directive = FALSE;
+  BOOL s2_lex_before_s1 = ((!s1_lex_before_s2) && !(ref1 == ref2));
+  Is_True(_type!=LEVEL_ARRAY_GRAPH,
+	  ("Add_Edge called on a graph of type level"));
+  UINT8 common_nest;
+  if (_type == DEPV_ARRAY_ARRAY_GRAPH) {
+	common_nest = Common_Nest(s1,s2);
+	if ((common_nest == s1->Elements()) && 
+	 Do_Loop_Is_Ivdep(s1->Top_nth(0))) {
+	  is_ivdep = TRUE;
+	}
+	for (INT i=0; i<common_nest; i++) {
+	  if (Do_Loop_Concurrent_Directive(s1->Bottom_nth(i))) {
+	concurrent_directive = TRUE;
+	  }
+	}
+  } else {
+	Is_True(s1->Elements() == s2->Elements(),
+	("Add_Edge called on a DEP graph with refs not in the same inner loop"));
+	common_nest = s1->Elements();
+	if (Do_Loop_Concurrent_Directive(s1->Top_nth(0))) {
+	  concurrent_directive = TRUE;
+	}
+	if (Do_Loop_Is_Ivdep(s1->Top_nth(0))) {
+	  is_ivdep = TRUE;
+	}
+  }
+  if (is_ivdep) { // ivdep should not apply to compiler generated arrays
+	if (Compiler_Generated(addr1) || 
+	Compiler_Generated(addr2)) {
+	  is_ivdep = FALSE;
+	}
+  }
+
+  if (is_ivdep && !Cray_Ivdep && !Liberal_Ivdep && 
+	!OPCODE_is_call(op1) && !OPCODE_is_call(op2) &&
+	Ref_Inner_Invar(addr1,s1->Top_nth(0)) && 
+	Ref_Inner_Invar(addr2,s1->Top_nth(0))) {
+	is_ivdep = FALSE;  // ivdep doesn't apply to "scalars"
+  }
+
+  UINT8 num_bad = Num_Bad(s1);
+  if ((num_bad < common_nest) || (_type == DEP_ARRAY_GRAPH)) {
+	MEM_POOL_Push(&DEP_local_pool);
+
+	INT dv_dim; // how many dimensions of dvector to compute
+	if (_type == DEPV_ARRAY_ARRAY_GRAPH) {
+	  dv_dim = common_nest-num_bad;  // as many as possible
+	} else {
+	  dv_dim = 1;  // 1
+	}
+
+	DEPV_LIST *tmp = CXX_NEW(DEPV_LIST(ref1,ref2,common_nest,
+		 dv_dim,use_bounds,&DEP_local_pool,s1,s2),&DEP_local_pool);
+	if (!tmp->Is_Empty()) {
+
+	  VINDEX16 v1 = Get_Vertex(ref1);
+	  VINDEX16 v2 = Get_Vertex(ref2);
+	  if (v1 == 0 || v2 == 0) 
+		return FALSE; 
+	  if (_type == DEPV_ARRAY_ARRAY_GRAPH) {
+		DEPV_LIST *pos = CXX_NEW(DEPV_LIST(tmp->Num_Dim(),tmp->Num_Unused_Dim(),
+					&DEP_local_pool), &DEP_local_pool);
+		DEPV_LIST *neg = CXX_NEW(DEPV_LIST(tmp->Num_Dim(),tmp->Num_Unused_Dim(),
+					&DEP_local_pool),&DEP_local_pool);
+		if (ref1 == ref2) {
+	  tmp->Lex_Pos_Decompose(&DEP_local_pool,pos,neg,FALSE,FALSE);
+		} else if (s1_lex_before_s2) {
+	  tmp->Lex_Pos_Decompose(&DEP_local_pool,pos,neg,TRUE,FALSE);
+		} else {
+	  tmp->Lex_Pos_Decompose(&DEP_local_pool,pos,neg,FALSE,TRUE);
+		}
+
+
+	// Get rid of non-obvious dependences that inhibit parallelism
+	if (concurrent_directive) {
+	  if (!OPCODE_is_call(op1) && !OPCODE_is_call(op2)) {
+		if (!Ref_Inner_Invar(addr1,s1->Top_nth(0)) &&
+			  !Ref_Inner_Invar(addr2,s2->Top_nth(0))) {
+		  for (INT i=0; i<dv_dim; i++) {
+		if (Do_Loop_Concurrent_Directive(s1->Bottom_nth(i))) {
+		  pos->Eliminate_Non_Distance_Carried_By(i);
+		  neg->Eliminate_Non_Distance_Carried_By(i);
+			}
+		  }
+			}
+		  }
+	}
+	BOOL bad_ivdep = FALSE;
+	if (is_ivdep) {
+	  if (Cray_Ivdep) {
+			if (s1_lex_before_s2) {
+			  if (neg->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+		  neg->Eliminate_Inner_Carried();
+			} else if (s2_lex_before_s1) {
+			  if (pos->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+		  pos->Eliminate_Inner_Carried();
+			} else {
+			  if (neg->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+			  if (pos->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+		  pos->Eliminate_Inner_Carried();
+		  neg->Eliminate_Inner_Carried();
+			}
+		  } else if (Liberal_Ivdep) {
+		  if ((ref1 != ref2) && Equiv_Memory(addr1,addr2)) bad_ivdep = TRUE;
+			  if (neg->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+			  if (pos->Is_Inner_Non_Zero_Single_Distance()) bad_ivdep = TRUE;
+		  pos->Eliminate_Inner_Carried_Or_All_Equals();
+		  neg->Eliminate_Inner_Carried_Or_All_Equals();
+		  } else {
+			  if (neg->Is_Inner_Non_Zero_Single_Distance()) {
+		bad_ivdep = TRUE;
+			  }
+			  if (pos->Is_Inner_Non_Zero_Single_Distance()) {
+		bad_ivdep = TRUE;
+			  }
+		  pos->Eliminate_Inner_Carried();
+		  neg->Eliminate_Inner_Carried();
+		  }
+		}
+	if (bad_ivdep) {
+	  char error[120];
+	  sprintf(error,
+		"IVDEP where there is an obvious dependence to ref on line %d.	Dependence ignored.",
+		Srcpos_To_Line(Find_Line(ref2)));
+	  ErrMsgSrcpos(EC_LNO_Generic,Find_Line(ref1),error);
+		}
+
+		if (!pos->Is_Empty()) {
+		  DEPV_ARRAY *array = Create_DEPV_ARRAY(pos,_pool);
+		  if (!Add_Edge(v1, v2,array)) {
+			MEM_POOL_Pop(&DEP_local_pool);
+		return(FALSE);
+	  }
+		}
+		if (!neg->Is_Empty() && (ref2 != ref1)) {
+		  DEPV_ARRAY *array = Create_DEPV_ARRAY(neg,_pool);
+		  if (!Add_Edge(v2, v1,array)) {
+			MEM_POOL_Pop(&DEP_local_pool);
+		return(FALSE);
+		  }
+		}
+	  } else { // a DEP_ARRAY_GRAPH
+	DEP tmp_dep = tmp->Convert_To_Dep();
+	DEP *pos,*neg;
+		if (ref1 == ref2) {
+	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,0,0);
+		} else if (s1_lex_before_s2) {
+	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,TRUE,FALSE);
+		} else {
+	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,FALSE,TRUE);
+		}
+
+	BOOL bad_ivdep = FALSE;
+	if (is_ivdep) {
+	  if (Cray_Ivdep) {
+		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
+		if (s1_lex_before_s2) {
+		  neg = NULL;
+		} else if (s2_lex_before_s1) {
+		  pos = NULL;
+			} else {
+		  neg = pos = NULL;
+			}
+	  } else if (Liberal_Ivdep) { 
+		if ((ref1 != ref2) && Equiv_Memory(addr1,addr2)) bad_ivdep = TRUE;
+		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
+		neg = pos = NULL;
+		  } else {
+		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
+		if (!neg || (DEP_Direction(*neg) == DIR_POS)) {
+		  neg = NULL;
+			} else {
+		  *neg = DEP_SetDistance(0);
+			}
+		if (!pos || (DEP_Direction(*pos) == DIR_POS)) {
+		  pos = NULL;
+			} else {
+		  *pos = DEP_SetDistance(0);
+			}
+		  }
+		}
+	if (bad_ivdep) {
+	  char error[120];
+	  sprintf(error,
+		"IVDEP where there is an obvious dependence to ref on line %d.	Dependence ignored.",
+		Srcpos_To_Line(Find_Line(ref2)));
+	  ErrMsgSrcpos(EC_LNO_Generic,Find_Line(ref1),error);
+		}
+
+	if (pos) {	
+		  if (!Add_Edge(v1, v2,*pos)) {
+			MEM_POOL_Pop(&DEP_local_pool);
+		return(FALSE);
+	  }
+	}
+		if (neg && (ref2 != ref1)) {
+		  if (!Add_Edge(v2, v1,*neg)) {
+			MEM_POOL_Pop(&DEP_local_pool);
+		return(FALSE);
+	  }
+		}
+	  }
+	}
+	MEM_POOL_Pop(&DEP_local_pool);
   }
   return(TRUE);
 }

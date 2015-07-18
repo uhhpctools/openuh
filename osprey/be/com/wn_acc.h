@@ -172,6 +172,7 @@ extern BOOL acc_ptr_restrict_enabled;
 extern map<ST*, BOOL> acc_const_offload_scalar;
 extern vector<ST*> acc_loop_index_var;
 extern UINT32 kernel_tmp_licm_count;
+extern INT32 MAX_REGISTERS_ALLOWED_PER_KERNEL;
 extern TY_IDX ACC_Get_ElementTYForMultiArray(ST* stArr);
 extern void ACC_Scalar_Replacement_Algorithm(WN* tree, ST* st_kernel);
 
@@ -305,7 +306,8 @@ typedef enum {
 	ACCR_FREE_REDUCTION_BUFF = 50,
 	ACCR_INIT_LAUNCH_PARAMS = 51,
 	ACCR_INIT_LAUNCH_RED_PARAMS = 52,	//for reduction kernel launch
-	ACCRUNTIME_LAST 		= ACCR_INIT_LAUNCH_RED_PARAMS
+	ACCR_LAUNCHKERNEL_EX = 53,	//for CUDA launch with options
+	ACCRUNTIME_LAST 		= ACCR_LAUNCHKERNEL_EX
 } OACCRUNTIME;
 
 typedef enum {
@@ -382,6 +384,8 @@ extern ST *glbl_blockDim_z;
 extern ST *glbl_gridDim_x;
 extern ST *glbl_gridDim_y;
 extern ST *glbl_gridDim_z;
+extern ST *st_glbl_threadIdx_gid_x;
+extern ST *st_glbl_threadDim_gbl_x;
 
 extern WN* threadidx;
 extern WN* threadidy;
@@ -398,6 +402,11 @@ extern WN* blockdimz;
 extern WN* griddimx;
 extern WN* griddimy;
 extern WN* griddimz;
+
+extern WN* wn_threadid_gid_x;
+extern WN* wn_thread_global_width;
+
+
 extern ST *acc_parallel_proc;	/* Extracted parallel/kernels process */
 extern vector<ST*> acc_kernel_functions_st; //ST list of kernel functions created
 extern ST* acc_st_shared_memory;
@@ -707,6 +716,10 @@ extern WN *acc_inout_nodes;
 extern WN *acc_delete_nodes;
 extern WN *acc_use_device_nodes;
 
+extern BOOL acc_set_gangs;
+extern BOOL acc_set_workers;
+extern BOOL acc_set_vector_length;
+
 /*********************************************************************************************************
 ***********************************************runtime gen API********************************************
 **********************************************************************************************************/
@@ -773,6 +786,8 @@ extern void Transform_ACC_Kernel_Block ( WN * tree, KernelsRegionInfo* pKRInfo, 
 extern void ACC_Fix_Dependence_Graph(PU_Info *parent_pu_info, PU_Info *child_pu_info, WN *child_wn);
 extern  WN* ACC_Launch_HSA_Kernel(int index, WN* wn_replace_block);
 extern  WN* ACC_LaunchKernel_nvidia (int index, WN* wn_replace_block, BOOL bParallel);
+extern  WN* ACC_LaunchKernelEx_nvidia (int index, WN* wn_replace_block, BOOL bParallel);
+
 
 /*********************************************************************************************************
 ***********************************************Reduction Operations***************************************

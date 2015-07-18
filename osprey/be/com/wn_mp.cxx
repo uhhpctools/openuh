@@ -3040,6 +3040,7 @@ is inheriting pu_recursive OK?
   Set_ST_addr_passed(parallel_proc);
 
   Allocate_Object ( parallel_proc );
+  Set_ST_sfname_idx(parallel_proc, Save_Str(Src_File_Name));
 
 
   // create nested symbol table for parallel function

@@ -703,8 +703,8 @@ static WN* ACC_Extract_Seq_Loops_Info(WN * tree )
 		  if (WN_next(cur_node) == NULL)
 		    WN_last(tree) = sequential_list;
 
-		  RID_Delete( Current_Map_Tab, cur_node );
-		  WN_DELETE_Tree(cur_node);
+		  //RID_Delete( Current_Map_Tab, cur_node );
+		  //WN_DELETE_Tree(cur_node);
 		}
 	}
 
@@ -767,6 +767,7 @@ static WN* ACC_Extract_Seq_Loops_Info(WN * tree )
 					 {
 						 Fail_FmtAssertion("ACC DO LOOP Region must include do loop(ACC_Walk_and_Replace_ACC_Loop_Seq)");
 					 }
+					 
 					 WN_prev(wn_region_bdy) = WN_prev(tree);
 					 if(WN_prev(tree))
 						 WN_next(WN_prev(tree)) = wn_region_bdy;
@@ -1426,6 +1427,349 @@ ACC_Walk_and_Replace_Dope (WN * tree, BOOL bOffloadRegion, BOOL bInArray)
   return (tree);
 }   
 
+static BOOL 
+ACC_Walk_and_Replace_KernelsReduction2ParallelReduction (WN * tree, BOOL isInKernels)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  WN *r;
+  WN *temp;
+  ST *old_sym;
+  WN_OFFSET old_offset;
+
+  /* Ignore NULL subtrees. */
+
+  if (tree == NULL)
+    return (FALSE);
+
+  /* Initialization. */
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+
+  /* Walk all children */
+  if(op == OPC_REGION)
+  {
+	  if ((WN_opcode(tree) == OPC_REGION) && 
+			(WN_region_kind(tree) == REGION_KIND_ACC) &&
+		     WN_first(WN_region_pragmas(tree)) &&
+		     ((WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_PRAGMA) ||
+		      (WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_XPRAGMA))
+		      && WN_pragma(WN_first(WN_region_pragmas(tree))) == WN_PRAGMA_ACC_LOOP_BEGIN) 
+	  {
+	  	  WN* pragma_block = WN_region_pragmas(tree);
+		  WN* cur_node = WN_first(pragma_block);
+		  WN* next_node = WN_next(cur_node);
+		  WN* wn_region_bdy = WN_region_body(tree);
+		  UINT32 acc_reduction_count = 0;
+		  
+		   //find out all the reduction clauses
+		   cur_node = WN_first(pragma_block);
+		   next_node = WN_next(cur_node);
+		   while ((cur_node = next_node)) 
+		   {
+			  next_node = WN_next(cur_node);
+	  
+			  if (((WN_opcode(cur_node) == OPC_PRAGMA) ||
+			   (WN_opcode(cur_node) == OPC_XPRAGMA)) &&
+			  (WN_pragmas[WN_pragma(cur_node)].users & PUSER_ACC)) 
+			  {
+				  if (WN_pragma(cur_node) == WN_PRAGMA_ACC_CLAUSE_REDUCTION) 
+					  	return TRUE;
+			  } 
+		   }
+		   //we didn't find the reduction,
+		   //recursively find it
+		   return ACC_Walk_and_Replace_KernelsReduction2ParallelReduction(wn_region_bdy, isInKernels);
+	  }
+	  
+	  else if ((WN_opcode(tree) == OPC_REGION) && 
+			(WN_region_kind(tree) == REGION_KIND_ACC) &&
+		     WN_first(WN_region_pragmas(tree)) &&
+		     ((WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_PRAGMA) ||
+		      (WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_XPRAGMA))) 
+	  {
+
+		    WN *wtmp = WN_first(WN_region_pragmas(tree));
+		    WN_PRAGMA_ID wid = (WN_PRAGMA_ID) WN_pragma(wtmp);
+
+			WN * wn_stmt_block = NULL;
+		    if (wid == WN_PRAGMA_ACC_KERNELS_BEGIN) 
+			{
+			  wn_stmt_block = WN_region_body(tree);
+			  if(ACC_Walk_and_Replace_KernelsReduction2ParallelReduction(wn_stmt_block, TRUE) == TRUE)
+			  	WN_pragma(wtmp) = WN_PRAGMA_ACC_PARALLEL_BEGIN;
+			  return FALSE;
+		    }
+			else if (wid == WN_PRAGMA_ACC_PARALLEL_BEGIN) 
+			{
+			  return FALSE;
+			}
+		}
+  }  
+  
+  if (op == OPC_BLOCK) 
+  {
+    BOOL HasReduction = FALSE;
+    r = WN_first(tree);
+    while (r) 
+	{ 
+      HasReduction = ACC_Walk_and_Replace_KernelsReduction2ParallelReduction (r, isInKernels);
+	  if(HasReduction && isInKernels)
+	  	return HasReduction;
+      r = WN_next(r);
+      
+   }
+  }
+  else 
+  {    
+    BOOL HasReduction = FALSE;
+    for (i=0; i < WN_kid_count(tree); i++)
+    {
+      HasReduction = ACC_Walk_and_Replace_KernelsReduction2ParallelReduction ( WN_kid(tree, i), isInKernels);
+	  if(HasReduction && isInKernels)
+	  	return HasReduction;
+    }
+  }
+  return (FALSE);
+}
+
+static WN* tmp_async_node = NULL;
+static WN* tmp_wait_node = NULL;
+static WN* tmp_devicetype_node = NULL;
+static WN* tmp_if_node = NULL;
+static WN* tmp_default_node = NULL;
+
+static void ACC_Remove_RID_Kid(RID* p_rid, RID* c_rid)
+{
+  	RID *rtmp;
+	RID *rtmp_prev = NULL;
+	for (rtmp=RID_first_kid(p_rid); rtmp; rtmp=RID_next(rtmp)) 
+	{
+		if (rtmp == c_rid) 
+		{
+			if(rtmp_prev)
+				RID_next(rtmp_prev) = RID_next(rtmp);
+			else
+				RID_first_kid(p_rid) = RID_next(rtmp);
+			RID_next(rtmp) = NULL;
+			break;
+		}
+		rtmp_prev = rtmp;
+	}
+	if(rtmp == NULL)
+		Fail_FmtAssertion("Cannot find RID from parents' RID.");
+}
+
+static void ACC_Increase_Kid_Level(RID* p_rid)
+{
+  	RID *rtmp;
+  
+	for (rtmp=RID_first_kid(p_rid); rtmp; rtmp=RID_next(rtmp)) 
+	{
+		RID_depth(rtmp) = RID_depth(p_rid)+1;
+		ACC_Increase_Kid_Level(rtmp);
+	}
+}
+
+
+static WN* 
+ACC_Walk_and_Replace_Split_Loops_InKernels (WN * tree, RID* p_rid)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  WN *r;
+  WN *temp;
+  ST *old_sym;
+  WN_OFFSET old_offset;
+
+  /* Ignore NULL subtrees. */
+
+  if (tree == NULL)
+    return (NULL);
+
+  /* Initialization. */
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+
+  /* Walk all children */
+  if ((WN_opcode(tree) == OPC_REGION) && 
+		(WN_region_kind(tree) == REGION_KIND_ACC) &&
+	     WN_first(WN_region_pragmas(tree)) &&
+	     ((WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_PRAGMA) ||
+	      (WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_XPRAGMA))
+	      && WN_pragma(WN_first(WN_region_pragmas(tree))) == WN_PRAGMA_ACC_LOOP_BEGIN) 
+  {	  		
+  		RID* c_rid = REGION_get_rid(tree);
+  		if(p_rid != RID_parent(c_rid))
+			Fail_FmtAssertion("Parent RID and Child RID do not match.");
+		
+		WN* wn_prev = WN_prev(tree);
+		WN* wn_next = WN_next(tree);
+		WN* wn_kernels_region = WN_CreateRegion(REGION_KIND_ACC,
+				WN_CreateBlock(),
+				WN_CreateBlock(),
+				WN_CreateBlock(),
+				-1,
+				0);
+		
+		WN* wn_pragmas = WN_region_pragmas(wn_kernels_region);
+		WN* wn_pragma = WN_CreatePragma(WN_PRAGMA_ACC_KERNELS_BEGIN, (ST *)NULL, 0, 1);
+		WN_set_pragma_omp(wn_pragma);
+		WN_set_pragma_compiler_generated(wn_pragma);
+		WN_INSERT_BlockFirst(wn_pragmas, wn_pragma);
+		
+		if(tmp_async_node)
+			WN_INSERT_BlockFirst(wn_pragmas, tmp_async_node);
+		if(tmp_wait_node)
+			WN_INSERT_BlockFirst(wn_pragmas, tmp_wait_node);
+		if(tmp_devicetype_node)
+			WN_INSERT_BlockFirst(wn_pragmas, tmp_devicetype_node);
+		if(tmp_if_node)
+			WN_INSERT_BlockFirst(wn_pragmas, tmp_if_node);
+		if(tmp_default_node)
+			WN_INSERT_BlockFirst(wn_pragmas, tmp_default_node);
+
+		WN* wn_region_body = WN_region_body(wn_kernels_region);
+		WN_INSERT_BlockFirst(wn_region_body, tree);
+		//update RID
+		//create middle level RID which kernels RID
+		RID *m_rid = RID_Create(WN_region_id(wn_kernels_region), RID_depth(p_rid)+1, wn_kernels_region);
+		RID_level(m_rid) = RL_RGN_INIT;
+		RID_TYPE_acc_Set(m_rid);
+		WN_MAP_Set(RID_map, wn_kernels_region, (void *)m_rid);
+		//update child RID first
+		RID_depth(c_rid) = RID_depth(m_rid)+1;
+		ACC_Increase_Kid_Level(c_rid);
+		RID_parent(c_rid) = m_rid;
+		//update parent RID
+		ACC_Remove_RID_Kid(p_rid, c_rid);
+		RID_Add_kid(m_rid, p_rid);
+		//update middle level RID
+		RID_parent(m_rid) = p_rid;
+		RID_Add_kid(c_rid, m_rid);
+
+		//current node
+		WN_prev(wn_kernels_region) = wn_prev;
+		WN_next(wn_kernels_region) = wn_next;
+		//prev node's next node
+		if(wn_prev)
+			WN_next(wn_prev) = wn_kernels_region;
+		//next node's prev node
+		if(wn_next)
+			WN_prev(wn_next) = wn_kernels_region;
+	   	return wn_kernels_region;
+  }
+  
+  else if ((WN_opcode(tree) == OPC_REGION) && 
+		(WN_region_kind(tree) == REGION_KIND_ACC) &&
+	     WN_first(WN_region_pragmas(tree)) &&
+	     ((WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_PRAGMA) ||
+	      (WN_opcode(WN_first(WN_region_pragmas(tree))) == OPC_XPRAGMA))) 
+  {
+
+	    WN *wtmp = WN_first(WN_region_pragmas(tree));
+	    WN_PRAGMA_ID wid = (WN_PRAGMA_ID) WN_pragma(wtmp);
+
+		WN * wn_stmt_block = NULL;
+		//prevent recursive split, if this kernels directive is generated by compiler, 
+		//there is no necessary to scan it again
+	    if (wid == WN_PRAGMA_ACC_KERNELS_BEGIN && WN_pragma_compiler_generated(wtmp) == 0) 
+		{
+		    tmp_async_node = NULL;
+			tmp_wait_node = NULL;
+			tmp_devicetype_node = NULL;
+			tmp_if_node = NULL;
+			tmp_default_node = NULL;
+		   //find out all the reduction clauses
+		   WN* pragma_block = WN_region_pragmas(tree);
+		   WN* cur_node = WN_first(pragma_block);
+		   WN* next_node = WN_next(cur_node);
+		   while ((cur_node = next_node)) 
+		   {
+			  next_node = WN_next(cur_node);
+			  if (((WN_opcode(cur_node) == OPC_PRAGMA) ||
+			   (WN_opcode(cur_node) == OPC_XPRAGMA)) &&
+			  (WN_pragmas[WN_pragma(cur_node)].users & PUSER_ACC)) 
+			  {				  
+	    		  WN_PRAGMA_ID wid = (WN_PRAGMA_ID) WN_pragma(cur_node);
+				  switch(wid)
+			  	  {
+			  	  	case WN_PRAGMA_ACC_CLAUSE_IF:
+						tmp_if_node = cur_node;
+						break;
+					case WN_PRAGMA_ACC_CLAUSE_ASYNC:
+						tmp_async_node = cur_node;
+					    if(next_node != NULL)
+					   	  WN_prev(next_node) = WN_prev(cur_node);
+					    WN_next(WN_prev(cur_node)) = next_node;
+						break;
+					case WN_PRAGMA_ACC_CLAUSE_DEVICE_TYPE:
+						tmp_devicetype_node = cur_node;
+					    if(next_node != NULL)
+					   	  WN_prev(next_node) = WN_prev(cur_node);
+					    WN_next(WN_prev(cur_node)) = next_node;
+						break;
+					case WN_PRAGMA_ACC_CLAUSE_WAIT:
+						tmp_wait_node = cur_node;
+					    if(next_node != NULL)
+					   	  WN_prev(next_node) = WN_prev(cur_node);
+					    WN_next(WN_prev(cur_node)) = next_node;
+						break;
+					case WN_PRAGMA_ACC_CLAUSE_DEFAULT:
+						tmp_default_node = cur_node;
+					    if(next_node != NULL)
+					   	  WN_prev(next_node) = WN_prev(cur_node);
+					    WN_next(WN_prev(cur_node)) = next_node;
+						break;
+					default:
+						break;
+			  	  }
+			  } 
+		   }
+		  wn_stmt_block = WN_region_body(tree);
+		  p_rid = REGION_get_rid(tree);
+		  ACC_Walk_and_Replace_Split_Loops_InKernels(wn_stmt_block, p_rid);			  
+		  WN_pragma(wtmp) = WN_PRAGMA_ACC_DATA_BEGIN;
+		  WN_set_pragma_compiler_generated(wtmp);
+		  
+		  return tree;
+	    }
+		else if (wid == WN_PRAGMA_ACC_PARALLEL_BEGIN) 
+		{
+		  return tree;
+		}
+	}
+
+  if (op == OPC_BLOCK) 
+  {
+    r = WN_first(tree);
+    while (r) 
+	{ // localize each node in block
+      r = ACC_Walk_and_Replace_Split_Loops_InKernels (r, p_rid);
+      if (WN_prev(r) == NULL)
+        WN_first(tree) = r;
+      if (WN_next(r) == NULL)
+        WN_last(tree) = r;
+
+      r = WN_next(r);
+      
+   }
+  }
+  else 
+  {
+    for (i=0; i < WN_kid_count(tree); i++)
+    {
+      WN_kid(tree, i) = ACC_Walk_and_Replace_Split_Loops_InKernels (WN_kid(tree, i), p_rid);
+    }
+  }
+  return (tree);
+}
 
 /*This function must be called before OPENACC OFFLOAD DATA FLOW ANALYSIS*/
 WN* VH_OpenACC_Lower(WN * node, INT64 actions)
@@ -1441,7 +1785,11 @@ WN* VH_OpenACC_Lower(WN * node, INT64 actions)
 
   Is_True(actions & LOWER_ACC_VH,
 	  ("actions does not contain LOWER_ACC_VH"));
-  node = ACC_Walk_and_Replace_Dope(node, FALSE, FALSE);
-
+  if((PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG))
+  	node = ACC_Walk_and_Replace_Dope(node, FALSE, FALSE);
+  
+  ACC_Walk_and_Replace_KernelsReduction2ParallelReduction(node, FALSE);
+  ACC_Walk_and_Replace_Split_Loops_InKernels(node, NULL);
+  return node;
 }
 

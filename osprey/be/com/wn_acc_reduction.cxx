@@ -327,7 +327,7 @@ WN* GenFinalReductionAlgorithm_nvidia(ST* st_dbuffer, ST* st_dhost,
 	//Set_ST_name_idx
 	WN * wn;
 	WN* wnx;
-	wn = WN_Create(OPC_VCALL, 6);	
+	wn = WN_Create(OPC_VCALL, 7);	
 	WN_st_idx(wn) = GET_ACCRUNTIME_ST(ACCR_FINAL_REDUCTION_ALGORITHM);
   
 	WN_Set_Call_Non_Data_Mod(wn);
@@ -350,17 +350,33 @@ WN* GenFinalReductionAlgorithm_nvidia(ST* st_dbuffer, ST* st_dhost,
 	WN_kid(wn, 2) = WN_CreateParm(Pointer_type, wn_kernelname, 
 						 		WN_ty(wn_kernelname), WN_PARM_BY_VALUE);
 	//which PTX file	
-    char* srcfname = Last_Pathname_Component(Src_File_Name);   
-    char* ptxfname = New_Extension ( srcfname, ".w2c.ptx");
-	WN* wn_ptxname = WN_LdaString(ptxfname,0, strlen(ptxfname)+1);
+	char szPTXArrayName[256];
+    char* srcfname = Last_Pathname_Component(Src_File_Name); 
+    char* ptxfname = New_Extension ( srcfname, ".w2c.ptx"); 
+	ptxfname[strlen(ptxfname)-8] = '\0';
+	sprintf(szPTXArrayName, "__acc_%s_ptx_p", ptxfname);
+	WN* wn_ptxname = WN_LdaString(szPTXArrayName,0, strlen(szPTXArrayName)+1);
 	WN_kid(wn, 3) = WN_CreateParm(Pointer_type, wn_ptxname, 
 						 		WN_ty(wn_ptxname), WN_PARM_BY_VALUE);
-	
+	//////////////////////////////////////////////////////////////////////////
+	TY_IDX ty = Be_Type_Tbl(MTYPE_I1);//Make_Array_Type(TY_mtype(ty), 1, 1024);
+	TY_IDX ty_array = Make_Pointer_Type(MTYPE_To_TY(TY_mtype(ty)));
+	ST* st_ptxbuffer = New_ST(GLOBAL_SYMTAB); 
+	ST_Init(st_ptxbuffer,
+	  Save_Str( szPTXArrayName),
+	  CLASS_VAR,
+	  SCLASS_EXTERN,
+	  EXPORT_PREEMPTIBLE,
+	  ty_array);
+	WN* wn_ptxbuffer = WN_Ldid(Pointer_type, 0, st_ptxbuffer, ST_type(st_ptxbuffer));	
+	WN_kid(wn, 4) = WN_CreateParm(Pointer_type, wn_ptxbuffer, 
+						 		WN_ty(wn_ptxbuffer), WN_PARM_BY_VALUE);
+
   	wnx = WN_Ldid(TY_mtype(ST_type(st_num_of_element)), 0, st_num_of_element, ST_type(st_num_of_element));	
-    WN_kid(wn, 4) = WN_CreateParm(TY_mtype(ST_type(st_num_of_element)), wnx, 
+    WN_kid(wn, 5) = WN_CreateParm(TY_mtype(ST_type(st_num_of_element)), wnx, 
 		  							ST_type(st_num_of_element), WN_PARM_BY_VALUE);
 	
-    WN_kid(wn, 5) = WN_CreateParm(MTYPE_U4, WN_Intconst(MTYPE_U4, iTypesize), 
+    WN_kid(wn, 6) = WN_CreateParm(MTYPE_U4, WN_Intconst(MTYPE_U4, iTypesize), 
 		  							Be_Type_Tbl(MTYPE_U4), WN_PARM_BY_VALUE);
 	
   	return wn;
@@ -2840,6 +2856,14 @@ static void ACC_Parallel_Loop_Reduction_Extract (WN * tree, WN* wn_replace_block
 					pReductionMap->acc_stmt_location_new = 
 								ACC_Locate_Reduction(wn_region_bdy, pReductionMap->hostName, 
 														pReductionMap->ReductionOpr, looptype);
+					if(pReductionMap->acc_stmt_location_new == ACC_NONE_SPECIFIED)
+					{
+					   if(next_node != NULL)
+					   	WN_prev(next_node) = WN_prev(cur_node);
+					   WN_next(WN_prev(cur_node)) = next_node;
+					   WN_DELETE_Tree(cur_node);
+					   break;
+					}
 					if(pReductionMap->acc_stmt_location_new == ACC_NONE_SPECIFIED)
 						Fail_FmtAssertion ("Cannot Locate the Reduction Statement.");
 

@@ -2204,9 +2204,15 @@ void directive_stmt_semantics(void)
       case  Parallel_Open_Acc_Opr:
         open_acc_directive_semantics(Parallel_Acc);
         break;
+      case  Parallel_Loop_Open_Acc_Opr:
+        open_acc_directive_semantics(Parallel_Loop_Acc);
+        break;
 		
       case  Kernels_Open_Acc_Opr:
         open_acc_directive_semantics(Kernels_Acc);
+        break;
+      case  Kernels_Loop_Open_Acc_Opr:
+        open_acc_directive_semantics(Kernels_Loop_Acc);
         break;
 		
       case  Data_Open_Acc_Opr:

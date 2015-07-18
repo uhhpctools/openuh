@@ -4268,6 +4268,22 @@ static void process_x_option (char *optargs)
             disregard_open_acc[Tok_Open_Acc_Dir_Endparallel - 
                               Tok_Open_Acc_Dir_Start]			= TRUE;
 			break;
+		case Tok_Open_Acc_Dir_Kernels_Loop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Kernels_Loop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endkernels_Loop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endkernels_Loop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		case Tok_Open_Acc_Dir_Parallel_Loop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Parallel_Loop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
+		 case Tok_Open_Acc_Dir_Endparallel_Loop :
+            disregard_open_acc[Tok_Open_Acc_Dir_Endparallel_Loop - 
+                              Tok_Open_Acc_Dir_Start]			= TRUE;
+			break;
 		case Tok_Open_Acc_Dir_Loop :
             disregard_open_acc[Tok_Open_Acc_Dir_Loop - 
                               Tok_Open_Acc_Dir_Start]			= TRUE;

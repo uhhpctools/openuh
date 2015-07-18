@@ -7053,45 +7053,75 @@ c_parser_acc_variable_list (c_parser *parser, enum acc_clause_code kind,
       tree t = lookup_name (c_parser_peek_token (parser)->value);
 	  tree u = NULL_TREE;
 
-      if (t == NULL_TREE)
-	undeclared_variable (c_parser_peek_token (parser)->value,
-			     c_parser_peek_token (parser)->location);
-      else if (t == error_mark_node)
-	;
-      else if (kind != 0)
-	{
-	  u = build_acc_clause (kind);
-	  ACC_CLAUSE_DECL (u) = t;
-	  ACC_CLAUSE_CHAIN (u) = list;
-	  list = u;
-	}
-      else
-	list = tree_cons (t, NULL_TREE, list);
+	  if(flag_accuma == 0)
+	  {
+	      if (t == NULL_TREE)
+		undeclared_variable (c_parser_peek_token (parser)->value,
+				     c_parser_peek_token (parser)->location);
+	      else if (t == error_mark_node)
+		;
+	      else if (kind != 0)
+		{
+		  u = build_acc_clause (kind);
+		  ACC_CLAUSE_DECL (u) = t;
+		  ACC_CLAUSE_CHAIN (u) = list;
+		  list = u;
+		}
+	      else
+		list = tree_cons (t, NULL_TREE, list);
+	  }
+	  else
+  	  {
+  	  	//no necessary to record this
+  	  }
 
       c_parser_consume_token (parser);
 
     //if region is declared
 	if(c_parser_next_token_is(parser, CPP_OPEN_SQUARE))
 	{
-		tree start, end;
-		c_parser_consume_token (parser);
-		//taken "start"
-		start = c_parser_acc_single_variable(parser);
-		if (c_parser_next_token_is_not (parser, CPP_COLON))
-			c_parser_error (parser, 
-				"expected ':' in region declare in acc pragma");
-		ACC_CLAUSE_DATA_START_EXPR(u) = start;
-		//consume :
-		c_parser_consume_token (parser);
-		//taken "end"
-		end = c_parser_acc_single_variable(parser);
-		ACC_CLAUSE_DATA_END_EXPR(u) = end;
-		//c_parser_consume_token (parser);
-		if (c_parser_next_token_is_not (parser, CPP_CLOSE_SQUARE))
-			c_parser_error (parser, 
-				"expected ']' in region declare in acc pragma");
-		//consume ]
-		c_parser_consume_token (parser);
+		if(flag_accuma == 0)
+		{
+			tree start, end;
+			c_parser_consume_token (parser);
+			//taken "start"
+			start = c_parser_acc_single_variable(parser);
+			if (c_parser_next_token_is_not (parser, CPP_COLON))
+				c_parser_error (parser, 
+					"expected ':' in region declare in acc pragma");
+			ACC_CLAUSE_DATA_START_EXPR(u) = start;
+			//consume :
+			c_parser_consume_token (parser);
+			//taken "end"
+			end = c_parser_acc_single_variable(parser);
+			ACC_CLAUSE_DATA_END_EXPR(u) = end;
+			//c_parser_consume_token (parser);
+			if (c_parser_next_token_is_not (parser, CPP_CLOSE_SQUARE))
+				c_parser_error (parser, 
+					"expected ']' in region declare in acc pragma");
+			//consume ]
+			c_parser_consume_token (parser);
+		}
+		else
+		{
+			c_parser_consume_token (parser);
+			//consume start
+			c_parser_peek_token(parser);
+			c_parser_consume_token (parser);
+			if (c_parser_next_token_is_not (parser, CPP_COLON))
+				c_parser_error (parser, 
+					"expected ':' in region declare in acc pragma");
+			//consume :
+			c_parser_consume_token (parser);
+			//consume end
+			c_parser_peek_token(parser);
+			c_parser_consume_token (parser);
+			//c_parser_consume_token (parser);
+			if (c_parser_next_token_is_not (parser, CPP_CLOSE_SQUARE))
+				c_parser_error (parser, 
+					"expected ']' in region declare in acc pragma");
+			c_parser_consume_token (parser);
+		}
 	}
 		
 

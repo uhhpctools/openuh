@@ -1496,6 +1496,26 @@ cpp_avoid_paste (cpp_reader *pfile, const cpp_token *token1,
   return 0;
 }
 
+extern const cpp_token *cpp_get_token_acc_dir (cpp_reader *pfile);
+/* Output OpenACC directives  */
+void
+cpp_output_acc_line (cpp_reader *pfile, FILE *fp)
+{
+  const cpp_token *token;
+
+  token = cpp_get_token_acc_dir (pfile);
+  while (token->type != CPP_EOF)
+    {
+      if (token->type != CPP_PADDING)
+      	cpp_output_token (token, fp);
+      token = cpp_get_token_acc_dir (pfile);
+      if (token->flags & PREV_WHITE)
+	putc (' ', fp);
+    }
+
+  putc ('\n', fp);
+}
+
 /* Output all the remaining tokens on the current line, and a newline
    character, to FP.  Leading whitespace is removed.  If there are
    macros, special token padding is not performed.  */

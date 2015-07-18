@@ -604,7 +604,12 @@ extern tree c_finish_omp_task (tree, tree);
 extern tree c_finish_omp_clauses (tree);
 
 
+extern tree c_begin_acc_parallel (void);
+extern tree c_finish_acc_parallel (tree clauses, tree block);
 extern tree c_finish_oacc_clauses (tree);
+extern tree c_begin_acc_kernel(void);
+extern tree c_finish_acc_kernel (tree clauses, tree block);
+extern tree c_finish_acc_clauses (tree clauses);
 
 /* Set to 0 at beginning of a function definition, set to 1 if
    a return statement that specifies a return value is seen.  */

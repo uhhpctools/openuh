@@ -168,6 +168,10 @@ char* native_path = NULL;
 char* cloc_cmd = NULL;
 char* cloc_path = NULL;
 char* cl_obj_file_path = NULL;
+char* cuda_path = NULL;
+char* ptx_file_name = NULL;
+char* ptx_prepath = NULL;
+char* ptx_obj_file_path = NULL;
 boolean compiling_opencl = FALSE;
 
 extern void turn_down_opt_level (int new_olevel, char *msg);
@@ -305,6 +309,11 @@ add_implied_string (string_list_t *list, int iflag, int flag, phases_t phase)
 			 && (phase == P_spin_cc1 || phase == P_spin_cc1plus)) {
 			add_string(list, "-fopenmp");
 		}
+        else if(strcmp(iname, "-fuma") == 0)
+        {
+            if(phase == P_spin_cc1)
+              add_string(list, "-fuma");
+        }
 		else if (strcmp(iname, "-acc") == 0
 			 && (phase == P_spin_cc1 || phase == P_spin_cc1plus)) {
 			add_string(list, "-fopenacc");
@@ -1694,6 +1703,7 @@ add_file_args (string_list_t *args, phases_t index)
 		//temp = strcat(temp,"w2c.cu");
 		sprintf (buf, "%s.w2c.cu", temp);
 		add_string(args, buf);
+		cuda_path = strdup(buf);
 		{
 			char* pname;
 			int index = -1;
@@ -1744,6 +1754,9 @@ add_file_args (string_list_t *args, phases_t index)
 		add_string(args, "-o");
 		sprintf (buf, "%s/%s.ptx", temp, temp1);
 		add_string(args, buf);
+		sprintf (buf, "%s/%s", temp, temp1);
+		ptx_prepath = strdup(buf);
+		ptx_file_name = strdup(temp1);
 		break;
 
 	case P_cloc:	
@@ -3908,6 +3921,9 @@ run_compiler (int argc, char *argv[])
 				file = fopen(buf, "r");
 				if(file != NULL)
 				{
+					int sz_length = 0;
+					char* szPTX = NULL;
+					char* szPTXC = NULL;
 					fclose(file);
 					if(!nvcc_path)					
 					{
@@ -3918,9 +3934,94 @@ run_compiler (int argc, char *argv[])
 					nvcc_args = init_string_list();
 					add_file_args (nvcc_args, P_nvcc);
 					run_phase (P_nvcc, full_path, nvcc_args);
+					//read the ptx file into another source file and 
+					//use nvcc to compile it into object file.
+					sprintf(buf, "%s.ptx", ptx_prepath);
+					file = fopen(buf, "rb"); 
+					fseek(file, 0L, SEEK_END);
+					sz_length = ftell(file);
+					fseek(file, 0L, SEEK_SET);
+					szPTX = (char*)malloc((sz_length+1)*sizeof(char));
+					memset(szPTX, 0, (sz_length+1)*sizeof(char));
+					fread(szPTX, sizeof(char), sz_length, file);
+					fclose(file);
+					//create a new c file
+					sprintf(buf, "%s.ptx.c", ptx_prepath);
+					file = fopen(buf, "wb"); 
+					szPTXC = (char*)malloc((100)*sizeof(char));
+					memset(szPTXC, 0, (100)*sizeof(char));
+					//////////////////////////////////////////////////////					
+					char* the_file = fix_name_by_phase(source_file, P_nvcc);
+	 				char* pname_without_ext_and_path = strdup(the_file);
+					int index1;		
+					for ( index1=strlen(pname_without_ext_and_path)-1; index1>=0; index1-- ) 
+					{						
+					    if ( pname_without_ext_and_path[index1] == '/' ) 
+							break;
+				    	if ( pname_without_ext_and_path[index1] == '.' ) 
+					    {
+				      		pname_without_ext_and_path[index1] = 0;
+				      		break;
+				    	}
+			  		}
+					for ( index1=strlen(pname_without_ext_and_path)-1; index1>=0; index1-- ) 
+					{
+					    if ( pname_without_ext_and_path[index1] == '/' ) 
+					    {
+					    	pname_without_ext_and_path = pname_without_ext_and_path + index1 + 1;
+							break;
+					    }
+					}
+					//////////////////////////////////////////////////////
+					sprintf(szPTXC, "char __acc_%s_ptx[%d] = {", pname_without_ext_and_path, 
+															sz_length+1);
+					int w_size = fwrite(szPTXC, sizeof(char), strlen(szPTXC), file);
+					char* pSzCur = szPTX;
+					while(*pSzCur)
+					{
+						sprintf(szPTXC, "%#x,", (unsigned char)(*pSzCur));
+						w_size = fwrite(szPTXC, sizeof(char), strlen(szPTXC), file);
+						pSzCur ++;
+					}
+					sprintf(szPTXC, "0x0};", pname_without_ext_and_path, 
+															sz_length);
+					w_size = fwrite(szPTXC, sizeof(char), strlen(szPTXC), file);
+					sprintf(szPTXC, "char* __acc_%s_ptx_p = __acc_%s_ptx;", pname_without_ext_and_path, 
+															pname_without_ext_and_path);
+					w_size = fwrite(szPTXC, sizeof(char), strlen(szPTXC), file);
+					//////////////////////////////////////////////////////
+					w_size = fflush(file);
+					fclose(file);
+					free(szPTXC);
+					free(szPTX);
+					//compiler this file into object file with nvcc
+					string_list_t* nvcc_args_1 = init_string_list();					
+					//sprintf (buf, "%s/%s.ptx", temp, temp1);
+					add_string(nvcc_args_1, buf);
+					add_string(nvcc_args_1, "-c");
+					add_string(nvcc_args_1, "-o");
+					sprintf(buf, "%s.ptx.o", ptx_prepath);
+					add_string(nvcc_args_1, buf);
+					run_phase (P_nvcc, full_path, nvcc_args_1);
+					
+					if(cl_obj_file_path)
+					{
+						free(cl_obj_file_path);
+						cl_obj_file_path = NULL;
+					}
+					cl_obj_file_path = strdup(buf);
+					if(keep_flag == FALSE)
+					{
+						sprintf(buf, "%s.ptx.c", ptx_prepath);
+						remove(buf);
+						//after finish the single object, ptx will be deleted
+						//sprintf(buf, "%s.ptx", ptx_prepath);
+						//remove(buf);
+					}
+					
 				}
 
-				sprintf(buf, "%s.w2c.ptx", pname);
+				sprintf(buf, "%s.ptx", ptx_prepath);
 				file = fopen(buf, "r"); 
 				if(acc_feedback==TRUE && nvcc_path != NULL && accfeedback_phase<2 && file != NULL)
 				{
@@ -3936,6 +4037,15 @@ run_compiler (int argc, char *argv[])
 					run_phase (P_nvptxas, full_path, nvptxas_args);
 					accfeedback_phase ++;
 					goto acc_feedback_startpoint;
+				}
+				
+				if(keep_flag == FALSE)
+				{
+					//after finish the feedback analysis, ptx will be deleted
+					sprintf(buf, "%s.ptx", ptx_prepath);
+					remove(buf);
+					sprintf(buf, "%s.w2c.cu", pname);
+					remove(buf);
 				}
 			}
 			//check if it is necessary to run OpenCL files
@@ -3983,6 +4093,15 @@ run_compiler (int argc, char *argv[])
 						cloc_args = init_string_list();
 						add_file_args (cloc_args, P_cloc);
 						run_phase (P_cloc, full_path, cloc_args);
+						
+						if(keep_flag == FALSE)
+						{
+							//after finish the feedback analysis, cl and .h will be deleted
+							sprintf(buf, "%s.w2c.cl", pname);
+							remove(buf);
+							sprintf(buf, "%s.w2c.h", pname);
+							remove(buf);
+						}
 
 						//feedback
 						if(acc_feedback==TRUE && accfeedback_phase<2)

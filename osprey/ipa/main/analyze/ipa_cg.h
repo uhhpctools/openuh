@@ -1237,7 +1237,7 @@ public:
 #ifdef DRAGON
  void Dragon_Print(ofstream &);
 #endif
-  void Print_Debug_Info();
+
   void Print_vobose (FILE*);
   void Print_vobose (FILE*, TRAVERSAL_ORDER, BOOL);
 

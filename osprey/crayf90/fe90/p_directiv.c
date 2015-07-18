@@ -12472,6 +12472,29 @@ static void parse_open_acc_directives(void)
          LINK_TO_PARENT_BLK;
 	  	break;
 		
+      case Tok_Open_Acc_Dir_Kernels_Loop:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Kernels_Loop_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Kernels_Loop_Acc);
+
+         if (directive_region_error(Kernels_Loop_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         
+         SET_DIRECTIVE_STATE(Open_Acc_Kernels_Loop_Region);
+         PUSH_BLK_STK (Open_Acc_Kernels_Loop_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endkernels_Loop:
+	  	break;
+		
       case Tok_Open_Acc_Dir_Endkernels:
          ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
          ir_idx = gen_directive_ir(Endkernels_Open_Acc_Opr);
@@ -12551,6 +12574,32 @@ static void parse_open_acc_directives(void)
          BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
          CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
          LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Parallel_Loop:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Parallel_Loop_Open_Acc_Opr);
+
+         parse_open_acc_clauses(Parallel_Loop_Acc);
+
+         if (directive_region_error(Parallel_Loop_Open_Acc_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         /* clear directive state */
+         //directive_state &= (long) 0;
+
+         //par_nest_depth++;
+         SET_DIRECTIVE_STATE(Open_Acc_Parallel_Loop_Region);
+         PUSH_BLK_STK (Open_Acc_Parallel_Loop_Blk);
+         BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+	  	break;
+		
+      case Tok_Open_Acc_Dir_Endparallel_Loop:
 	  	break;
 		
       case Tok_Open_Acc_Dir_Endparallel:

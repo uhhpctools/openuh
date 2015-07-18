@@ -8755,7 +8755,9 @@ static void chk_for_unlabeled_stmt (void)
 		     case Open_ACC_End_Host_Data_Stmt:           
 		     case Open_ACC_End_Data_Stmt:           
 		     case Open_ACC_End_Parallel_Stmt:           
-		     case Open_ACC_End_Kernels_Stmt:           
+		     case Open_ACC_End_Kernels_Stmt:            
+		     case Open_ACC_End_Parallel_Loop_Stmt:           
+		     case Open_ACC_End_Kernels_Loop_Stmt:            
 		     case Open_ACC_End_Atomic_Stmt:
 
                break;

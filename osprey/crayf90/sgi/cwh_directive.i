@@ -38,7 +38,7 @@
 
 int parallel_do_count;
 int acc_doloop_count;
-
+int acc_is_combining_loop;
 /* table to map asserts to whirl nodes */
 /* the MIPS_ASSERT_* are defined in fe90/i_cvrt.h, this table must be sync-ed */
 static struct {

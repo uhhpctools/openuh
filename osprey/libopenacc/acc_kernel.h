@@ -51,5 +51,7 @@ extern int __accr_get_total_gangs_workers();
 extern int __accr_get_total_num_vectors();
 
 extern void __accr_launchkernel(char* szKernelName, char* szKernelLib, int async_expr);
+extern void __accr_launchkernelex(char* szKernelName, char* szKernelLib, char* szKernelPtx, 
+									int max_register, int async_expr);
 
 #endif

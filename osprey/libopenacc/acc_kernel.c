@@ -312,3 +312,140 @@ void __accr_launchkernel(char* szKernelName, char* szKernelLib, int async_expr)
 	free(args);
 
 }
+
+
+/*
+ *szKernelName: kernel function name
+ *szKernelLib: kernel file name
+ */
+void __accr_launchkernelex(char* szKernelName, char* szKernelLib, char* szKernelPtx, 
+									int max_register, int async_expr)
+{
+	void **args;
+	FILE *fp;
+	int file_size;
+    CUmodule cu_module;
+    CUfunction cu_function;
+	CUresult ret;
+	int i, args_count;
+	param_t *param;
+
+
+    if(__accr_file_map == NULL)
+        __accr_file_map = acc_hashmap_create();
+
+       
+    cu_module =  (char*)acc_hashmap_get_string(__accr_file_map, szKernelLib);
+    if(cu_module == NULL)
+    {
+        /* 
+         * this file is the first time to appear, add it in the hashmap
+         * key is the file name, value is the module in this file
+         */
+		char *ptx_source = szKernelPtx;
+		CUjit_option pOptions[2]; //= (CUjit_option*)malloc(4*sizeof(CUjit_option));
+		void* pOpvalues[2];
+		int buff_size;
+		#define ERROR_BUFFER_SIZE (1024*1024)
+		buff_size = ERROR_BUFFER_SIZE;
+		//max_register = 255;
+		//pOptions[0] = CU_JIT_ERROR_LOG_BUFFER; 
+		//pOpvalues[0] = (void*)malloc(ERROR_BUFFER_SIZE);
+		
+		//pOptions[1] = CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES; 
+		//pOpvalues[1] = (void*)buff_size; 
+		
+		pOptions[0] = CU_JIT_MAX_REGISTERS;
+		pOpvalues[0] = (void*)max_register; 
+		
+		pOptions[1] = CU_JIT_TARGET_FROM_CUCONTEXT; 
+		pOpvalues[1] = (void*)0;
+			
+		//printf("Loading module %s\n", ptx_source);
+		ret = cuModuleLoadDataEx(&cu_module, ptx_source, 2, pOptions, pOpvalues);	
+		CUDA_CHECK(ret);
+        acc_hashmap_put_string(__accr_file_map, szKernelLib, cu_module);
+    }
+        
+	ret = cuModuleGetFunction(&cu_function, cu_module, szKernelName);	
+	CUDA_CHECK(ret);
+    
+	args_count = vector_length(param_list);
+	args = (void**)malloc(args_count*sizeof(void*));
+	
+	for(i = args_count-1; i >=0; i--)
+	{
+		param = (param_t*)malloc(sizeof(param_t));
+		vector_popback(param_list, param);
+		if(param->device_addr != NULL)
+		{
+			args[i] = &(param->device_addr);
+			DEBUG(("args[%d] device address: %p", i, param->device_addr));
+		}
+		else
+		{
+			args[i] = param->host_addr;
+			DEBUG(("args[%d] host address: %p", i, param->host_addr));
+		}
+
+	}
+
+	DEBUG(("Arguments added successfully"));
+	DEBUG(("gang_x: %d, gang_y: %d, gang_z: %d", gangs[0], gangs[1], gangs[2]));
+	DEBUG(("vector_x: %d, vector_y: %d, vector_z: %d", vectors[0], vectors[1], vectors[2]));
+
+	if(gangs[0] > __acc_gpu_config->max_grid_dim[0] ||
+	   gangs[1] > __acc_gpu_config->max_grid_dim[1] ||
+	   gangs[2] > __acc_gpu_config->max_grid_dim[2] )
+	   ERROR(("Gang number exceeds the limit"));
+
+	if(vectors[0] > __acc_gpu_config->max_block_dim[0] ||
+	   vectors[1] > __acc_gpu_config->max_block_dim[1] ||
+	   vectors[2] > __acc_gpu_config->max_block_dim[2] ||
+	   vectors[0]*vectors[1]*vectors[2] > __acc_gpu_config->max_threads_per_block)
+	   ERROR(("Vector number exceeds the limit"));
+	
+
+	/* the asynchronous scalar expression do not accept negative value now*/
+	if(async_expr < 0)
+	{
+		ret = cuLaunchKernel(cu_function, gangs[0], gangs[1], gangs[2], 
+						     vectors[0], vectors[1], vectors[2], 
+						     shared_size, 
+						     NULL, args, NULL);
+		CUDA_CHECK(ret);
+	}else if(async_expr == 0)
+	{
+		if(async_streams[MODULE_BASE] == NULL)
+		{
+			CUDA_CHECK( cuStreamCreate(&async_streams[MODULE_BASE], 0) );	
+		}
+		
+		ret = cuLaunchKernel(cu_function, gangs[0], gangs[1], gangs[2], 
+						     vectors[0], vectors[1], vectors[2], 
+						     shared_size, 
+						     async_streams[MODULE_BASE], args, NULL);
+		CUDA_CHECK(ret);
+	}else
+	{
+		int stream_pos;
+		stream_pos = async_expr % MODULE_BASE;
+		
+		if(async_streams[stream_pos] == NULL)
+		{
+			CUDA_CHECK( cuStreamCreate(&async_streams[stream_pos], 0) );	
+		}
+		
+		ret = cuLaunchKernel(cu_function, gangs[0], gangs[1], gangs[2], 
+						     vectors[0], vectors[1], vectors[2], 
+						     shared_size, 
+						     async_streams[stream_pos], args, NULL);
+		CUDA_CHECK(ret);
+	}
+
+	DEBUG(("The kernel is launched successfully"));
+	/* free the memory of kernel parameter */
+	free(args);
+
+}
+

@@ -208,6 +208,7 @@ typedef STACK<WN *> STACK_OF_WN;
   extern void Pad_First_Dim_Degenerates(WN *func_nd);
 
   extern BOOL Build_Array_Dependence_Graph (WN* func_nd);
+  extern BOOL Build_DataReuse_Array_Dependence_Graph (WN* func_nd);
   extern void Build_CG_Dependence_Graph (WN* func_nd);
   extern void Build_CG_Dependence_Graph (ARRAY_DIRECTED_GRAPH16*);
 #ifdef DRAGON
@@ -1892,6 +1893,41 @@ extern BOOL Build_Array_Dependence_Graph (WN* func_nd) {
   Array_Dependence_Graph = 
     CXX_NEW(ARRAY_DIRECTED_GRAPH16(100,500,Array_Dependence_Map,
                                    DEPV_ARRAY_ARRAY_GRAPH), &LNO_default_pool);
+  BOOL graph_ok=Array_Dependence_Graph->Build(func_nd,&LNO_default_pool);
+  WB_Set_Sanity_Check_Level(WBC_DU_AND_ARRAY); 
+  WN_Register_Delete_Cleanup_Function(LWN_Delete_LNO_dep_graph);
+
+  // Is_True(graph_ok,("Overflow building dependence graph"));
+  if (!graph_ok) return FALSE;
+  if (Get_Trace(TP_LNOPT,TT_LNO_DEP2) || 
+      Get_Trace(TP_LNOPT,TT_LNO_DEP)) {
+    fprintf(TFile, "%sLNO dependence graph (before transformation)\n%s",
+            DBar, DBar);
+    Array_Dependence_Graph->Print(TFile);
+  }
+
+#ifdef DRAGON
+  if (Dragon_Flag)
+     write_dependence_graph(func_nd);
+#endif
+
+  return TRUE;
+}
+
+
+/***********************************************************************
+ *
+ * Build the appropriate data reuse dependence graph. 
+ * it is used to find out the array reference reuse.
+ * Return TRUE if the graph was OK, FALSE otherwise.
+ *
+ ***********************************************************************/
+extern BOOL Build_DataReuse_Array_Dependence_Graph (WN* func_nd) {
+
+  Array_Dependence_Graph = 
+    CXX_NEW(ARRAY_DIRECTED_GRAPH16(100,500,Array_Dependence_Map,
+                                   DEPV_ARRAY_ARRAY_GRAPH), &LNO_default_pool);
+  Array_Dependence_Graph->Set_Input_Dep();
   BOOL graph_ok=Array_Dependence_Graph->Build(func_nd,&LNO_default_pool);
   WB_Set_Sanity_Check_Level(WBC_DU_AND_ARRAY); 
   WN_Register_Delete_Cleanup_Function(LWN_Delete_LNO_dep_graph);

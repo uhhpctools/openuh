@@ -620,34 +620,38 @@ Open_W2c_Output_File(W2C_FILE_KIND kind)
 		 else if(kind == W2C_CL_FILE)
 		 {
 			Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockIdx_x get_group_id(0)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockIdx_y get_group_id(1)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockIdx_z get_group_id(2)\n");
+                                                    "#define __nv50_blockIdx_x get_group_id(0)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_blockIdx_y get_group_id(1)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_blockIdx_z get_group_id(2)\n");
 
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_threadIdx_x get_local_id(0)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_threadIdx_y get_local_id(1)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_threadIdx_z get_local_id(2)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_threadIdx_x get_local_id(0)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_threadIdx_y get_local_id(1)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_threadIdx_z get_local_id(2)\n");
 
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockdim_x get_local_size(0)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockdim_y get_local_size(1)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_blockdim_z get_local_size(2)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_blockdim_x get_local_size(0)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_blockdim_y get_local_size(1)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_blockdim_z get_local_size(2)\n");
 
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_griddim_x get_num_groups(0)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_griddim_y get_num_groups(1)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __nv50_griddim_z get_num_groups(2)\n");
-                        Write_String(W2C_File[kind], NULL/* No srcpos map */,
-                                                                "#define __syncthreads() barrier(CLK_LOCAL_MEM_FENCE)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_griddim_x get_num_groups(0)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_griddim_y get_num_groups(1)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __nv50_griddim_z get_num_groups(2)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __syncthreads() barrier(CLK_LOCAL_MEM_FENCE)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __apu_threadIdx_gid_x  get_global_id(0)\n");
+            Write_String(W2C_File[kind], NULL/* No srcpos map */,
+                                                    "#define __apu_threadDim_gbl_x  get_global_size(0)\n");
 			Write_String(W2C_File[kind], NULL/* No srcpos map */,
                                                                 "#define sinf(x) sin(x)\n");
 			Write_String(W2C_File[kind], NULL/* No srcpos map */,

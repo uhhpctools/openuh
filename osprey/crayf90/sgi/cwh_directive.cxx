@@ -3109,6 +3109,7 @@ fei_parallelworkshare_open_mp(INTPTR task_if_idx,
   cwh_directive_set_PU_flags(FALSE);
 }
 
+
 /*===============================================
  *
  * fei_parallel_kernels_open_acc
@@ -3361,7 +3362,7 @@ void fei_cache_update_wait_declare_open_acc(ACC_CONTEXT_DIR acc_context_directiv
  * For creating loop region for OpenACC 
  *===============================================
 */
-void fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id) 
+void fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id, INT32 isCombining) 
 {
 	WN *body, *region;
   	WN_PRAGMA_ID wn_pragma_id;
@@ -3408,6 +3409,8 @@ void fei_loop_open_acc(ACC_CONTEXT_DIR acc_context_directive_id)
 	cwh_block_set_current(body);
 
 	cwh_directive_set_PU_acc_flags();
+	if(isCombining)		
+  		acc_is_combining_loop = TRUE;
 }
 
 /*===============================================

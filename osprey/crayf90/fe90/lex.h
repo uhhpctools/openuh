@@ -892,6 +892,8 @@ static  kwd_type        kwd_open_acc_dir[] = {
 		"DTYPE",				Tok_Open_Acc_Dir_DType,  			/* Device_type, ACC2.0 */
 		"DATA",					Tok_Open_Acc_Dir_Data, 				/* Data						  */
 		
+		"ENDPARALLELLOOP",		Tok_Open_Acc_Dir_Endparallel_Loop, 	/* End of parallel loop		 */ 
+		"ENDKERNELSLOOP",		Tok_Open_Acc_Dir_Endkernels_Loop,	/* End of kernels loop					  */
 		"ENDHOST_DATA",			Tok_Open_Acc_Dir_Endhost_Data, 		/* end of host_data				  */
 		"ENDPARALLEL",			Tok_Open_Acc_Dir_Endparallel, 		/* End of parallel 		 */ 
 		"ENDKERNELS",			Tok_Open_Acc_Dir_Endkernels,		/* End of kernels 					  */
@@ -910,6 +912,7 @@ static  kwd_type        kwd_open_acc_dir[] = {
 		"INDEPENDENT",			Tok_Open_Acc_Dir_Independent,		/* independent 				  */		
 		"IF",					Tok_Open_Acc_Dir_If,				/* If					  */
 		
+		"KERNELSLOOP",			Tok_Open_Acc_Dir_Kernels_Loop,		/* Kernels Loop	  */
 		"KERNELS",				Tok_Open_Acc_Dir_Kernels,			/* Kernels 	  */
 		
 		"LINK",					Tok_Open_Acc_Dir_Link, 				/* Link	  */
@@ -925,6 +928,7 @@ static  kwd_type        kwd_open_acc_dir[] = {
 		"PRESENT_OR_COPYIN",	Tok_Open_Acc_Dir_Present_or_Copyin, /* pcopyin						  */
 		"PRESENT_OR_CREATE",	Tok_Open_Acc_Dir_Present_or_Create, /* pcreate					  */
 		"PRESENT_OR_COPY",		Tok_Open_Acc_Dir_Present_or_Copy, 	/* Pcopy					  */
+		"PARALLELLOOP",			Tok_Open_Acc_Dir_Parallel_Loop, 	/* Parallel Loop					  */
 		"PARALLEL",				Tok_Open_Acc_Dir_Parallel, 			/* Parallel					  */
 		"PCOPYOUT",				Tok_Open_Acc_Dir_Pcopyout,			/* Pcopyout					  */
 		"PCOPYIN",				Tok_Open_Acc_Dir_Pcopyin,			/* Pcopyin					  */

@@ -321,7 +321,8 @@ void __accr_final_reduction_algorithm(double* result, double *d_idata, int type)
 #endif
 
 void __accr_final_reduction_algorithm(void* device_result, void *d_idata, char* kernel_name, 
-                                char* kernel_filename, unsigned int size, unsigned int type_size)
+                                char* szKernelLib, char* szKernelPtx, unsigned int size, 
+                                unsigned int type_size)
 {
     unsigned int block_size;
     //void *__device_result;
@@ -336,7 +337,7 @@ void __accr_final_reduction_algorithm(void* device_result, void *d_idata, char* 
     __accr_push_kernel_param_scalar(&size);
     __accr_push_kernel_param_scalar(&block_size);
     //__accr_set_shared_mem_size(block_size*type_size);
-    __accr_launchkernel(kernel_name, kernel_filename, -2);
+    __accr_launchkernelex(kernel_name, szKernelLib, szKernelPtx, 64, -2);
     
     //__accr_memout_d2h(__device_result, result, type_size, 0, -2); 
     //__accr_free_on_device(__device_result);

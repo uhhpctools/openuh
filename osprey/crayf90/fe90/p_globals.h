@@ -116,7 +116,9 @@ enum    blk_cntxt_values       {Unknown_Blk,
 								Open_Acc_Data_Blk,
 								Open_Acc_Host_Data_Blk,
 								Open_Acc_Kernels_Blk,
+								Open_Acc_Kernels_Loop_Blk,
 								Open_Acc_Parallel_Blk,
+								Open_Acc_Parallel_Loop_Blk,
 								Open_Acc_Loop_Blk,
 				Derived_Type_Blk,
 #ifdef KEY /* Bug 10572 */
@@ -174,7 +176,9 @@ enum    directive_region_values {Parallel_Region,
 				 Open_Acc_Data_Region,
 				 Open_Acc_Host_Data_Region,
 				 Open_Acc_Kernels_Region,
+				 Open_Acc_Kernels_Loop_Region,
 				 Open_Acc_Parallel_Region,
+				 Open_Acc_Parallel_Loop_Region,
 				 Open_Acc_Loop_Region,
                                  Last_Region};
 
@@ -384,7 +388,9 @@ extern  void 	end_open_acc_atomic_blk(boolean  err_call);
 extern  void 	end_open_acc_data_blk(boolean  err_call);
 extern  void 	end_open_acc_host_data_blk(boolean  err_call);
 extern  void 	end_open_acc_kernels_blk(boolean  err_call);
+extern  void 	end_open_acc_kernels_loop_blk(boolean  err_call);
 extern  void 	end_open_acc_parallel_blk(boolean  err_call);
+extern  void 	end_open_acc_parallel_loop_blk(boolean  err_call);
 extern  void 	end_open_acc_loop_blk(boolean  err_call);
 
 # if defined(_EXPRESSION_EVAL)

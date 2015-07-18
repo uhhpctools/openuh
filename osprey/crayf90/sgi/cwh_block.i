@@ -58,6 +58,8 @@ typedef struct {
    UINT32 is_parallel_do:1 ; /* this loop is a parallel loop (may be a pseudo nested one */
    UINT32  is_top_pdo:1    ; /* this loop is the top DO of a C$PAR PDO */
    UINT32 is_acc_loop:1	   ; /* this loop is the openacc loop. !$acc loop */
+   UINT32 is_acc_combining_loop:1; 
+  /* this loop is combining with parallel/kernels directives*/
 			
 } block_stack_t;
 

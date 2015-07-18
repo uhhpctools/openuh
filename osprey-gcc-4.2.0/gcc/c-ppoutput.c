@@ -59,6 +59,7 @@ static void cb_ident (cpp_reader *, source_location, const cpp_string *);
 static void cb_def_pragma (cpp_reader *, source_location);
 static void cb_read_pch (cpp_reader *pfile, const char *name,
 			 int fd, const char *orig_name);
+static void do_pragma_acc (cpp_reader *);
 
 /* Preprocess and output.  */
 void
@@ -119,6 +120,8 @@ init_pp_output (FILE *out_stream)
       cb->define = cb_define;
       cb->undef  = cb_undef;
     }
+  
+  cpp_register_pragma (parse_in, NULL, "acc",  do_pragma_acc, false);
 
   /* Initialize the print structure.  Setting print.src_line to -1 here is
      a trick to guarantee that the first token of the file will cause
@@ -415,6 +418,17 @@ pp_file_change (const struct line_map *map)
 	  print_line (map->start_location, flags);
 	}
     }
+}
+
+extern void cpp_output_acc_line (cpp_reader *pfile, FILE *fp);
+/* Copy a #pragma acc directive to the preprocessed output.  */
+static void
+do_pragma_acc (cpp_reader *pfile)
+{
+  maybe_print_line(pfile->directive_line);
+  fputs ("#pragma acc ", print.outf);
+  cpp_output_acc_line (pfile, print.outf);
+  print.src_line++;
 }
 
 /* Copy a #pragma directive to the preprocessed output.  */
