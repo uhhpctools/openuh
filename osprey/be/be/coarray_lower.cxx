@@ -6066,7 +6066,8 @@ static void handle_caf_call_stmts(
                 ("Expected 6 args for sync_images from FE"));
 
         ST *st1 = WN_st(WN_kid0(WN_actual(wn,0)));
-        TY_IDX ty1 = ST_type(st1);
+        TY_IDX ty1 = WN_ty(WN_kid0(WN_actual(wn,0)));
+        WN_OFFSET ofst = WN_offset(WN_kid0(WN_actual(wn,0)));
         if (TY_kind(ty1) == KIND_POINTER)
             ty1 = TY_pointed(ty1);
 
@@ -6083,16 +6084,16 @@ static void handle_caf_call_stmts(
         WN_Delete(WN_kid0(WN_actual(wn,0)));
         WN_Delete(WN_kid0(WN_actual(wn,1)));
         WN_kid0(WN_actual(wn,0)) =
-            WN_Ldid(Pointer_type, 0 /* DV_BASE_PTR ofst */,
+            WN_Ldid(Pointer_type, ofst /* DV_BASE_PTR ofst */,
                     st1, MTYPE_To_TY(Pointer_type));
         if (TY_size(ty1) > ( Pointer_Size == 4?
                     dopevec_fldinfo[DV_DIM1_LB].ofst32 :
                     dopevec_fldinfo[DV_DIM1_LB].ofst64)) {
-            WN_kid0(WN_actual(wn,1)) =
-                WN_Ldid(Integer_type,
-                        Pointer_Size == 4 ?
+            WN_OFFSET new_ofst = ofst + (Pointer_Size == 4 ?
                         dopevec_fldinfo[DV_DIM1_EXT].ofst32 :
-                        dopevec_fldinfo[DV_DIM1_EXT].ofst64,
+                        dopevec_fldinfo[DV_DIM1_EXT].ofst64);
+            WN_kid0(WN_actual(wn,1)) =
+                WN_Ldid(Integer_type, new_ofst,
                         WN_st(WN_kid0(WN_actual(wn,0))),
                         MTYPE_To_TY(Integer_type));
         } else {
