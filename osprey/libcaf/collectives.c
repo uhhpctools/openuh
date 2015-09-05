@@ -204,18 +204,20 @@ static size_t inline get_reduction_type_size(caf_reduction_type_t type, int char
         case CAF_LOGICAL4:
         case CAF_INT4:
         case CAF_REAL4:
-        case CAF_COMPLEX4:
             elem_size = 4;
             break;
         case CAF_LOGICAL8:
         case CAF_INT8:
         case CAF_REAL8:
-        case CAF_COMPLEX8:
+        case CAF_COMPLEX4:
             elem_size = 8;
             break;
         case CAF_REAL16:
-        case CAF_COMPLEX16:
+        case CAF_COMPLEX8:
             elem_size = 16;
+            break;
+        case CAF_COMPLEX16:
+            elem_size = 32;
             break;
         case CAF_CHAR:
             elem_size =  charlen;
