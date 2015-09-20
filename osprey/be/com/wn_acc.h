@@ -605,6 +605,7 @@ extern vector<ACC_DREGION__ENTRY> acc_unspecified_dregion_pcopy;
 
 extern vector<ACC_DATA_ST_MAP*> acc_unspecified_pcopyMap;
 
+extern BOOL acc_kernel_launch_debug_mode;
 extern BOOL acc_dfa_enabled;
 extern ST* st_shared_array_4parallelRegion ;
 extern TY_IDX ty_shared_array_in_parallel;

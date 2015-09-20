@@ -273,7 +273,7 @@ void FIZ_FUSE_INFO::Build(WN* root, BOOL all_loops)
     WN* wn=WN_ITER_wn(wn_walker);
     if (WN_opcode(wn)==OPC_DO_LOOP && loop_table->Find(wn)==0) {
       if (!all_loops && (!Do_Loop_Is_Good(wn) || Do_Loop_Has_Exits(wn) || 
-						Do_Loop_Is_Mp(wn)))
+						Do_Loop_Is_Mp(wn) || Do_Loop_Is_ACC(wn)))
 	continue; 
       snl_id=_snl_info.Newidx();
       loop_table->Enter(wn,snl_id);

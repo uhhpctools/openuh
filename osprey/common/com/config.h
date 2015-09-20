@@ -766,8 +766,11 @@ extern BOOL run_autoConstCacheOpt;
 #define UHACC_ENABLE_RESTRICT_PTR_OFFLOAD			(0x6)
 //enable read-only scalar recognization in the array index expression
 #define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL3	(0x7)
-//def-use chain, unsupported yet
+//inter-iteration scalar replacement, it requires dependence analysis
 #define UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL4	(0x8)
+//dep-analysis for data locality
+#define UHACC_ENABLE_DEP_ANALYSIS_DLOCALITY			(0x9)
+#define UHACC_ENABLE_KERNEL_LAUNCH_DEBUG_MODE		(0xa)
 //ignore the read-only and memory coalesced array elements
 //because they are alreadyin the read-only data cache
 //save the register

@@ -4097,9 +4097,9 @@ run_compiler (int argc, char *argv[])
 						if(keep_flag == FALSE)
 						{
 							//after finish the feedback analysis, cl and .h will be deleted
-							sprintf(buf, "%s.w2c.cl", pname);
+							sprintf(buf, "%s_w2c.cl", pname);
 							remove(buf);
-							sprintf(buf, "%s.w2c.h", pname);
+							sprintf(buf, "%s_w2c.h", pname);
 							remove(buf);
 						}
 

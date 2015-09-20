@@ -411,7 +411,7 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
         # 32bit libraries
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
@@ -564,7 +564,7 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
@@ -585,8 +585,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/libopenmp-pcl.a
@@ -604,8 +604,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
+		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/32/libopenmp-pcl.a

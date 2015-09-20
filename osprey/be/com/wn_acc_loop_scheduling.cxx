@@ -1417,7 +1417,7 @@ void ACC_Setup_GPU_toplogy_for_Parallel(WN* wn_gangs, WN* wn_workers,
 	{
 		wnVectorsNumExpr = WN_kid0(vectors_length);
 		if((WN_operator(wnVectorsNumExpr) == OPR_INTCONST 
-						&& WN_const_val(wnVectorsNumExpr) > 1 ) 
+						&& WN_const_val(wnVectorsNumExpr) >= 1 ) 
 						|| (WN_operator(wnVectorsNumExpr) != OPR_INTCONST))
 		{
 			WN* wn_vectors_set = Gen_Set_Vector_Num_X(wnVectorsNumExpr);
@@ -1566,7 +1566,7 @@ WN* ACC_Loop_Scheduling_Transformation_Gpu(WN* tree, WN* wn_replace_block)
 	    WN *code_before_pdo = NULL;
 	    if (wn_prev_node) {
 	        // add synchronization to sandwich code before PDO
-	      WN *code_before_pdo = WN_CreateBlock();
+	      code_before_pdo = WN_CreateBlock();
 	      WN_EXTRACT_ItemsFromBlock(wn_region_bdy, wn_first_node, wn_prev_node);
 	      WN_first(code_before_pdo) = wn_first_node;
 	      WN_last(code_before_pdo) = wn_prev_node;

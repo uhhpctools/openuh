@@ -763,10 +763,6 @@ static WN* ACC_Extract_Seq_Loops_Info(WN * tree )
 					 //RID_Delete( Current_Map_Tab, tree );
 					 WN* acc_do_node = WN_first(wn_region_bdy);
 					 //WN* sequential_tmp = NULL;
-					 if(WN_operator(acc_do_node) != OPR_DO_LOOP)
-					 {
-						 Fail_FmtAssertion("ACC DO LOOP Region must include do loop(ACC_Walk_and_Replace_ACC_Loop_Seq)");
-					 }
 					 
 					 WN_prev(wn_region_bdy) = WN_prev(tree);
 					 if(WN_prev(tree))

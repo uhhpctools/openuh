@@ -195,10 +195,11 @@ typedef STACK<WN *> STACK_OF_WN;
   ALIAS_MANAGER *Alias_Mgr;
   REDUCTION_MANAGER *red_manager;
   ARRAY_DIRECTED_GRAPH16 *Array_Dependence_Graph;  // LNO dependence graph
+  ARRAY_DIRECTED_GRAPH16 *Array_DataReuse_Dependence_Graph;  // LNO dependence graph
   INT snl_debug = 0; 
   FILE *STDOUT;
   BOOL Contains_MP = FALSE;
-
+  BOOL Contains_ACC = FALSE;
   BOOL LNO_enabled = TRUE;
 
   PERMUTATION_ARRAYS *Permutation_Arrays;
@@ -810,6 +811,47 @@ BOOL Peel_2D_Triangle_Loops(WN* outer_loop)
   SNL_Rebuild_Access_Arrays(parent_loop);
   
   return TRUE;
+}
+
+static void ACC_Mark_IfCtrl_ACC_Region_Recur(WN* tree, BOOL isInLoop)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+
+  if (tree == NULL)
+    return;
+
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+  if (opr == OPR_IF && isInLoop == TRUE) 
+  {
+  	 WN* wn_loop_src = Enclosing_Do_Loop(tree);
+	 DO_LOOP_INFO *dli_src = Get_Do_Loop_Info(wn_loop_src);
+	 if(dli_src->Is_ACC_Loop)
+	 	dli_src->has_FlowCtrl_InACCLoop = TRUE;
+  }
+  else if(opr == OPR_DO_LOOP)
+  	isInLoop = TRUE;
+  if (op == OPC_BLOCK) 
+  {
+		WN* r = WN_first(tree);
+		while (r) 
+		{ 
+			ACC_Mark_IfCtrl_ACC_Region_Recur (r, isInLoop);
+			r = WN_next(r);
+
+		}
+  }    
+  else 
+  {
+	  for (i=0; i < WN_kid_count(tree); i++)
+	  {
+	      ACC_Mark_IfCtrl_ACC_Region_Recur ( WN_kid(tree, i), isInLoop);
+	  }
+  }
 }
 
 // returns true if any inner loop in wn is fully unrolled.
@@ -1437,7 +1479,21 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
 	  			>> UHACC_ENABLE_LOOP_UNROLLING_OFFLOAD))
 	  	{
 	  		ACC_Fully_Unroll_Short_Loops(func_nd, FALSE, FALSE);
-			Mark_Code(func_nd, FALSE, TRUE);  
+			Mark_Code(func_nd, FALSE, TRUE);
+			ACC_Mark_IfCtrl_ACC_Region_Recur(func_nd, FALSE);
+			//Perform input data dependence analysis	  
+			if((Enable_UHACCFlag>>UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL4)&1 == 1)
+			{
+				BOOL input_graph_is_OK = Build_DataReuse_Array_Dependence_Graph (func_nd);
+				if (!input_graph_is_OK) 
+				goto return_point;
+				//extract the array element reuse here for OpenACC offload region
+				//perform the transformation
+				/////////////////////////////////////////////////////////////////////
+				Array_DataReuse_Dependence_Graph->Erase_Graph();
+				//Array_Dependence_Graph->Reset_Input_Dep();
+				WN_Remove_Delete_Cleanup_Function(LWN_Delete_LNO_dep_graph);
+			}
 	  	}
       Fully_Unroll_Short_Loops(func_nd);
     }
@@ -1492,7 +1548,8 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       }
       goto return_point;
     }
-    else {
+    else {	  	
+	  //then perform original dep analysis
       BOOL graph_is_ok = Build_Array_Dependence_Graph (func_nd);
       Stop_Timer ( T_LNOBuildDep_CU );
       if (!graph_is_ok) 
@@ -1924,11 +1981,11 @@ extern BOOL Build_Array_Dependence_Graph (WN* func_nd) {
  ***********************************************************************/
 extern BOOL Build_DataReuse_Array_Dependence_Graph (WN* func_nd) {
 
-  Array_Dependence_Graph = 
+  Array_DataReuse_Dependence_Graph = 
     CXX_NEW(ARRAY_DIRECTED_GRAPH16(100,500,Array_Dependence_Map,
                                    DEPV_ARRAY_ARRAY_GRAPH), &LNO_default_pool);
-  Array_Dependence_Graph->Set_Input_Dep();
-  BOOL graph_ok=Array_Dependence_Graph->Build(func_nd,&LNO_default_pool);
+  Array_DataReuse_Dependence_Graph->Set_Input_Dep();
+  BOOL graph_ok=Array_DataReuse_Dependence_Graph->Build(func_nd,&LNO_default_pool);
   WB_Set_Sanity_Check_Level(WBC_DU_AND_ARRAY); 
   WN_Register_Delete_Cleanup_Function(LWN_Delete_LNO_dep_graph);
 
@@ -1938,14 +1995,10 @@ extern BOOL Build_DataReuse_Array_Dependence_Graph (WN* func_nd) {
       Get_Trace(TP_LNOPT,TT_LNO_DEP)) {
     fprintf(TFile, "%sLNO dependence graph (before transformation)\n%s",
             DBar, DBar);
-    Array_Dependence_Graph->Print(TFile);
+    Array_DataReuse_Dependence_Graph->Print(TFile);
   }
 
-#ifdef DRAGON
-  if (Dragon_Flag)
-     write_dependence_graph(func_nd);
-#endif
-
+  Array_DataReuse_Dependence_Graph->ACC_SR_Dep_Edge_Prune();
   return TRUE;
 }
 
@@ -2469,6 +2522,10 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     Is_Ivdep = FALSE;
     Is_Concurrent_Call = FALSE;
     Concurrent_Directive = FALSE;
+	acc_lno_looptype = ACC_LNO_LT_NONE;
+	Is_ACC_Loop = FALSE;
+	has_FlowCtrl_InACCLoop = FALSE;
+	has_inner_loop = FALSE;
     No_Fission = FALSE;
     No_Fusion = FALSE; 
     Aggressive_Inner_Fission = FALSE;

@@ -406,6 +406,14 @@ static void Mark_Code(WN *wn, WN *func_nd, DOLOOP_STACK *stack,
   if (opcode == OPC_DO_LOOP) {
     label_stack = CXX_NEW(STACK_OF_WN(&LNO_local_pool),&LNO_local_pool); 
     has_dos = TRUE;
+	//defined by daniel tian for OpenACC scalar replacement
+	WN* wn_outer_doloop = Enclosing_Do_Loop(LWN_Get_Parent(wn));
+	if(wn_outer_doloop)
+	{
+		DO_LOOP_INFO *dli_outer = Get_Do_Loop_Info(wn_outer_doloop);
+		dli_outer->has_inner_loop = TRUE;
+  	}
+	
     dli = (DO_LOOP_INFO *) WN_MAP_Get(LNO_Info_Map,wn);
     if (!dli) {
       dli = (DO_LOOP_INFO *) 
@@ -453,6 +461,55 @@ static void Mark_Code(WN *wn, WN *func_nd, DOLOOP_STACK *stack,
                                  &LNO_default_pool);
       }
     }
+	else if (Is_ACC_Region(wn_region)) {
+      Contains_ACC = TRUE;
+      Patch_Loop_Statements(wn);
+      WN* wn_first_pragma = WN_first(WN_region_pragmas(wn_region));
+	  
+	  if ((WN_opcode(wn_first_pragma) == OPC_PRAGMA
+			|| WN_opcode(wn_first_pragma) == OPC_XPRAGMA) 
+			   && WN_pragma(wn_first_pragma) == WN_PRAGMA_ACC_LOOP_BEGIN)
+	   {
+		 WN* cur_node = wn_first_pragma;
+		 WN* next_node = WN_next(cur_node);
+	  	 ACC_LNO_LOOP_TYPE acc_lno_loop_type = ACC_LNO_LT_NONE;
+	 
+		 while ((cur_node = next_node)) 
+		 {
+			 next_node = WN_next(cur_node);	 
+			 if (((WN_opcode(cur_node) == OPC_PRAGMA) ||
+			  (WN_opcode(cur_node) == OPC_XPRAGMA)) &&
+			 (WN_pragmas[WN_pragma(cur_node)].users & PUSER_ACC)) 
+			 {
+				 switch (WN_pragma(cur_node)) 
+				 {
+	 
+				   	case WN_PRAGMA_ACC_CLAUSE_SEQ:
+					 	acc_lno_loop_type = ACC_LNO_LT_SEQ;
+					 break;  
+ 
+					case WN_PRAGMA_ACC_CLAUSE_GANG:
+						acc_lno_loop_type = ACC_LNO_LT_GANG;
+					break;  
+
+					case WN_PRAGMA_ACC_CLAUSE_WORKER:
+						acc_lno_loop_type = ACC_LNO_LT_WORKER;
+					break;  
+
+					case WN_PRAGMA_ACC_CLAUSE_VECTOR:
+						acc_lno_loop_type = ACC_LNO_LT_VECTOR;
+					break;  
+					 
+				   default:
+					 break;
+				 }
+			 } 
+		  }  
+		 
+	  	  dli->acc_lno_looptype = acc_lno_loop_type;
+		  dli->Is_ACC_Loop = TRUE;
+	   }     
+    }
     depth++;
     INT i;
     for (i=0; i<dlistack->Elements(); i++) {
@@ -472,6 +529,8 @@ static void Mark_Code(WN *wn, WN *func_nd, DOLOOP_STACK *stack,
     } 
     if (Is_Mp_Region(wn)) 
       Contains_MP = TRUE; 
+    if (Is_ACC_Region(wn)) 
+      Contains_ACC = TRUE; 
     for (INT i=0; i<if_stack->Elements(); i++) {
       if_stack->Bottom_nth(i)->Contains_Regions = TRUE;
     }

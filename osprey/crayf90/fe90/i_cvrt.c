@@ -3810,9 +3810,9 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
 			 if(acc_is_offload_region)
-             	fei_exp(basic);
-			 else
              	fei_cuda_exp(basic);			 	
+			 else
+             	fei_exp(basic);
 # endif
              break;
 

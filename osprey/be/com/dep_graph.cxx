@@ -125,6 +125,9 @@ static char *rcs_id = "$Source: be/com/SCCS/s.dep_graph.cxx $ $Revision: 1.7 $";
 using namespace std;
 #endif
 
+#include <map>
+using namespace std;
+
 // return TRUE if any erased vertices.
 static BOOL LNO_Erase_Dg_From_Here_In_X(WN* wn, ARRAY_DIRECTED_GRAPH16* dg)
 {
@@ -1079,7 +1082,7 @@ DOLOOP_STACK *stack, BOOL rebuild, BOOL skip_bad)
     }
   }
 
-  // Now every write vrs every read
+  // Now every read vrs every read
   if (_type == DEPV_ARRAY_ARRAY_GRAPH && _identify_input_dep == TRUE) {
 	  for (i=0; i<reads->Elements(); i++) {
 	    //for (INT j=0; j<reads->Elements(); j++) {
@@ -1766,6 +1769,1236 @@ BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge(WN *ref1, const DOLOOP_STACK *s1,
   return(TRUE);
 }
 
+
+BOOL DataReuseDependenceEdge(ARRAY_DIRECTED_GRAPH16 * adg, EINDEX16 edge, 
+						EINDEX16 *distance, 
+						DIRECTION *direction, BOOL *is_must, BOOL *status)
+{
+  *status=	FALSE;
+
+  if (adg == NULL)
+    return FALSE;
+
+  *status =	TRUE;
+
+  if (edge)
+  {
+    DEP dep = adg->Dep(edge);
+
+    *direction = DEP_Direction(dep);
+
+    *is_must = adg->Is_Must(edge);
+
+    *distance = DEP_IsDistance(dep) ? DEP_Distance(dep) : DEP_DistanceBound(dep);
+
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+typedef enum DEPTYPE_DATA_REUSE
+{
+	DEPTYPE_DATA_REUSE_NONE,
+	DEPTYPE_DATA_REUSE_FLOW,   //flow dependence, also call true dep. READ After WRITE
+	DEPTYPE_DATA_REUSE_INPUT,  //input dep. READ After READ
+	DEPTYPE_DATA_REUSE_ANTI,   //anti dep. WRITE After READ
+	DEPTYPE_DATA_REUSE_OUTPUT, //output dep. WRITE After WRITE
+}DEPTYPE_DATA_REUSE;
+
+
+map<EINDEX16, DEPTYPE_DATA_REUSE> dep_edge_types;
+map<VINDEX16, BOOL> acc_generator_vertices;
+map<VINDEX16, BOOL> acc_is_visit_vertices;
+
+//max iteration and respective vertex
+typedef struct max_distance_info
+{
+	INT32 distance;
+	VINDEX16 v_id;
+}max_distance_info;
+map<VINDEX16, max_distance_info> acc_largest_dep_dis;
+
+typedef struct acc_name_partition
+{
+	map<VINDEX16, BOOL> acc_name_set;
+}acc_name_partition;
+
+//name partition is classified by vertex id.
+map<VINDEX16, acc_name_partition> acc_gen_partition;
+
+static WN* ACC_Walk_Replace_LDID_Recur(WN* tree, ST* st_name, WN* wn_lbound)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  ST *old_sym;
+
+  /* Ignore NULL subtrees. */
+
+  if (tree == NULL)
+    return (tree);
+
+  /* Initialization. */
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+  /* Look for and replace any nodes referencing localized symbols */
+  if (opr == OPR_LDID) 
+  {
+    old_sym = WN_st(tree);
+	if(old_sym == st_name)
+	{
+		WN* new_kid = NULL;
+		if(WN_rtype(wn_lbound) != WN_rtype(tree))
+		{
+			TYPE_ID from = WN_rtype(wn_lbound);
+			TYPE_ID to = WN_rtype(tree);
+			WN* wn_new_value = WN_COPY_Tree(wn_lbound);
+			new_kid = WN_CreateExp1(OPCODE_make_op(OPR_CVT, from, to), wn_new_value);
+		}
+		else
+			new_kid = WN_COPY_Tree(wn_lbound);
+		return WN_COPY_Tree(new_kid);
+	}
+	else 
+		return tree;
+  }
+  for (i=0; i < WN_kid_count(tree); i++)
+  {
+      WN_kid(tree, i) = ACC_Walk_Replace_LDID_Recur ( WN_kid(tree, i), st_name, wn_lbound);
+  }
+  return (tree);
+}
+
+static BOOL ACC_Locate_Loop_Index_Dim_Recur(WN* tree, ST* st_name)
+{
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  ST *old_sym;
+
+  /* Ignore NULL subtrees. */
+
+  if (tree == NULL)
+    return (FALSE);
+
+  /* Initialization. */
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+  /* Look for and replace any nodes referencing localized symbols */
+  if (opr == OPR_LDID) 
+  {
+    old_sym = WN_st(tree);
+	if(old_sym == st_name)
+	{
+		return TRUE;
+	}
+	else 
+		return FALSE;
+  }
+  for (i=0; i < WN_kid_count(tree); i++)
+  {
+      BOOL bFound = ACC_Locate_Loop_Index_Dim_Recur ( WN_kid(tree, i), st_name);
+	  if(bFound == TRUE)
+	  	return TRUE;
+  }
+  return (FALSE);
+}
+
+static void ACC_Locate_Loop_Index_Dim(WN* tree, ST* st_name, vector<INT32>* pvector_dims)
+{
+	INT32 idim_num = WN_num_dim(tree);
+	INT32 i;
+	for(i=0; i<idim_num; i++)
+	{
+		WN* wn_index_exp = WN_array_index(tree,i);
+		if(ACC_Locate_Loop_Index_Dim_Recur(wn_index_exp, st_name) == TRUE)
+			pvector_dims->push_back(i);
+	}
+}
+
+static WN* ACC_Walk_Replace_LDID(WN* tree, ST* st_name, WN* wn_lbound, INT32 ioffset)
+{	
+  OPCODE op;
+  OPERATOR opr;
+  INT32 i;
+  ST *old_sym;
+  vector<INT32> vector_dims;
+  vector_dims.clear();
+
+  op = WN_opcode(tree);
+  opr = OPCODE_operator(op);
+
+  /* Ignore NULL subtrees. */
+  Is_True(opr == OPR_ARRAY, ("tree must be ARRAY operator.\n"));
+
+  if (tree == NULL)
+    return (tree);
+  ACC_Locate_Loop_Index_Dim(tree, st_name, &vector_dims);
+  tree = ACC_Walk_Replace_LDID_Recur(tree, st_name, wn_lbound);
+
+  for(i=0; i<vector_dims.size(); i++)
+  {
+  	INT32 idim = vector_dims[i];
+	WN* wn_old_index = WN_array_index(tree, idim);
+	WN* wn_new_index = NULL;
+	OPERATOR opr_index = OPR_ADD;
+	if(ioffset<0)
+	{
+		ioffset = -ioffset;
+		opr_index = OPR_SUB;
+	}
+	WN* wn_index_offset	= WN_Intconst(WN_rtype(wn_old_index), ioffset);
+	wn_new_index = WN_Binary(opr_index, WN_rtype(wn_index_offset), wn_old_index, wn_index_offset);
+	WN_array_index(tree, idim) = wn_new_index;
+  }  
+  return (tree);
+}
+
+//handle the i-- mode
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Partition_Trans_Minus(VINDEX16 NIndex)
+{
+	acc_name_partition acc_vertex_partition;
+  	acc_vertex_partition = acc_gen_partition[NIndex];
+	map<VINDEX16, BOOL> acc_name_set = acc_vertex_partition.acc_name_set;
+	vector<ST*> vector_temp_list;
+	//find the iteration spanned by the set of this name partition : dep dist + 1
+	INT32 ispanned_iter = acc_largest_dep_dis[NIndex].distance + 1;
+	//ST* st_array_base = NULL;
+	WN * wn_generator = Get_Wn(NIndex);
+	WN * wn_loop_src = Enclosing_Do_Loop(wn_generator);
+	WN * wn_index = WN_index(wn_loop_src);
+	WN * wn_upper_bound = WN_end(wn_loop_src);
+	WN* wn_lbound = WN_start(wn_loop_src);
+	//wn_index must be INAME OPR
+	ST* st_loop_iname = WN_st(wn_index);
+	WN* wn_addr1 = (OPCODE_is_store(WN_opcode(wn_generator)) ? 
+								(WN_kid1(wn_generator)) : (WN_kid0(wn_generator)));
+	WN *wn_base = WN_array_base(wn_addr1);
+	ST *st_array_base = Get_ST_Base(wn_base);
+	if(st_array_base == NULL)
+                 st_array_base = WN_st(wn_base);
+	char sz_temp_name[256];
+	TYPE_ID array_type = WN_desc(wn_generator);
+	int i=0;
+	//create do loop stack
+	DOLOOP_STACK dostack(&LNO_local_pool);
+	Build_Doloop_Stack(LWN_Get_Parent(wn_generator), &dostack);
+
+	//find the upbound value, we only take care of "i++" loop
+	WN* wn_real_bound = NULL;
+	if (WN_operator(WN_end(wn_loop_src)) == OPR_GT)
+	{
+		wn_real_bound = WN_COPY_Tree(WN_kid1(wn_upper_bound));
+		wn_upper_bound = WN_Binary(OPR_ADD, WN_rtype(wn_real_bound), wn_real_bound, 
+							WN_Intconst(WN_rtype(wn_real_bound), 1));
+	}
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_GE)
+		wn_upper_bound = WN_COPY_Tree(WN_kid1(wn_upper_bound));
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_LT)
+	{
+		wn_real_bound = WN_COPY_Tree(WN_kid0(wn_upper_bound));
+		wn_upper_bound = WN_Binary(OPR_ADD, WN_rtype(wn_real_bound), wn_real_bound, 
+							WN_Intconst(WN_rtype(wn_real_bound), 1));
+	}
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_LE)
+		wn_upper_bound = WN_COPY_Tree(WN_kid0(wn_upper_bound));
+	//find the low bound
+	wn_lbound = WN_COPY_Tree(WN_kid0(wn_lbound));
+	//Step 1: create the number of "ispanned_iter" temp variables	
+	for(i=0; i<ispanned_iter; i++)
+	{		
+		ST* st_temp_name = NULL;
+		sprintf(sz_temp_name, "__acc_sr_tmp_%s_%d_%d", ST_name(st_array_base), NIndex, i);
+		st_temp_name = New_ST( CURRENT_SYMTAB );
+		ST_Init(st_temp_name,
+				Save_Str( sz_temp_name ),
+				CLASS_VAR,
+				SCLASS_FORMAL,
+				EXPORT_LOCAL,
+				MTYPE_To_TY(array_type));
+		vector_temp_list.push_back(st_temp_name);
+	}
+	//step 2: get the array index expession of the generator
+	//we always assume the loop is i++. The i-- loop can be canonically transformed into i++
+	//WN* wn_index_src = WN_array_index(wn_addr1, iarray_index_dim);
+	//the parent whirl node which includes this loop node
+	WN* wn_loop_parent = LWN_Get_Parent(wn_loop_src);
+	WN* wn_acc_seq_loop_region = LWN_Get_Parent(wn_loop_parent);
+	WN* wn_acc_seq_loop_region_parent = LWN_Get_Parent(wn_acc_seq_loop_region);
+	//the loop body node in the loop
+	WN* wn_loop_body = WN_do_body(wn_loop_src);
+	INT32 var_length = vector_temp_list.size();
+	//step 3: traverse each array reference in the name partition
+	map<VINDEX16, BOOL>::iterator name_iter = acc_name_set.begin();
+	for(; name_iter != acc_name_set.end(); name_iter++)
+	{
+		//in this phase, we insert new statements
+		VINDEX16 v1 = name_iter->first;
+		BOOL bBelong = name_iter->second;
+		WN *wn_vertex = Get_Wn(v1);
+		INT32 istore_count = 0;
+		vector<VINDEX16> v1_output_sinks;
+		v1_output_sinks.clear();
+
+		//TODO: traverse the name partition, replace the array reference 
+		//with scalar variables with flow dep connection
+		if(OPCODE_is_store(WN_opcode(wn_vertex)))
+		{								
+			//check if it is assignment statement, then perform necessary operations
+			for (EINDEX16 e1 = Get_Out_Edge(v1); e1; e1 = Get_Next_Out_Edge(e1))
+			{
+				if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_OUTPUT)
+				{
+					VINDEX16 sink1 = Get_Sink(e1);
+					v1_output_sinks.push_back(sink1);
+				}
+			}
+			
+			istore_count = v1_output_sinks.size();
+			//this is the generator
+			//if there is no output dependence to another assigned reference
+			if(v1_output_sinks.empty())
+			{				
+				WN* wn_new_assignment = LWN_Copy_Tree(wn_vertex, TRUE, LNO_Info_Map);
+				ST* st_temp = vector_temp_list.front();
+				WN* wn_value = WN_Ldid(TY_mtype(ST_type(st_temp)), 
+									0, st_temp, ST_type(st_temp));
+				WN_kid0(wn_new_assignment) = wn_value;
+				WN* wn_new_assign_parent = LWN_Get_Parent(wn_vertex);
+				//LWN_Parentize(wn_new_assignment);
+				//this "wn_new_assignment" is inserted right after "wn_vertex" statement						
+				LWN_Insert_Block_After(wn_new_assign_parent, wn_vertex, wn_new_assignment);
+			}
+			//if there is an output dependences
+			else
+			{
+				VINDEX16 sink1 = v1_output_sinks.back();
+				v1_output_sinks.pop_back();
+				EINDEX16 e_output = Get_Edge(NIndex, sink1);
+				DEPV_ARRAY * pDepv_array = Depv_Array(e_output);
+				INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+				INT32 idep_dist = distance;
+				Is_True(idep_dist >= 0,    
+							("dependence distance must be larger or equal than 0.\n"));
+				
+				//perform a[N + dep distance] = temp 
+				for(i=1; i<=idep_dist; i++)
+				{
+					TYPE_ID opr_type_id = WN_rtype(WN_array_index(wn_addr1, 0));
+					//offset from small to large
+					WN* wn_addr3 = ACC_Walk_Replace_LDID(WN_COPY_Tree(wn_addr1), 
+															st_loop_iname, wn_upper_bound, (i));			
+					ST* st_temp = vector_temp_list[i];
+					WN* wn_value = WN_Ldid(TY_mtype(ST_type(st_temp)), 
+											0, st_temp, ST_type(st_temp));
+					WN* wn_new_assignment = WN_Istore(array_type, 0, 
+									Make_Pointer_Type(MTYPE_To_TY(array_type)), wn_addr3, wn_value);
+					LNO_Build_Access(wn_addr3, &dostack, &LNO_default_pool);
+					//insert this "wn_new_assignment" right after the loop
+					//TO DO
+					LWN_Insert_Block_After(wn_acc_seq_loop_region_parent, 
+											wn_acc_seq_loop_region, wn_new_assignment);
+				}
+			}
+		}	
+		//if it is input dep generator
+		else if(OPCODE_is_load(WN_opcode(wn_vertex)) && v1 == NIndex)
+		{
+			//if it is empty
+			if(v1_output_sinks.empty())
+			{				
+				WN* wn_new_iload = WN_COPY_Tree(wn_vertex);
+				ST* st_temp = vector_temp_list.front();
+				WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_temp)), 0, 
+												st_temp, ST_type(st_temp), wn_new_iload);
+				
+				LNO_Build_Access(wn_new_iload, &dostack, &LNO_default_pool);
+				//this "wn_new_assignment" is inserted right after "wn_vertex" statement	
+				WN_INSERT_BlockFirst(wn_loop_body,  wn_st_temp);
+			}
+		}
+	}
+
+	//step 4: insert load reference statement into temporary scalar variables before the beginning of the loop
+	//init_block
+	INT32 idep_dist = ispanned_iter-1;
+	//WN* wn_init_blk = WN_CreateBlock();
+	//WN* wn_init_blk_last = wn_acc_seq_loop_region;
+	for(i=idep_dist; i>0; i--)
+	{
+		WN* wn_new_tree = ACC_Walk_Replace_LDID(WN_COPY_Tree(wn_addr1), st_loop_iname, 
+													wn_lbound, i);
+		//create iload
+		ST* st_temp = vector_temp_list[i];
+		
+		WN* wn_iload_stmt = WN_Iload(TY_mtype(ST_type(st_temp)), 0,  
+												ST_type(st_temp), wn_new_tree);
+		LNO_Build_Access(wn_iload_stmt, &dostack, &LNO_default_pool);
+		WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_temp)), 0, 
+												st_temp, ST_type(st_temp), wn_iload_stmt);
+		
+		LWN_Insert_Block_Before(wn_acc_seq_loop_region_parent, 
+									wn_acc_seq_loop_region, wn_st_temp);		
+		//WN_INSERT_BlockLast(wn_init_blk,  wn_st_temp);
+	}	
+
+	//step 5: insert the scalar data exchange just before the end of the loop	
+	//WN* wn_exch_var_blk = WN_CreateBlock();
+	for(i=idep_dist; i>0; i--)
+	{
+		//create assignment statement
+		ST* st_temp0 = vector_temp_list[i];
+		
+		ST* st_temp1 = vector_temp_list[i-1];
+		WN* wn_ld_temp1 = WN_Ldid(TY_mtype(ST_type(st_temp1)), 
+					0, st_temp1, ST_type(st_temp1));
+		WN* wn_st_temp0 = WN_Stid(TY_mtype(ST_type(st_temp0)), 0, 
+				st_temp0, ST_type(st_temp0), wn_ld_temp1);
+		WN_INSERT_BlockLast(wn_loop_body,  wn_st_temp0);
+	}
+	//LWN_Parentize(wn_exch_var_blk);
+	//WN_INSERT_BlockLast(wn_loop_body, wn_exch_var_blk);
+	//LWN_Set_Parent(wn_exch_var_blk, wn_loop_body);	
+	//previous steps do not change any original statement. 
+	//but in the step 6, the original statement will be changed
+	//basically, the array references will be replaced with the respective scalar variables.
+	//step 6 : replace all of this array reference with the scalar variables
+	name_iter = acc_name_set.begin();
+	for(; name_iter != acc_name_set.end(); name_iter++)
+	{
+		VINDEX16 v1 = name_iter->first;
+		BOOL bBelong = name_iter->second;
+		WN *wn_vertex = Get_Wn(v1);
+		ST* st_tmp_scalar = NULL;
+		INT32 var_length = vector_temp_list.size();
+		if(v1 == NIndex)
+		{
+			st_tmp_scalar = vector_temp_list.front();
+		}
+		else
+		{
+			EINDEX16 e_dep = Get_Edge(NIndex, v1);
+			DEPV_ARRAY * pDepv_array = Depv_Array(e_dep);
+			INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+			//the reference which has the largest dep distance with generator is in scalar var "t0"
+			st_tmp_scalar = vector_temp_list[distance];
+		}
+				
+		if(OPCODE_is_store(WN_opcode(wn_vertex)))
+		{
+			//it is store
+			//WN* wn_st_value = WN_COPY_Tree(WN_kid0(wn_vertex));
+			//we cannot use the COPY TREE operation,
+			//because some vertex may exist in the kid0.
+			//if we use the COPY Tree, the dep edge link will be broken.
+			WN* wn_st_value = WN_kid0(wn_vertex);
+			WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_tmp_scalar)), 0, 
+												st_tmp_scalar, ST_type(st_tmp_scalar), wn_st_value);
+			WN* wn_new_assign_parent = LWN_Get_Parent(wn_vertex);
+			//LWN_Parentize(wn_st_temp);					
+			LWN_Insert_Block_After(wn_new_assign_parent, wn_vertex, wn_st_temp);
+			//extract the original
+			LWN_Extract_From_Block(wn_new_assign_parent, wn_vertex);
+		}
+		else  
+		{
+			//it is load
+			WN* wn_ld_parent = LWN_Get_Parent(wn_vertex);
+			INT kidno=0;
+	  		while (WN_kid(wn_ld_parent, kidno) != wn_vertex) kidno++;
+			WN* wn_ld_temp1 = WN_Ldid(TY_mtype(ST_type(st_tmp_scalar)), 
+					0, st_tmp_scalar, ST_type(st_tmp_scalar));
+			WN_kid(wn_ld_parent, kidno) = wn_ld_temp1;
+			//LWN_Set_Parent(wn_ld_temp1, wn_ld_parent);	
+		}
+	}
+	//update the whole tree map
+	LWN_Parentize(wn_acc_seq_loop_region_parent);
+	//deal the def-use chain. unfinished yet
+}
+
+//handle the i++ mode
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Partition_Trans_Plus(VINDEX16 NIndex)
+{
+	acc_name_partition acc_vertex_partition;
+  	acc_vertex_partition = acc_gen_partition[NIndex];
+	map<VINDEX16, BOOL> acc_name_set = acc_vertex_partition.acc_name_set;
+	vector<ST*> vector_temp_list;
+	//find the iteration spanned by the set of this name partition : dep dist + 1
+	INT32 ispanned_iter = acc_largest_dep_dis[NIndex].distance + 1;
+	//ST* st_array_base = NULL;
+	WN * wn_generator = Get_Wn(NIndex);
+	WN * wn_loop_src = Enclosing_Do_Loop(wn_generator);
+	WN * wn_index = WN_index(wn_loop_src);
+	WN * wn_upper_bound = WN_end(wn_loop_src);
+	WN* wn_lbound = WN_start(wn_loop_src);
+	//wn_index must be INAME OPR
+	ST* st_loop_iname = WN_st(wn_index);
+	WN* wn_addr1 = (OPCODE_is_store(WN_opcode(wn_generator)) ? 
+								(WN_kid1(wn_generator)) : (WN_kid0(wn_generator)));
+	WN *wn_base = WN_array_base(wn_addr1);
+	ST *st_array_base = Get_ST_Base(wn_base);
+	if(st_array_base == NULL)
+		st_array_base = WN_st(wn_base);
+	char sz_temp_name[256];
+	TYPE_ID array_type = WN_desc(wn_generator);
+	int i=0;
+	//create do loop stack
+	DOLOOP_STACK dostack(&LNO_local_pool);
+    Build_Doloop_Stack(LWN_Get_Parent(wn_generator), &dostack);
+
+	//find the upbound value, we only take care of "i++" loop
+	WN* wn_real_bound = NULL;
+	if (WN_operator(WN_end(wn_loop_src)) == OPR_GT)
+	{
+		wn_real_bound = WN_COPY_Tree(WN_kid0(wn_upper_bound));
+		wn_upper_bound = WN_Binary(OPR_SUB, WN_rtype(wn_real_bound), wn_real_bound, 
+							WN_Intconst(WN_rtype(wn_real_bound), 1));
+	}
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_GE)
+		wn_upper_bound = WN_COPY_Tree(WN_kid0(wn_upper_bound));
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_LT)
+	{
+		wn_real_bound = WN_COPY_Tree(WN_kid1(wn_upper_bound));
+		wn_upper_bound = WN_Binary(OPR_SUB, WN_rtype(wn_real_bound), wn_real_bound, 
+							WN_Intconst(WN_rtype(wn_real_bound), 1));
+	}
+	else if(WN_operator(WN_end(wn_loop_src)) == OPR_LE)
+		wn_upper_bound = WN_COPY_Tree(WN_kid1(wn_upper_bound));
+	//find the low bound
+	wn_lbound = WN_COPY_Tree(WN_kid0(wn_lbound));
+	//Step 1: create the number of "ispanned_iter" temp variables	
+	for(i=0; i<ispanned_iter; i++)
+	{		
+		ST* st_temp_name = NULL;
+		sprintf(sz_temp_name, "__acc_sr_tmp_%s_%d_%d", ST_name(st_array_base), NIndex, i);
+		st_temp_name = New_ST( CURRENT_SYMTAB );
+		ST_Init(st_temp_name,
+				Save_Str( sz_temp_name ),
+				CLASS_VAR,
+				SCLASS_FORMAL,
+				EXPORT_LOCAL,
+				MTYPE_To_TY(array_type));
+		vector_temp_list.push_back(st_temp_name);
+	}
+	//step 2: get the array index expession of the generator
+	//we always assume the loop is i++. The i-- loop can be canonically transformed into i++
+	//WN* wn_index_src = WN_array_index(wn_addr1, iarray_index_dim);
+	//the parent whirl node which includes this loop node
+	WN* wn_loop_parent = LWN_Get_Parent(wn_loop_src);
+	WN* wn_acc_seq_loop_region = LWN_Get_Parent(wn_loop_parent);
+	WN* wn_acc_seq_loop_region_parent = LWN_Get_Parent(wn_acc_seq_loop_region);
+	//the loop body node in the loop
+	WN* wn_loop_body = WN_do_body(wn_loop_src);
+	INT32 var_length = vector_temp_list.size();
+	//step 3: traverse each array reference in the name partition
+	map<VINDEX16, BOOL>::iterator name_iter = acc_name_set.begin();
+	for(; name_iter != acc_name_set.end(); name_iter++)
+	{
+		//in this phase, we insert new statements
+		VINDEX16 v1 = name_iter->first;
+		BOOL bBelong = name_iter->second;
+		WN *wn_vertex = Get_Wn(v1);
+		INT32 istore_count = 0;
+		vector<VINDEX16> v1_output_sinks;
+		v1_output_sinks.clear();
+
+		//TODO: traverse the name partition, replace the array reference 
+		//with scalar variables with flow dep connection
+		if(OPCODE_is_store(WN_opcode(wn_vertex)))
+		{								
+			//check if it is assignment statement, then perform necessary operations
+			for (EINDEX16 e1 = Get_Out_Edge(v1); e1; e1 = Get_Next_Out_Edge(e1))
+			{
+				if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_OUTPUT)
+				{
+					VINDEX16 sink1 = Get_Sink(e1);
+					v1_output_sinks.push_back(sink1);
+				}
+			}
+			
+			istore_count = v1_output_sinks.size();
+			//this is the generator
+			//if there is no output dependence to another assigned reference
+			if(v1_output_sinks.empty())
+			{				
+				WN* wn_new_assignment = LWN_Copy_Tree(wn_vertex, TRUE, LNO_Info_Map);
+				ST* st_temp = vector_temp_list.back();
+				WN* wn_value = WN_Ldid(TY_mtype(ST_type(st_temp)), 
+									0, st_temp, ST_type(st_temp));
+				WN_kid0(wn_new_assignment) = wn_value;
+				WN* wn_new_assign_parent = LWN_Get_Parent(wn_vertex);
+				//LWN_Parentize(wn_new_assignment);
+				//this "wn_new_assignment" is inserted right after "wn_vertex" statement						
+				LWN_Insert_Block_After(wn_new_assign_parent, wn_vertex, wn_new_assignment);
+				//LWN_Set_Parent(wn_new_assignment, wn_new_assign_parent);
+			}
+			//if there is an output dependences
+			else
+			{
+				VINDEX16 sink1 = v1_output_sinks.back();
+				v1_output_sinks.pop_back();
+				EINDEX16 e_output = Get_Edge(NIndex, sink1);
+				DEPV_ARRAY * pDepv_array = Depv_Array(e_output);
+				INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+				//WN* wn_dep_offset = WN_Intconst(WN_rtype(WN_array_index(wn_addr1, 0)), distance);
+				//WN_Binary(OPR_SUB, WN_desc(wn_index_sink), 
+				//						wn_index_src, wn_index_sink);
+				//this offset must be a constant value, or make the compiler crash
+				//Is_True(WN_operator(wn_dep_offset)==OPR_INTCONST,    
+				//			("Dependence distance must be a constant value.\n"));
+				INT32 idep_dist = distance;
+				Is_True(idep_dist >= 0,    
+							("dependence distance must be larger or equal than 0.\n"));
+				
+				//perform a[N + dep distance] = temp 
+				for(i=idep_dist-1; i>=0; i--)
+				{
+					TYPE_ID opr_type_id = WN_rtype(WN_array_index(wn_addr1, 0));
+					//offset from small to large
+					WN* wn_addr3 = ACC_Walk_Replace_LDID(WN_COPY_Tree(wn_addr1), 
+															st_loop_iname, wn_upper_bound, -(i));			
+					ST* st_temp = vector_temp_list[var_length-(i+1)];
+					WN* wn_value = WN_Ldid(TY_mtype(ST_type(st_temp)), 
+											0, st_temp, ST_type(st_temp));
+					WN* wn_new_assignment = WN_Istore(array_type, 0, 
+									Make_Pointer_Type(MTYPE_To_TY(array_type)), wn_addr3, wn_value);
+					LNO_Build_Access(wn_addr3, &dostack, &LNO_default_pool);
+					//LWN_Parentize(wn_new_assignment);
+					//insert this "wn_new_assignment" right after the loop
+					//TO DO
+					LWN_Insert_Block_After(wn_acc_seq_loop_region_parent, 
+											wn_acc_seq_loop_region, wn_new_assignment);
+				}
+			}
+		}	
+		//if it is input dep generator
+		else if(OPCODE_is_load(WN_opcode(wn_vertex)) && v1 == NIndex)
+		{
+			//if it is empty
+			if(v1_output_sinks.empty())
+			{				
+				WN* wn_new_iload = WN_COPY_Tree(wn_vertex);
+				ST* st_temp = vector_temp_list.back();
+				WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_temp)), 0, 
+												st_temp, ST_type(st_temp), wn_new_iload);
+				
+				LNO_Build_Access(wn_new_iload, &dostack, &LNO_default_pool);
+				//this "wn_new_assignment" is inserted right after "wn_vertex" statement	
+				WN_INSERT_BlockFirst(wn_loop_body,  wn_st_temp);
+			}
+		}
+	}
+
+	//step 4: insert load reference statement into temporary scalar variables before the beginning of the loop
+	//init_block
+	INT32 idep_dist = ispanned_iter-1;
+	for(i=idep_dist; i>0; i--)
+	{
+		WN* wn_new_tree = ACC_Walk_Replace_LDID(WN_COPY_Tree(wn_addr1), st_loop_iname, 
+													wn_lbound, -i);
+		//create iload
+		ST* st_temp = vector_temp_list[var_length - (i+1)];
+		
+		WN* wn_iload_stmt = WN_Iload(TY_mtype(ST_type(st_temp)), 0,  
+												ST_type(st_temp), wn_new_tree);
+		LNO_Build_Access(wn_iload_stmt, &dostack, &LNO_default_pool);
+		WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_temp)), 0, 
+												st_temp, ST_type(st_temp), wn_iload_stmt);
+		
+		LWN_Insert_Block_Before(wn_loop_parent, wn_loop_src, wn_st_temp);		
+		//WN_INSERT_BlockLast(wn_init_blk,  wn_st_temp);
+	}	
+
+	//step 5: insert the scalar data exchange just before the end of the loop	
+	//WN* wn_exch_var_blk = WN_CreateBlock();
+	for(i=0; i<ispanned_iter-1; i++)
+	{
+		//create assignment statement
+		ST* st_temp0 = vector_temp_list[i];
+		
+		ST* st_temp1 = vector_temp_list[i+1];
+		WN* wn_ld_temp1 = WN_Ldid(TY_mtype(ST_type(st_temp1)), 
+					0, st_temp1, ST_type(st_temp1));
+		WN* wn_st_temp0 = WN_Stid(TY_mtype(ST_type(st_temp0)), 0, 
+				st_temp0, ST_type(st_temp0), wn_ld_temp1);
+		WN_INSERT_BlockLast(wn_loop_body,  wn_st_temp0);
+	}
+	//LWN_Parentize(wn_exch_var_blk);
+	//WN_INSERT_BlockLast(wn_loop_body, wn_exch_var_blk);
+	//LWN_Set_Parent(wn_exch_var_blk, wn_loop_body);	
+	//previous steps do not change any original statement. 
+	//but in the step 6, the original statement will be changed
+	//basically, the array references will be replaced with the respective scalar variables.
+	//step 6 : replace all of this array reference with the scalar variables
+	name_iter = acc_name_set.begin();
+	for(; name_iter != acc_name_set.end(); name_iter++)
+	{
+		VINDEX16 v1 = name_iter->first;
+		BOOL bBelong = name_iter->second;
+		WN *wn_vertex = Get_Wn(v1);
+		ST* st_tmp_scalar = NULL;
+		INT32 var_length = vector_temp_list.size();
+		if(v1 == NIndex)
+		{
+			st_tmp_scalar = vector_temp_list.back();
+		}
+		else
+		{
+			EINDEX16 e_dep = Get_Edge(NIndex, v1);
+			DEPV_ARRAY * pDepv_array = Depv_Array(e_dep);
+			INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+			//the reference which has the largest dep distance with generator is in scalar var "t0"
+			st_tmp_scalar = vector_temp_list[var_length - (distance+1)];
+		}
+				
+		if(OPCODE_is_store(WN_opcode(wn_vertex)))
+		{
+			//it is store
+			//WN* wn_st_value = WN_COPY_Tree(WN_kid0(wn_vertex));
+			//we cannot use the COPY TREE operation,
+			//because some vertex may exist in the kid0.
+			//if we use the COPY Tree, the dep edge link will be broken.
+			WN* wn_st_value = WN_kid0(wn_vertex);
+			WN* wn_st_temp = WN_Stid(TY_mtype(ST_type(st_tmp_scalar)), 0, 
+												st_tmp_scalar, ST_type(st_tmp_scalar), wn_st_value);
+			WN* wn_new_assign_parent = LWN_Get_Parent(wn_vertex);
+			//LWN_Parentize(wn_st_temp);					
+			LWN_Insert_Block_After(wn_new_assign_parent, wn_vertex, wn_st_temp);
+			//extract the original
+			LWN_Extract_From_Block(wn_new_assign_parent, wn_vertex);
+		}
+		else  
+		{
+			//it is load
+			WN* wn_ld_parent = LWN_Get_Parent(wn_vertex);
+			INT kidno=0;
+	  		while (WN_kid(wn_ld_parent, kidno) != wn_vertex) kidno++;
+			WN* wn_ld_temp1 = WN_Ldid(TY_mtype(ST_type(st_tmp_scalar)), 
+					0, st_tmp_scalar, ST_type(st_tmp_scalar));
+			WN_kid(wn_ld_parent, kidno) = wn_ld_temp1;
+			//LWN_Set_Parent(wn_ld_temp1, wn_ld_parent);	
+		}
+	}
+	//update the whole tree map
+	LWN_Parentize(wn_acc_seq_loop_region_parent);
+	//deal the def-use chain. unfinished yet
+}
+
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Partition_Trans(VINDEX16 NIndex)
+{
+	WN * wn_generator = Get_Wn(NIndex);
+	WN * wn_loop_src = Enclosing_Do_Loop(wn_generator);
+	DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn_loop_src);
+	if(dli->Is_Acc_Loop_Backward)
+	{
+		ACC_SR_Partition_Trans_Minus(NIndex);
+	}
+	else		
+		ACC_SR_Partition_Trans_Plus(NIndex);
+}
+
+//pseudo
+//procedure DFS-iterative(G,v):
+//let S be a stack
+//S.push(v)
+//while S is not empty
+//			  v = S.pop()
+//			  if v is not labeled as discovered:
+//				 label v as discovered
+//				 for all edges from v to w in G.adjacentEdges(v) do
+//					 S.push(w)
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_DFS(VINDEX16 vgen)
+{
+	acc_name_partition acc_vertex_partition;
+	vector<VINDEX16> trace_stack;
+	trace_stack.push_back(vgen);
+	acc_vertex_partition.acc_name_set[vgen] = TRUE;
+	while(trace_stack.size() > 0)
+	{		
+		//Phases 3 : name partition : Find name partitions and eliminate input dependences. 
+		//Starting at each generator, mark each reference reachable from the generator 
+		//by a flow or input dependence as part of the name partition for that variable. 
+		//A name partition is a set of references that can be replaced by a reference to a single scalar variable.		
+		VINDEX16 v1 = trace_stack.back();
+		trace_stack.pop_back();
+		if(acc_is_visit_vertices[v1] == 0)
+		{
+			acc_is_visit_vertices[v1] = vgen;
+		}
+		else if(acc_is_visit_vertices[v1] == vgen)
+		{
+			//printf("vertex %d was accessed more than one time in the same partition.\n", v1);
+		}
+		else 
+			printf("This should not happen. The vertex %d cannot belong more than on partition.\n", v1);
+			
+		
+		EINDEX16 e_next;
+		for (EINDEX16 e1 = Get_Out_Edge(v1); e1; e1 = e_next)
+	  	{
+			e_next = Get_Next_Out_Edge(e1);
+	  		if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_FLOW 
+					|| dep_edge_types[e1] == DEPTYPE_DATA_REUSE_INPUT)
+	  		{    			
+     			VINDEX16 vsink = Get_Sink(e1);
+				VINDEX16 vsrc = Get_Source(e1);
+	  			trace_stack.push_back(vsink);				
+				acc_vertex_partition.acc_name_set[vsink] = TRUE;
+
+				//remove the useless input dependences between two elements of the same name partition
+				//Any input dependences between two elements of the same name partition may be eliminated unless 
+				//the source of the dependence is the generator itself. 
+				if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_INPUT
+					&& acc_generator_vertices[v1] == FALSE)
+					Remove_Edge(e1);
+
+				//from generator, find the largest dep distance in this partition
+				else if(acc_generator_vertices[v1] == TRUE)
+				{
+				   DEPV_ARRAY * pDepv_array = Depv_Array(e1);
+				   INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+				   if(acc_largest_dep_dis[v1].distance < distance)
+				   {
+				   		acc_largest_dep_dis[v1].distance = distance;
+						acc_largest_dep_dis[v1].v_id = vsink;
+				   }
+				}
+					
+	  		}
+	  	}
+	}
+	acc_gen_partition[vgen] = acc_vertex_partition;
+}
+
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Phase1_Prune_Edge()
+{
+  EINDEX16 e;
+  EINDEX16 e_next;
+  //Prune the edge using the algorithm proposed in the Ken Kennedy's book chap 8.3
+  for(e= Get_Edge(); e; e = e_next) 
+  {
+  	 e_next = Get_Next_Edge(e);
+	 BOOL bNeedPruned = FALSE;
+     VINDEX16 sink = Get_Sink(e);
+     VINDEX16 src = Get_Source(e);
+	 //sixth, now it is time to prune the edge
+	 //phase 1.1 : if the dependence to be pruned is a flow dependence, 
+	 //a killing store can be identified by the existence of an output dependence from 
+	 //the source of the dependence to an assignment from which there is a flow dependence 
+	 //to the sink of the dependence.
+	 if(dep_edge_types[e] == DEPTYPE_DATA_REUSE_FLOW)
+ 	 {
+ 	 	//find the output dep edges from the source of FLOW DEP edge
+ 	 	for (EINDEX16 e1 = Get_Out_Edge(src); e1; e1 = Get_Next_Out_Edge(e1)) 
+ 		{
+ 			if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_OUTPUT)
+			{
+				VINDEX16 sink1 = Get_Sink(e1);
+				//find the flow edge to the sink of the e
+				for (EINDEX16 e2 = Get_Out_Edge(sink1); e2; e2 = Get_Next_Out_Edge(e2)) 
+				{
+					if(dep_edge_types[e2] == DEPTYPE_DATA_REUSE_FLOW && Get_Sink(e2) == sink)
+					{
+						bNeedPruned = TRUE;
+						break;
+					}
+				}
+			}
+			if(bNeedPruned == TRUE)
+				break;
+ 		}
+ 	 } 
+	 //phase 1.2 : if the dependence to be pruned is an input dependence killed by a store in the loop, 
+	 //it will have an anti-dependence from the source to the assignment from which there is a flow 
+	 //dependence to the sink.
+	 else if(dep_edge_types[e] == DEPTYPE_DATA_REUSE_INPUT)
+ 	 {
+ 	 	//find the output dep edges from the source of FLOW DEP edge
+ 	 	for (EINDEX16 e1 = Get_Out_Edge(src); e1; e1 = Get_Next_Out_Edge(e1)) 
+ 		{
+ 			if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_ANTI)
+			{
+				VINDEX16 sink1 = Get_Sink(e1);
+				//find the flow edge to the sink of the e
+				for (EINDEX16 e2 = Get_Out_Edge(sink1); e2; e2 = Get_Next_Out_Edge(e2)) 
+				{
+					if(dep_edge_types[e2] == DEPTYPE_DATA_REUSE_FLOW && Get_Sink(e2) == sink)
+					{
+						bNeedPruned = TRUE;
+						break;
+					}
+				}
+			}
+			if(bNeedPruned == TRUE)
+				break;
+ 		}
+ 	 }
+	  	 
+	 
+	 if(bNeedPruned == TRUE)
+	 {
+	 	Remove_Edge(e);
+	 	continue;
+	 } 
+  }
+}
+
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Phase2_Identify_Generators()
+{
+  //identify the generators
+  VINDEX16 v1;
+  VINDEX16 v1_next;
+  acc_generator_vertices.clear();
+  acc_is_visit_vertices.clear();
+  for (v1 = Get_Vertex(); v1; v1 = v1_next) 
+  {
+	  v1_next = Get_Next_Vertex_In_Edit(v1);
+	  if (!Vertex_Is_In_Graph(v1))
+		continue;
+	  WN *wn_vertex = Get_Wn(v1);
+	  acc_generator_vertices[v1] = FALSE;
+	  acc_is_visit_vertices[v1] = 0;
+	  //Phase 2: identify the generator : In the pruned graph, 
+	  //(1) a generator is any assignment reference with at least one flow dependence emanating 
+	  //from it to another statement in the loop 
+	  if(OPCODE_is_store(WN_opcode(wn_vertex)))
+  	  {
+  	  	for (EINDEX16 e1 = Get_Out_Edge(v1); e1; e1 = Get_Next_Out_Edge(e1))
+	  	{
+	  		if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_FLOW)
+	  		{
+	  			acc_generator_vertices[v1] = TRUE;
+				acc_largest_dep_dis[v1].distance = 0;
+				break;
+	  		}
+	  	}
+  	  }	  
+	  //(2) a use reference with at least one input dependence emanating from it and with no input 
+	  //or flow dependence into it.
+	  else if(OPCODE_is_load(WN_opcode(wn_vertex)))
+	  {
+	  	BOOL hasInputDepFromIt = FALSE;
+		BOOL hasInputFlowDepInIt =FALSE;
+	  	for (EINDEX16 e1 = Get_Out_Edge(v1); e1; e1 = Get_Next_Out_Edge(e1))
+  		{
+  			if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_INPUT)
+  			{
+				hasInputDepFromIt = TRUE;
+				break;
+  			}
+  		}
+		for (EINDEX16 e1 = Get_In_Edge(v1); e1; e1 = Get_Next_In_Edge(e1))
+  		{
+  			if(dep_edge_types[e1] == DEPTYPE_DATA_REUSE_FLOW 
+				|| dep_edge_types[e1] == DEPTYPE_DATA_REUSE_INPUT)
+  			{
+				hasInputFlowDepInIt = TRUE;
+				break;
+  			}
+  		}
+		if(hasInputDepFromIt == TRUE && hasInputFlowDepInIt == FALSE)
+		{
+			acc_generator_vertices[v1] = TRUE;			
+			acc_largest_dep_dis[v1].distance = 0;
+		}
+	  }
+  }  
+}
+
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Phase3_Name_Partition()
+{
+  VINDEX16 v1;
+  VINDEX16 v1_next;
+  for (v1 = Get_Vertex(); v1; v1 = v1_next) 
+  {
+  	 //Phases 3 : name partition : Find name partitions and eliminate input dependences. 
+	 //Starting at each generator, mark each reference reachable from the generator 
+	 //by a flow or input dependence as part of the name partition for that variable. 
+	 //A name partition is a set of references that can be replaced by a reference to a single scalar variable.
+	 
+	 //remove the useless input dependences between two elements of the same name partition
+	 //Any input dependences between two elements of the same name partition may be eliminated unless 
+	 //the source of the dependence is the generator itself. 
+	  v1_next = Get_Next_Vertex_In_Edit(v1);
+	  if (!Vertex_Is_In_Graph(v1))
+		continue;
+	  //search from generators
+	  if(acc_generator_vertices[v1] == TRUE)
+  	  {
+  	  		ACC_SR_DFS(v1);
+  	  }
+  }
+}
+
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Phase0_Identify_Edge_Type()
+{
+  //identify all the edges
+  EINDEX16 e;
+  EINDEX16 e_next;
+  dep_edge_types.clear();
+  for(e= Get_Edge(); e; e = e_next) 
+  {
+  	 e_next = Get_Next_Edge(e);
+	 	 
+     VINDEX16 sink = Get_Sink(e);
+     WN * wn_sink = Get_Wn(sink);
+     VINDEX16 src = Get_Source(e);
+     WN * wn_src = Get_Wn(src);
+	 dep_edge_types[e] = DEPTYPE_DATA_REUSE_NONE;
+
+	 //if both are load, it is input dep
+	 if(OPCODE_is_load(WN_opcode(wn_src)) && OPCODE_is_load(WN_opcode(wn_sink)))
+	 {
+	 	dep_edge_types[e] = DEPTYPE_DATA_REUSE_INPUT;
+		//printf("INPUT: ");
+	 }
+	 //if both are load, it is input dep
+	 else if(OPCODE_is_store(WN_opcode(wn_src)) && OPCODE_is_store(WN_opcode(wn_sink)))
+	 {
+	 	dep_edge_types[e] = DEPTYPE_DATA_REUSE_OUTPUT;
+		//printf("OUTPUT: ");
+	 }
+	 //if both are load, it is input dep
+	 else if(OPCODE_is_store(WN_opcode(wn_src)) && OPCODE_is_load(WN_opcode(wn_sink)))
+	 {
+	 	dep_edge_types[e] = DEPTYPE_DATA_REUSE_FLOW;
+		//printf("FLOW: ");
+	 }
+	 //if both are load, it is input dep
+	 else if(OPCODE_is_load(WN_opcode(wn_src)) && OPCODE_is_store(WN_opcode(wn_sink)))
+	 {
+	 	dep_edge_types[e] = DEPTYPE_DATA_REUSE_ANTI;
+		//printf("ANTI: ");
+	 }
+
+	 //DEPV_ARRAY * pDepv_array = adg->Depv_Array(e);
+	 //pDepv_array->Print(stdout);
+	 //INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+	 //printf("edge:%d; distance: ", e);
+	 //pDepv_array->Print(stdout);
+	 //printf("\n");
+  }
+}
+
+//We only handle the i += const  loop
+static BOOL ACC_SR_Is_Good_Loop(WN* wn_loop, DO_LOOP_INFO *dli)
+{
+	WN* wn_step = WN_step(wn_loop);
+	WN* wn_index = WN_index(wn_loop);
+	ST* st_iname = WN_st(wn_index);
+	WN* wn_st_kid0 = WN_kid0(wn_step);
+	OPERATOR opr = WN_operator(wn_st_kid0);
+	BOOL isIndexBackward = dli->Is_Backward;
+	if(isIndexBackward)
+		return FALSE;
+	
+	if(WN_operator(wn_step) == OPR_STID && (opr == OPR_ADD || opr == OPR_SUB))
+	{
+		WN* kid0 = WN_kid0(wn_st_kid0);
+		WN* kid1 = WN_kid1(wn_st_kid0);
+		if(WN_operator(kid0) == OPR_LDID && WN_operator(kid1) == OPR_INTCONST 
+				&& (WN_const_val(kid1)==1 || WN_const_val(kid1)==-1))
+		{
+			INT32 istep = WN_const_val(kid1);
+			
+			if(opr == OPR_ADD && istep==1)
+				isIndexBackward = FALSE;
+			else if(opr == OPR_SUB && istep==-1)
+				isIndexBackward = FALSE;
+			else if(opr == OPR_ADD && istep==-1)
+				isIndexBackward = TRUE;
+			else //if(opr == OPR_SUB && istep==1)
+				isIndexBackward = TRUE;
+			dli->Is_Acc_Loop_Backward = isIndexBackward;
+			return TRUE;
+		}
+		else if(WN_operator(kid1) == OPR_LDID && WN_operator(kid0) == OPR_INTCONST 
+				&& (WN_const_val(kid0)==1 || WN_const_val(kid0)==-1))
+		{
+			INT32 istep = WN_const_val(kid0);
+			
+			if(opr == OPR_ADD && istep==1)
+				isIndexBackward = FALSE;
+			else if(opr == OPR_SUB && istep==-1)
+				isIndexBackward = FALSE;
+			else if(opr == OPR_ADD && istep==-1)
+				isIndexBackward = TRUE;
+			else //if(opr == OPR_SUB && istep==1)
+				isIndexBackward = TRUE;
+			dli->Is_Acc_Loop_Backward = isIndexBackward;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/**Only Preserve the dependence edges that are across the innest most seq loop iterations**/
+void ARRAY_DIRECTED_GRAPH16::ACC_SR_Dep_Edge_Prune()
+{
+  if(_identify_input_dep != TRUE)
+  	return;
+  if(_type!=DEPV_ARRAY_ARRAY_GRAPH)
+  	return;
+  ARRAY_DIRECTED_GRAPH16 * adg = this;
+
+  EINDEX16 e_next;
+  //first, remove the edges that across non-inner loop
+  for(EINDEX16 e= Get_Edge(); e; e = e_next) 
+  {
+  	 e_next = Get_Next_Edge(e);
+     VINDEX16 sink = adg->Get_Sink(e);
+     WN * wn_sink = adg->Get_Wn(sink);
+     VINDEX16 src = adg->Get_Source(e);
+     WN * wn_src = adg->Get_Wn(src);
+	 //first, if the source and sink must be with the same loop
+	 //if not, remove it
+	 WN* wn_loop_src = Enclosing_Do_Loop(wn_src);
+	 WN* wn_loop_sink = Enclosing_Do_Loop(wn_sink);
+	 DO_LOOP_INFO *dli_src = Get_Do_Loop_Info(wn_loop_src);
+	 DO_LOOP_INFO *dli_sink = Get_Do_Loop_Info(wn_loop_src);
+	 if(dli_src != dli_sink)
+ 	 { 	 	
+	  	Remove_Edge(e);
+		continue;
+ 	 }
+
+	 //second, if the loop is not innest most loop/multi-exit in the loop body, remove the edge
+	 if(dli_src->Is_Inner == FALSE || dli_src->Has_Exits || dli_src->Has_Gotos 
+				|| dli_src->has_FlowCtrl_InACCLoop)
+ 	 {
+	  	Remove_Edge(e);
+		continue;
+ 	 }
+
+	 //third, if the loop is not OpenACC seq loop, remove the edge across this loop
+	 if(dli_src->acc_lno_looptype != ACC_LNO_LT_SEQ)
+ 	 {
+	  	Remove_Edge(e);
+		continue;
+ 	 }
+	 if(ACC_SR_Is_Good_Loop(wn_loop_src, dli_src) == FALSE)
+	 {
+	 	Remove_Edge(e);
+		continue;
+	 }
+
+	 //fourth, the edge must span two array references. If not, delete it.
+	 WN* wn_addr1 = (OPCODE_is_store(WN_opcode(wn_sink)) ? (WN_kid1(wn_sink)) : (WN_kid0(wn_sink))) ;
+	 WN* wn_addr2 = (OPCODE_is_store(WN_opcode(wn_src)) ? (WN_kid1(wn_src)) : (WN_kid0(wn_src))) ;
+	 if(WN_operator(wn_addr1)!= OPR_ARRAY || WN_operator(wn_addr2) != OPR_ARRAY)
+ 	 {
+	  	Remove_Edge(e);
+		continue;
+	 }
+
+	 DEPV_ARRAY * pDepv_array = adg->Depv_Array(e);
+	 //fifth, delete the edges that carry dependences across outer loop
+	 if(pDepv_array->Num_Vec() > 1)
+ 	 {
+ 	 	//multi-cases of dependent vectors, it is undetermined, delete the edge
+ 	 	Remove_Edge(e);
+	 	continue;
+ 	 }
+	 INT32 dep_depth = pDepv_array->Loop_Carrying_Dependence();
+	 //self dep. if there is no dep, remove this useless edge
+	 //if(dep_depth == -1)
+	 //{
+	 //	Remove_Edge(e);
+	 //	continue;
+	 //}
+	 if(dep_depth >= 0 && dep_depth < dli_src->Depth)
+	 {
+	 	//outer loop dep
+	 	Remove_Edge(e);
+		continue;
+	 }
+ 	 e = e_next;
+  }
+  //identify all the edges
+  ACC_SR_Phase0_Identify_Edge_Type();
+
+  //prune useless input and flow edges
+  ACC_SR_Phase1_Prune_Edge();
+
+  //identify the generators
+  ACC_SR_Phase2_Identify_Generators();
+  
+  //perform name partition
+  ACC_SR_Phase3_Name_Partition();
+
+  //this->Print(stdout, 1);
+  //perform the transformation based on the partition names
+  map<VINDEX16, acc_name_partition>::iterator gen_iter = acc_gen_partition.begin();
+  for(; gen_iter != acc_gen_partition.end(); gen_iter++)
+  {  	
+	//Perform the transformation for this partition
+	VINDEX16 vgen  = gen_iter->first;
+	INT32  largest_dist = acc_largest_dep_dis[vgen].distance;
+	VINDEX16 v_largest_dist_sink = acc_largest_dep_dis[vgen].v_id;
+	//across iteration data reuse
+	if(largest_dist > 0)
+	{
+		//Perform Transformation
+		printf("Perform Inter-Iteration SR Transformation\n");
+		ACC_SR_Partition_Trans(vgen);
+	}
+  }
+ 
+   //clear up
+   
+  dep_edge_types.clear();
+  acc_generator_vertices.clear();
+  acc_is_visit_vertices.clear();
+  acc_largest_dep_dis.clear();
+  acc_gen_partition.clear(); 
+  //Prune the additional useless edges
+  //for(EINDEX16 e= Get_Edge(); e; e = e_next) 
+  //{
+  //	 e_next = Get_Next_Edge(e);	 
+	 //seventh, delete the output and anti-dependence edges which cannot directly contribute to data reuse analysis at the last.
+	 //because in the sith step, the output and anti-dependence edges are still used to prune the redundant edge
+  //}
+}
+
+/**Only Preserve the dependence edges that are across the OpenACC vector loop iterations**/
+void ARRAY_DIRECTED_GRAPH16::ACC_MemVec_Dep_Edge_Prune()
+{
+}
+
+/**Only Preserve the dependence edges that are across the OpenACC vector loop iterations
+***This is similar to the MemVec Edge, I am not sure if they are exactly the same, so two function are created.
+***They may be merged in the future into one.**/
+void ARRAY_DIRECTED_GRAPH16::ACC_SharedMem_Dep_Edge_Prune()
+{
+}
+
+BOOL ARRAY_DIRECTED_GRAPH16::Data_Reuse_Dep_Distance_Analysis()
+{ 
+  if(_identify_input_dep != TRUE)
+  	return FALSE;
+  if(_type!=DEPV_ARRAY_ARRAY_GRAPH)
+  	return FALSE;
+  ARRAY_DIRECTED_GRAPH16 * adg = this;
+  for(EINDEX16 e= Get_Edge(); e; e= Get_Next_Edge(e)) 
+  {
+     VINDEX16 sink = adg->Get_Sink(e);
+     WN * wn_sink = adg->Get_Wn(sink);
+     VINDEX16 src = adg->Get_Source(e);
+     WN * wn_src = adg->Get_Wn(src);
+	 DEPV_ARRAY * pDepv_array = adg->Depv_Array(e);
+	 INT distance = pDepv_array->Loop_Carrying_Dependence4DataReuse();
+	 printf("edge:%d; distance: ", e);
+	 pDepv_array->Print(stdout);
+	 printf("\n");
+  }
+}
+
 BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
 		WN *ref2, const DOLOOP_STACK *s2,
 		BOOL s1_lex_before_s2, BOOL use_bounds)
@@ -1834,17 +3067,8 @@ BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
 	concurrent_directive = TRUE;
 	  }
 	}
-  } else {
-	Is_True(s1->Elements() == s2->Elements(),
-	("Add_Edge called on a DEP graph with refs not in the same inner loop"));
-	common_nest = s1->Elements();
-	if (Do_Loop_Concurrent_Directive(s1->Top_nth(0))) {
-	  concurrent_directive = TRUE;
-	}
-	if (Do_Loop_Is_Ivdep(s1->Top_nth(0))) {
-	  is_ivdep = TRUE;
-	}
-  }
+  } 
+  
   if (is_ivdep) { // ivdep should not apply to compiler generated arrays
 	if (Compiler_Generated(addr1) || 
 	Compiler_Generated(addr2)) {
@@ -1959,66 +3183,6 @@ BOOL ARRAY_DIRECTED_GRAPH16::Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
 			MEM_POOL_Pop(&DEP_local_pool);
 		return(FALSE);
 		  }
-		}
-	  } else { // a DEP_ARRAY_GRAPH
-	DEP tmp_dep = tmp->Convert_To_Dep();
-	DEP *pos,*neg;
-		if (ref1 == ref2) {
-	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,0,0);
-		} else if (s1_lex_before_s2) {
-	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,TRUE,FALSE);
-		} else {
-	  DEP_Lex_Pos_Decompose(tmp_dep,&DEP_local_pool,&pos,&neg,FALSE,TRUE);
-		}
-
-	BOOL bad_ivdep = FALSE;
-	if (is_ivdep) {
-	  if (Cray_Ivdep) {
-		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
-		if (s1_lex_before_s2) {
-		  neg = NULL;
-		} else if (s2_lex_before_s1) {
-		  pos = NULL;
-			} else {
-		  neg = pos = NULL;
-			}
-	  } else if (Liberal_Ivdep) { 
-		if ((ref1 != ref2) && Equiv_Memory(addr1,addr2)) bad_ivdep = TRUE;
-		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
-		neg = pos = NULL;
-		  } else {
-		if (DEP_IsDistance(tmp_dep)&&DEP_Distance(tmp_dep)) bad_ivdep=TRUE;
-		if (!neg || (DEP_Direction(*neg) == DIR_POS)) {
-		  neg = NULL;
-			} else {
-		  *neg = DEP_SetDistance(0);
-			}
-		if (!pos || (DEP_Direction(*pos) == DIR_POS)) {
-		  pos = NULL;
-			} else {
-		  *pos = DEP_SetDistance(0);
-			}
-		  }
-		}
-	if (bad_ivdep) {
-	  char error[120];
-	  sprintf(error,
-		"IVDEP where there is an obvious dependence to ref on line %d.	Dependence ignored.",
-		Srcpos_To_Line(Find_Line(ref2)));
-	  ErrMsgSrcpos(EC_LNO_Generic,Find_Line(ref1),error);
-		}
-
-	if (pos) {	
-		  if (!Add_Edge(v1, v2,*pos)) {
-			MEM_POOL_Pop(&DEP_local_pool);
-		return(FALSE);
-	  }
-	}
-		if (neg && (ref2 != ref1)) {
-		  if (!Add_Edge(v2, v1,*neg)) {
-			MEM_POOL_Pop(&DEP_local_pool);
-		return(FALSE);
-	  }
 		}
 	  }
 	}

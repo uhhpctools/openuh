@@ -523,6 +523,10 @@ lower_acc_nvidia ( WN * block, WN * node, LOWER_ACTIONS actions )
 	tmp_flag = 1 << UHACC_ENABLE_RESTRICT_PTR_OFFLOAD;
 	acc_ptr_restrict_enabled = (Enable_UHACCFlag & tmp_flag) 
 				>> UHACC_ENABLE_RESTRICT_PTR_OFFLOAD;
+
+	tmp_flag = 1 << UHACC_ENABLE_KERNEL_LAUNCH_DEBUG_MODE;
+	acc_kernel_launch_debug_mode = (Enable_UHACCFlag & tmp_flag) 
+				>> UHACC_ENABLE_KERNEL_LAUNCH_DEBUG_MODE;
 	
 	acc_stmt_block = NULL;	  /* Original statement nodes */
 	acc_cont_nodes = NULL;	  /* Statement nodes after acc code */

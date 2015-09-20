@@ -670,6 +670,19 @@ public:
   BOOL Add_Edge_InputDep(WN *ref1, const DOLOOP_STACK *s1,
 		WN *ref2, const DOLOOP_STACK *s2,
 		BOOL s1_lex_before_s2, BOOL use_bounds=TRUE);
+  //analysis includes trim unnecessary edges
+  BOOL Data_Reuse_Dep_Distance_Analysis();
+  void ACC_SR_Phase0_Identify_Edge_Type();
+  void ACC_SR_Phase1_Prune_Edge();
+  void ACC_SR_Phase2_Identify_Generators();
+  void ACC_SR_Phase3_Name_Partition();
+  void ACC_SR_Partition_Trans(VINDEX16 NIndex);
+  void ACC_SR_Partition_Trans_Minus(VINDEX16 NIndex);
+  void ACC_SR_Partition_Trans_Plus(VINDEX16 NIndex);
+  void ACC_SR_DFS(VINDEX16 vgen);  
+  void ACC_SR_Dep_Edge_Prune();
+  void ACC_MemVec_Dep_Edge_Prune();
+  void ACC_SharedMem_Dep_Edge_Prune();
 
   DEPV_ARRAY *Depv_Array(EINDEX16 edge) {
     Is_True(_type==DEPV_ARRAY_ARRAY_GRAPH,

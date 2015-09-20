@@ -577,7 +577,9 @@ public:
   INT Max_Level() const;
   BOOL Equal_Through_Depth (INT depth);
   BOOL One_Equal_Through_Depth (INT depth);
-  INT Loop_Carrying_Dependence(); 
+  INT Loop_Carrying_Dependence();   
+  BOOL Loop_Is_Self_Dependence();
+  INT Loop_Carrying_Dependence4DataReuse(); 
   BOOL Is_Blockable(INT start_depth, INT stop_depth); 
 };
 

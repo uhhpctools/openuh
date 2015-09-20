@@ -231,7 +231,7 @@ map<ST*, ACC_VAR_TABLE> acc_local_new_var_map_host_data;     //used to replace v
 
 BOOL acc_dfa_enabled = FALSE;
 DST_INFO_IDX  acc_nested_dst;
-
+BOOL acc_kernel_launch_debug_mode = FALSE; //only for nvidia
 ST* st_shared_array_4parallelRegion = NULL;
 TY_IDX ty_shared_array_in_parallel = 0;
 
@@ -2525,6 +2525,8 @@ WN * ACC_Walk_and_Localize (WN * tree)
 					{
 						wn_dim = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_dim), mtype_base_id, WN_rtype(wn_dim));
 					}
+					else
+						wn_dim = WN_COPY_Tree(wn_dim);
 					if(WN_rtype(wn_index) != mtype_base_id)
                                         {
                                                 wn_index = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
@@ -2555,9 +2557,11 @@ WN * ACC_Walk_and_Localize (WN * tree)
 			}
 			WN* wn_index = WN_array_index(tree, ii);
 			if(WN_rtype(wn_index) != mtype_base_id)
-                        {
-                               wn_index = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
-                        }
+            {
+               wn_index = ACC_WN_Integer_Cast(WN_COPY_Tree(wn_index), mtype_base_id, WN_rtype(wn_index));
+            }
+			else
+			   wn_index = WN_COPY_Tree(wn_index);
 
 			if(wn_offset)
 				wn_offset = WN_Binary(OPR_ADD, 
@@ -5807,7 +5811,12 @@ void Transform_ACC_Parallel_Block_New ( WN * tree, WN* wn_replace_block,
 	if(acc_target_arch == ACC_ARCH_TYPE_APU)
 		ACC_Launch_HSA_Kernel(0, wn_replace_block);
 	else
-		ACC_LaunchKernelEx_nvidia(0, wn_replace_block, TRUE);
+	{
+		if(acc_kernel_launch_debug_mode)
+			ACC_LaunchKernel_nvidia(0, wn_replace_block,  TRUE);
+		else
+			ACC_LaunchKernelEx_nvidia(0, wn_replace_block, TRUE);
+	}
 	//LaunchKernel(0, wn_replace_block, TRUE);
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	//launch final reduction global reduction operations
@@ -5970,7 +5979,12 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 				if(acc_target_arch == ACC_ARCH_TYPE_APU)
 					ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 				else
-					ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+				{					
+					if(acc_kernel_launch_debug_mode)
+						ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block,  FALSE);
+					else
+						ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+				}
 				//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 				wn_prehandblock = NULL;
 			}
@@ -5992,7 +6006,12 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 			if(acc_target_arch == ACC_ARCH_TYPE_APU)
 				ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 			else
-				ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+			{
+				if(acc_kernel_launch_debug_mode)
+					ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block,  FALSE);
+				else
+					ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+			}
 			//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 
 			WN_Delete ( WN_region_pragmas(cur_node) );
@@ -6019,7 +6038,12 @@ void Transform_ACC_Kernel_Block_New ( WN * tree, WN* wn_replace_block)
 		if(acc_target_arch == ACC_ARCH_TYPE_APU)
 			ACC_Launch_HSA_Kernel(iKernelsCount-1, wn_replace_block);
 		else
-			ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+		{
+			if(acc_kernel_launch_debug_mode)
+				ACC_LaunchKernel_nvidia(iKernelsCount-1, wn_replace_block,  FALSE);
+			else					
+				ACC_LaunchKernelEx_nvidia(iKernelsCount-1, wn_replace_block, FALSE);
+		}
 		//LaunchKernel(iKernelsCount-1, wn_replace_block, FALSE);
 		wn_prehandblock = NULL;
 	}

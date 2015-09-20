@@ -373,6 +373,51 @@ BOOL DEPV_ARRAY::Loop_Carrying_Dependence() {
   return result; 
 }
 
+BOOL DEPV_ARRAY::Loop_Is_Self_Dependence() {
+  INT num_dim = Num_Dim();
+  INT num_unused = Num_Unused_Dim();
+  INT result = TRUE; 
+  for (INT i=0; i<Num_Vec(); i++) {
+    DEPV *depv = Depv(i);
+    INT j;
+    for (j=num_unused; j<num_unused+num_dim; j++) {
+      DIRECTION dir = DEP_Direction(DEPV_Dep(depv, j-num_unused));
+      if (dir != DIR_EQ)
+        break;
+    }
+    if (j == num_unused+num_dim)
+      continue; 
+    if (j < num_unused+num_dim)
+    {
+      result = FALSE; 
+	  break;
+    }
+  }
+  return result; 
+}
+
+INT DEPV_ARRAY::Loop_Carrying_Dependence4DataReuse() 
+{
+  INT num_dim = Num_Dim();
+  INT num_unused = Num_Unused_Dim();
+  INT32 dist = 0;
+  for (INT i=0; i<Num_Vec(); i++) {
+    DEPV *depv = Depv(i);
+    INT j;
+    for (j=num_unused; j<num_unused+num_dim; j++) {
+		DIRECTION dir = DEP_Direction(DEPV_Dep(depv, j-num_unused));
+      	if (dir != DIR_EQ)
+      	{      		
+      		//all of the inconsistent dep edge should be already removed.
+      		//now the distance must be constant
+      		dist = DEP_Distance(DEPV_Dep(depv, j-num_unused));
+        	return dist;
+      	}
+    }
+  }
+  return dist; 
+}
+
 BOOL DEPV_ARRAY::Is_Blockable(INT start_depth, 
 			      INT stop_depth)
 { 

@@ -471,6 +471,10 @@ Process_Command_Line (INT argc, char **argv)
 				else if (!strcmp( cp, "ccdfa" )) {
 				  	Enable_UHACCFlag |= 1<<UHACC_ENABLE_DFA_OFFLOAD_REGION;
                     break;
+				}
+				else if (!strcmp( cp, "cckdebug" )) {
+				  	Enable_UHACCFlag |= 1<<UHACC_ENABLE_KERNEL_LAUNCH_DEBUG_MODE;
+                    break;
 				}	
 				else if (!strncmp( cp, "ccfeedback", 10)) 
 				{
@@ -498,7 +502,13 @@ Process_Command_Line (INT argc, char **argv)
 				  	Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL1;
 					if(!strncmp( cp+8, ":" , 1))
 					{
-						if(!strcmp( cp+9, "l3" ))
+						if(!strcmp( cp+9, "l4" ))
+						{
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL2;
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL3;
+					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL4;
+						}
+						else if(!strcmp( cp+9, "l3" ))
 						{				  		
 					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL2;
 					  		Enable_UHACCFlag |= 1<<UHACC_ENABLE_SCALARIZATION_OFFLOAD_LEVEL3;
@@ -550,6 +560,7 @@ Process_Command_Line (INT argc, char **argv)
                         break;
                 }
                 break;
+				
 
 	    case 'S':		    /* -S: Produce assembly file: */
 		add_phase_args (PHASE_CG, argv[i]);

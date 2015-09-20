@@ -742,6 +742,7 @@ extern INT snl_debug;
 
 extern BOOL Run_Snl;
 extern BOOL Contains_MP;  // does the PU contain any MP constructs
+extern BOOL Contains_ACC;  // does the PU contain any MP constructs
 extern BOOL Do_Aggressive_Fuse;
 
 extern FILE *STDOUT;
@@ -752,6 +753,19 @@ extern BOOL LNO_Allow_Delinearize;
 extern BOOL LNO_Tlog;
 extern FILE* LNO_Analysis;
 
+typedef enum ACC_LNO_LOOP_TYPE
+{
+	ACC_LNO_LT_NONE, //unspecified
+	ACC_LNO_LT_SEQ,	//scalar replace analysis within each thread
+	ACC_LNO_LT_VECTOR, //memory vectorization load/store, or shared memory optimization
+	ACC_LNO_LT_WORKER,
+	ACC_LNO_LT_WORKER_VECTOR,
+	ACC_LNO_LT_GANG_VECTOR,
+	ACC_LNO_LT_GANG_WORKER,
+	ACC_LNO_LT_GANG_WORKER_VECTOR,
+	ACC_LNO_LT_GANG,
+	ACC_LNO_LT_NUM_TYPES
+}ACC_LNO_LOOP_TYPE;
 // The following is useful since LNO might be called to do lego
 // processing without optimizations. This variable is TRUE by
 // default, off if lno is disabled for some reason.
@@ -764,6 +778,7 @@ extern class DU_MANAGER *Du_Mgr;  // manage the def-use chains
 extern class ALIAS_MANAGER *Alias_Mgr;  // manage alias info
 extern class REDUCTION_MANAGER *red_manager; // manage redution information
 extern class ARRAY_DIRECTED_GRAPH16 *Array_Dependence_Graph;  // LNO dep graph
+extern class ARRAY_DIRECTED_GRAPH16 *Array_DataReuse_Dependence_Graph;  // LNO dep graph
 typedef STACK<ST *> STACK_OF_ST;
 
 // Permutation arrays
@@ -866,6 +881,11 @@ public:
   mBOOL Is_Ivdep; 
   mBOOL Is_Concurrent_Call;
   mBOOL Concurrent_Directive;
+  mBOOL Is_ACC_Loop; //for openacc
+  mBOOL has_FlowCtrl_InACCLoop;
+  mBOOL Is_Acc_Loop_Backward;
+  ACC_LNO_LOOP_TYPE acc_lno_looptype; //for openacc
+  mBOOL has_inner_loop; //for openacc
   mBOOL No_Fission; 
   mBOOL No_Fusion; 
   mBOOL Aggressive_Inner_Fission; 
@@ -1051,6 +1071,12 @@ inline BOOL Do_Loop_Concurrent_Directive(WN *wn)
 {
   DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
   return(dli->Concurrent_Directive);
+}
+
+inline ACC_LNO_LOOP_TYPE Do_Loop_ACC_Loop_Type(WN *wn)
+{
+  DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+  return(dli->acc_lno_looptype);
 }
 
 inline INT Do_Loop_Depth (WN *wn)
