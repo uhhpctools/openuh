@@ -37,7 +37,7 @@ include $(COMMONDEFS)
 ifdef GASNET_HOME
 GASNET_SUBDIRS := $(foreach conduit,$(GASNET_CONDUITS),gasnet-$(conduit))
 endif
-BUILD_SUBDIRS := armci $(GASNET_SUBDIRS)
+BUILD_SUBDIRS := shmem armci $(GASNET_SUBDIRS)
 
 default: first
 
@@ -59,6 +59,14 @@ else
 	@echo "--------------------------------------------------------"
 	@echo "GASNET_HOME is not set. Skipping build for libcaf-gasnet"
 	@echo "--------------------------------------------------------"
+	@echo ""
+endif
+ifdef SHMEM_HOME
+	$(call submake,shmem)
+else
+	@echo "----------------------------------------------------------"
+	@echo "SHMEM_HOME is not set. Skipping build for libcaf-shmem"
+	@echo "----------------------------------------------------------"
 	@echo ""
 endif
 

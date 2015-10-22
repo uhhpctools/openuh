@@ -1,0 +1,15 @@
+#  Define build parameters
+
+BUILD_BASE     = @top_srcdir@/osprey/libcaf/shmem
+#BUILD_OPTIMIZE = NODEBUG
+
+#
+# Here we set to use gcc compiler.
+#
+# If you want to compile with TOT compiler, commend out the
+# "BUILD_COMPIER" here and set the path to the TOT compiler.
+#
+override BUILD_COMPILER = GNU
+
+#  Include setup file which will then include Makefile.base
+include @top_builddir@/osprey/Makefile.gsetup

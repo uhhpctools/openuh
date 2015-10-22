@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os uh_config_arguments BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE DEFAULT_CAF_TEAMS_HEAP_SIZE GASNET_HOME GASNET_CONDUITS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION ENABLE_OSA CUDA_HOME AMD_CL_HOME INTEL_CL_HOME LIBLIST subdirs LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os uh_config_arguments BASH_PATH MPICC_PATH MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME DEFAULT_CAF_HEAP_SIZE DEFAULT_CAF_TEAMS_HEAP_SIZE GASNET_HOME GASNET_CONDUITS SHMEM_HOME SHMEM_LDFLAGS ARMCI_HOME ARMCI_NETWORK_LIBS CAFRT_ENABLE_DTRACES CAFRT_ENABLE_PROFILES DEFAULT_COMM UHCAF_MPI_INCLUDE UHCAF_MPI_FCFLAGS UHCAF_MPI_LDFLAGS BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION ENABLE_OSA CUDA_HOME AMD_CL_HOME INTEL_CL_HOME LIBLIST subdirs LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -816,6 +816,10 @@ Optional Packages:
   --with-armci-network-libs=<armci libs>
                           Specify additional network libraries for linker when
                           using ARMCI
+  --with-shmem-root=<shmem path>
+                          Builds SHMEM-based libcaf runtime
+  --with-shmem-ldflags=<linker flags>
+                          Specify additional flags for linker when using SHMEM
   --with-default-comm=gasnet|armci
                           Default communication layer to use if GASNet and
                           ARMCI are supported. Will be GASNet if unspecified.
@@ -1538,6 +1542,26 @@ else
   ARMCI_NETWORK_LIBS=""
 fi;
 
+# enable SHMEM for Coarrays
+
+# Check whether --with-shmem-root or --without-shmem-root was given.
+if test "${with_shmem_root+set}" = set; then
+  withval="$with_shmem_root"
+  SHMEM_HOME="$with_shmem_root"
+else
+  SHMEM_HOME=""
+fi;
+
+# specify SHMEM linker flags
+
+# Check whether --with-shmem-ldflags or --without-shmem-ldflags was given.
+if test "${with_shmem_ldflags+set}" = set; then
+  withval="$with_shmem_ldflags"
+  SHMEM_LDFLAGS="$with_shmem_ldflags"
+else
+  SHMEM_LDFLAGS=""
+fi;
+
 # default comm library
 
 # Check whether --with-default-comm or --without-default-comm was given.
@@ -1690,9 +1714,9 @@ echo "$as_me: error: --enable-coarrays option is expected when using --with-caf-
    { (exit 1); exit 1; }; }
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
-    { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&5
-echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&2;}
+if test -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
+    { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays" >&5
+echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
@@ -1803,10 +1827,26 @@ echo "$as_me: error: Specified --with-opencl-intel=<path> does not look right. C
    fi
 fi
 
+if test -n "${SHMEM_HOME}"; then
+    if test ! -d "${SHMEM_HOME}"; then
+        { { echo "$as_me:$LINENO: error: Specified --with-shmem-root=<path> does not look right.  Check path." >&5
+echo "$as_me: error: Specified --with-shmem-root=<path> does not look right.  Check path." >&2;}
+   { (exit 1); exit 1; }; }
+    fi
+fi
+
+if test -n "${SHMEM_LDFLAGS}" -a -z "${SHMEM_HOME}"; then
+    { { echo "$as_me:$LINENO: error: --with-shmem-root=<path> must be specified if you want to use SHMEM" >&5
+echo "$as_me: error: --with-shmem-root=<path> must be specified if you want to use SHMEM" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
   DEFAULT_COMM=gasnet
 elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
+elif test -z "${DEFAULT_COMM}" -a -n "${SHMEM_HOME}" ; then
+  DEFAULT_COMM=shmem
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
     { { echo "$as_me:$LINENO: error: --with-default-comm accepts gasnet or armci" >&5
 echo "$as_me: error: --with-default-comm accepts gasnet or armci" >&2;}
@@ -1818,6 +1858,10 @@ echo "$as_me: error: default comm (gasnet) requires --with-gasnet-root to be spe
 elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
     { { echo "$as_me:$LINENO: error: default comm (armci) requires --with-armci-root to be specified" >&5
 echo "$as_me: error: default comm (armci) requires --with-armci-root to be specified" >&2;}
+   { (exit 1); exit 1; }; }
+elif test "${DEFAULT_COMM}" = "shmem" -a -z "${SHMEM_HOME}" ; then
+    { { echo "$as_me:$LINENO: error: default comm (shmem) requires --with-shmem-root to be specified" >&5
+echo "$as_me: error: default comm (shmem) requires --with-shmem-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
@@ -2403,6 +2447,8 @@ export GCC_CONFIGURE_CFLAGS
 
 
 
+
+
 # List of configurable files to create in object directory.
                                                                                                                                                                                                                                                                     ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
 
@@ -2499,7 +2545,7 @@ fi
 fi
 
 if test "${BUILD_FORTRAN}" = "YES"; then
-                                                     ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile osprey/targdir_lib/libcaf-extra/Makefile osprey/targdir_lib/libcaf/Makefile osprey/targdir_lib/libcaf/armci/Makefile"
+                                                               ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile osprey/targdir_lib/libcaf-extra/Makefile osprey/targdir_lib/libcaf/Makefile osprey/targdir_lib/libcaf/armci/Makefile osprey/targdir_lib/libcaf/shmem/Makefile"
 
    if test -n "${GASNET_CONDUITS}"; then
      for conduit in $GASNET_CONDUITS; do
@@ -2545,7 +2591,7 @@ if test $BUILD_MULTILIB = "YES"; then
                                                               ac_config_files="$ac_config_files osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in"
 
   if test "${BUILD_FORTRAN}" = "YES"; then
-                                                      ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in"
+                                                                ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in osprey/targdir_lib2/libcaf/shmem/Makefile:osprey/targdir_lib/libcaf/shmem/Makefile.in"
 
     if test -n "${GASNET_CONDUITS}"; then
       for conduit in $GASNET_CONDUITS; do
@@ -3192,6 +3238,7 @@ do
   "osprey/targdir_lib/libcaf-extra/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf-extra/Makefile" ;;
   "osprey/targdir_lib/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/Makefile" ;;
   "osprey/targdir_lib/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/armci/Makefile" ;;
+  "osprey/targdir_lib/libcaf/shmem/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/shmem/Makefile" ;;
   "osprey/targdir_lib/libcaf/gasnet-${conduit}/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;
   "osprey/targdir_lib/libcaf/gasnet/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/gasnet/Makefile" ;;
   "osprey/targdir_lib/libopen64rt/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libopen64rt/Makefile" ;;
@@ -3213,6 +3260,7 @@ do
   "osprey/targdir_lib2/libcaf-extra/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in" ;;
+  "osprey/targdir_lib2/libcaf/shmem/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/shmem/Makefile:osprey/targdir_lib/libcaf/shmem/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/gasnet-${conduit}/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/gasnet/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;
   "osprey/targdir_lib2/libopen64rt/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libopen64rt/Makefile:osprey/targdir_lib/libopen64rt/Makefile.in" ;;
@@ -3357,6 +3405,8 @@ s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
 s,@DEFAULT_CAF_TEAMS_HEAP_SIZE@,$DEFAULT_CAF_TEAMS_HEAP_SIZE,;t t
 s,@GASNET_HOME@,$GASNET_HOME,;t t
 s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
+s,@SHMEM_HOME@,$SHMEM_HOME,;t t
+s,@SHMEM_LDFLAGS@,$SHMEM_LDFLAGS,;t t
 s,@ARMCI_HOME@,$ARMCI_HOME,;t t
 s,@ARMCI_NETWORK_LIBS@,$ARMCI_NETWORK_LIBS,;t t
 s,@CAFRT_ENABLE_DTRACES@,$CAFRT_ENABLE_DTRACES,;t t
@@ -3891,6 +3941,10 @@ echo "$as_me:    GASNET_CONDUITS                = $GASNET_CONDUITS" >&6;}
 echo "$as_me:    ARMCI_HOME                     = $ARMCI_HOME" >&6;}
 { echo "$as_me:$LINENO:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&5
 echo "$as_me:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&6;}
+{ echo "$as_me:$LINENO:    SHMEM_HOME                     = $SHMEM_HOME" >&5
+echo "$as_me:    SHMEM_HOME                     = $SHMEM_HOME" >&6;}
+{ echo "$as_me:$LINENO:    SHMEM_LDFLAGS                  = $SHMEM_LDFLAGS" >&5
+echo "$as_me:    SHMEM_LDFLAGS                  = $SHMEM_LDFLAGS" >&6;}
 { echo "$as_me:$LINENO:    UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE" >&5
 echo "$as_me:    UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE" >&6;}
 { echo "$as_me:$LINENO:    UHCAF_MPI_FCFLAGS              = $UHCAF_MPI_FCFLAGS" >&5

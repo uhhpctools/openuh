@@ -42,10 +42,12 @@
 #include "trace.h"
 #include "util.h"
 #include "profile.h"
+#include "team.h"
 
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
+extern team_type current_team;
 
 struct lock_request {
     volatile int locked;
@@ -66,6 +68,18 @@ typedef struct lock_req_tbl_item lock_req_tbl_item_t;
 
 lock_req_tbl_item_t *req_table = NULL;
 
+static int inline my_proc(void)
+{
+    int proc_id = _this_image-1;
+
+    if (current_team!= NULL || current_team->codimension_mapping != NULL) {
+            proc_id = current_team->codimension_mapping[proc_id];
+    }
+
+    return proc_id;
+}
+
+
 static inline void *get_shared_mem_address_from_offset(long ofst,
                                                        size_t image)
 {
@@ -74,7 +88,7 @@ static inline void *get_shared_mem_address_from_offset(long ofst,
 
 static inline unsigned long get_offset_from_shared_mem_address(void *addr)
 {
-    return addr - comm_start_shared_mem(_this_image - 1);
+    return addr - comm_start_shared_mem(my_proc());
 }
 
 /***********************************************************************
@@ -88,6 +102,7 @@ void comm_lock(lock_t * lock, int image, char *errmsg, int errmsg_len)
     lock_t p, q;
     lock_request_t *lock_req;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (errmsg != NULL && errmsg_len) {
         memset(errmsg, 0, (size_t) errmsg_len);
@@ -122,7 +137,7 @@ void comm_lock(lock_t * lock, int image, char *errmsg, int errmsg_len)
     lock_req->done = 0;
 
     q.locked = 1;
-    q.image = _this_image;
+    q.image = ti;
     q.ofst = get_offset_from_shared_mem_address(lock_req);
 
     LOAD_STORE_FENCE();
@@ -132,7 +147,7 @@ void comm_lock(lock_t * lock, int image, char *errmsg, int errmsg_len)
 
     if (p.locked != 0) {
         lock_request_t r;
-        r.image = _this_image;
+        r.image = ti;
         r.ofst = q.ofst;
         r.done = 1;
 
@@ -171,6 +186,7 @@ void comm_unlock(lock_t * lock, int image, char *errmsg, int errmsg_len)
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (errmsg != NULL && errmsg_len) {
         memset(errmsg, 0, (size_t) errmsg_len);
@@ -195,7 +211,7 @@ void comm_unlock(lock_t * lock, int image, char *errmsg, int errmsg_len)
         /* there doesn't appear to be a successor (yet) */
         lock_t reset;
         q.locked = 1;
-        q.image = _this_image;
+        q.image = ti;
         q.ofst = get_offset_from_shared_mem_address(req);
         reset.locked = 0;
         reset.image = 0;
@@ -205,7 +221,7 @@ void comm_unlock(lock_t * lock, int image, char *errmsg, int errmsg_len)
         comm_cswap_request(lock, &q, &reset, sizeof(reset), image - 1, &q);
 
         /* confirm that there is no successor */
-        if (q.image == _this_image) {
+        if (q.image == ti) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
             coarray_asymmetric_deallocate_(request_item->req);
@@ -230,7 +246,6 @@ void comm_unlock(lock_t * lock, int image, char *errmsg, int errmsg_len)
 
     /* unset 'locked' on successor */
     s = get_shared_mem_address_from_offset(req->ofst, req->image);
-    i = 0;
     comm_write(((size_t) (req->image) - 1), s, &i, sizeof(i), 1, NULL);
 
     /* delete request item from request table */
@@ -255,6 +270,7 @@ void comm_unlock2(lock_t * lock, int image, char *errmsg, int errmsg_len)
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (errmsg != NULL && errmsg_len) {
         memset(errmsg, 0, (size_t) errmsg_len);
@@ -286,7 +302,7 @@ void comm_unlock2(lock_t * lock, int image, char *errmsg, int errmsg_len)
         comm_fstore_request(lock, &u, sizeof(u), image - 1, &v);
 
         /* confirm that there is no successor */
-        if (v.image == _this_image) {
+        if (v.image == ti) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
             coarray_asymmetric_deallocate_(request_item->req);
@@ -368,6 +384,7 @@ void comm_lock_stat(lock_t * lock, int image, char *success,
     lock_t p, q;
     lock_request_t *lock_req;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -414,7 +431,7 @@ void comm_lock_stat(lock_t * lock, int image, char *success,
     lock_req->done = 0;
 
     q.locked = 1;
-    q.image = _this_image;
+    q.image = ti;
     q.ofst = get_offset_from_shared_mem_address(lock_req);
 
     LOAD_STORE_FENCE();
@@ -463,7 +480,7 @@ void comm_lock_stat(lock_t * lock, int image, char *success,
 
     if (p.locked != 0) {
         lock_request_t r;
-        r.image = _this_image;
+        r.image = ti;
         r.ofst = q.ofst;
         r.done = 1;
 
@@ -506,6 +523,7 @@ void comm_unlock_stat(lock_t * lock, int image, int *status,
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -545,7 +563,7 @@ void comm_unlock_stat(lock_t * lock, int image, int *status,
         /* there doesn't appear to be a successor (yet) */
         lock_t reset;
         q.locked = 1;
-        q.image = _this_image;
+        q.image = ti;
         q.ofst = get_offset_from_shared_mem_address(req);
         reset.locked = 0;
         reset.image = 0;
@@ -555,7 +573,7 @@ void comm_unlock_stat(lock_t * lock, int image, int *status,
         comm_cswap_request(lock, &q, &reset, sizeof(reset), image - 1, &q);
 
         /* confirm that there is no successor */
-        if (q.image == _this_image) {
+        if (q.image == ti) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
             coarray_asymmetric_deallocate_(request_item->req);
@@ -607,6 +625,7 @@ void comm_unlock2_stat(lock_t * lock, int image, int *status,
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_shared_mem_address(lock);
+    const int ti = my_proc() + 1;
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -653,7 +672,7 @@ void comm_unlock2_stat(lock_t * lock, int image, int *status,
         comm_fstore_request(lock, &u, sizeof(u), image - 1, &v);
 
         /* confirm that there is no successor */
-        if (v.image == _this_image) {
+        if (v.image == ti) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
             coarray_asymmetric_deallocate_(request_item->req);

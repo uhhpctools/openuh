@@ -155,6 +155,20 @@ AS_HELP_STRING([--with-armci-network-libs=<armci libs>],
 ARMCI_NETWORK_LIBS="$with_armci_network_libs",
 ARMCI_NETWORK_LIBS="")
 
+# enable SHMEM for Coarrays
+AC_ARG_WITH(shmem-root,
+AS_HELP_STRING([--with-shmem-root=<shmem path>],
+[Builds SHMEM-based libcaf runtime]),
+SHMEM_HOME="$with_shmem_root",
+SHMEM_HOME="")
+
+# specify SHMEM linker flags
+AC_ARG_WITH(shmem-ldflags,
+AS_HELP_STRING([--with-shmem-ldflags=<linker flags>],
+[Specify additional flags for linker when using SHMEM]),
+SHMEM_LDFLAGS="$with_shmem_ldflags",
+SHMEM_LDFLAGS="")
+
 # default comm library
 AC_ARG_WITH(default-comm,
 AS_HELP_STRING([--with-default-comm=gasnet|armci],
@@ -242,8 +256,8 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
    )
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
-    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays])
+if test -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
+    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays])
 fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
@@ -298,16 +312,30 @@ if test -n "${INTEL_CL_HOME}"; then
    fi
 fi
 
+if test -n "${SHMEM_HOME}"; then
+    if test ! -d "${SHMEM_HOME}"; then
+        AC_MSG_ERROR([Specified --with-shmem-root=<path> does not look right.  Check path.])
+    fi
+fi
+
+if test -n "${SHMEM_LDFLAGS}" -a -z "${SHMEM_HOME}"; then
+    AC_MSG_ERROR([--with-shmem-root=<path> must be specified if you want to use SHMEM])
+fi
+
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
   DEFAULT_COMM=gasnet
 elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
+elif test -z "${DEFAULT_COMM}" -a -n "${SHMEM_HOME}" ; then
+  DEFAULT_COMM=shmem
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
     AC_MSG_ERROR([--with-default-comm accepts gasnet or armci])
 elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
     AC_MSG_ERROR([default comm (gasnet) requires --with-gasnet-root to be specified])
 elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
     AC_MSG_ERROR([default comm (armci) requires --with-armci-root to be specified])
+elif test "${DEFAULT_COMM}" = "shmem" -a -z "${SHMEM_HOME}" ; then
+    AC_MSG_ERROR([default comm (shmem) requires --with-shmem-root to be specified])
 fi
 
 if test -z "${DEFAULT_CAF_HEAP_SIZE}"; then
@@ -767,6 +795,8 @@ AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
 AC_SUBST([DEFAULT_CAF_TEAMS_HEAP_SIZE])
 AC_SUBST([GASNET_HOME])
 AC_SUBST([GASNET_CONDUITS])
+AC_SUBST([SHMEM_HOME])
+AC_SUBST([SHMEM_LDFLAGS])
 AC_SUBST([ARMCI_HOME])
 AC_SUBST([ARMCI_NETWORK_LIBS])
 AC_SUBST([CAFRT_ENABLE_DTRACES])
@@ -934,6 +964,7 @@ if test "${BUILD_FORTRAN}" = "YES"; then
    osprey/targdir_lib/libcaf-extra/Makefile
    osprey/targdir_lib/libcaf/Makefile
    osprey/targdir_lib/libcaf/armci/Makefile
+   osprey/targdir_lib/libcaf/shmem/Makefile
 ])
    if test -n "${GASNET_CONDUITS}"; then
      for conduit in $GASNET_CONDUITS; do
@@ -995,6 +1026,7 @@ if test $BUILD_MULTILIB = "YES"; then
     osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in
     osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in
     osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in
+    osprey/targdir_lib2/libcaf/shmem/Makefile:osprey/targdir_lib/libcaf/shmem/Makefile.in
   ])
     if test -n "${GASNET_CONDUITS}"; then
       for conduit in $GASNET_CONDUITS; do
@@ -1072,6 +1104,8 @@ AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])
 AC_MSG_NOTICE([   GASNET_CONDUITS                = $GASNET_CONDUITS])
 AC_MSG_NOTICE([   ARMCI_HOME                     = $ARMCI_HOME])
 AC_MSG_NOTICE([   ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS])
+AC_MSG_NOTICE([   SHMEM_HOME                     = $SHMEM_HOME])
+AC_MSG_NOTICE([   SHMEM_LDFLAGS                  = $SHMEM_LDFLAGS])
 AC_MSG_NOTICE([   UHCAF_MPI_INCLUDE              = $UHCAF_MPI_INCLUDE])
 AC_MSG_NOTICE([   UHCAF_MPI_FCFLAGS              = $UHCAF_MPI_FCFLAGS])
 AC_MSG_NOTICE([   UHCAF_MPI_LDFLAGS              = $UHCAF_MPI_LDFLAGS])

@@ -725,7 +725,7 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
 
     CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fence_all);
 
-#if defined(GASNET)
+#if defined(GASNET)// || defined(SHMEM)
     if (status == NULL) {
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock, lock, img, errmsg,
                              errmsg_len);
@@ -733,7 +733,7 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock_stat, lock, img,
                              status, stat_len, errmsg, errmsg_len);
     }
-#elif defined(ARMCI)
+#elif defined(ARMCI) || defined(SHMEM)
     /* this version uses fetch-and-store instead of compare-and-swap */
     if (status == NULL) {
         CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock2, lock, img, errmsg,

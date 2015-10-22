@@ -35,8 +35,10 @@ tracing_enabled=@CAFRT_ENABLE_DTRACES@
 GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 ARMCI_HOME=@ARMCI_HOME@
+SHMEM_HOME=@SHMEM_HOME@
 COMM_LAYER=@DEFAULT_COMM@
 ARMCI_NETWORK_LIBS="@ARMCI_NETWORK_LIBS@"
+SHMEM_LDFLAGS="@SHMEM_LDFLAGS@"
 CC=uhcc
 FC=uhf90
 CAF_FLAGS="-coarray -fno-second-underscore"
@@ -56,6 +58,7 @@ Where options are
                     accesses. Available layers are:
                         gasnet-<conduit>, where <conduit> may be one of: @GASNET_CONDUITS@
                         armci
+                        shmem
 
   --mpi             Compile CAF+MPI programs
 
@@ -78,6 +81,9 @@ Where options are
 
   --armci-path=A    A is the path to a specified ARMCI source directory
                           Currently set to: $ARMCI_HOME
+
+  --shmem-path=S    S is the path to a specified SHMEM source directory
+                          Currently set to: $SHMEM_HOME
 
 Environment Variables:
    UHCAF_MPI_FCFLAGS
@@ -149,6 +155,10 @@ print_compile_link_info()
   elif [ "$COMM_LAYER" == "armci" ]; then
       LAYER_INSTALLATION_PATH=$ARMCI_HOME
       UHCAF_NETWORK=$ARMCI_NETWORK
+      MSG_LAYER=$UHCAF_MPI_LDFLAGS
+  elif [ "$COMM_LAYER" == "shmem" ]; then
+      LAYER_INSTALLATION_PATH=$SHMEM_HOME
+      UHCAF_NETWORK=""
       MSG_LAYER=$UHCAF_MPI_LDFLAGS
   fi
 
@@ -347,6 +357,14 @@ for arg in "$@" ;  do
           ARMCI_HOME=$val
           pass_arg=no
           ;;
+        --shmem-path=*)
+          val=`echo UhCaf$arg | sed -e 's/UhCaf--shmem-path=//g'`
+          if [ ! -d "$val" ]; then
+            print_error "$val does not exist"
+          fi
+          SHMEM_HOME=$val
+          pass_arg=no
+          ;;
         --layer=*)
           val=`echo UhCaf$arg | sed -e 's/UhCaf--layer=//g'`
           layer=`echo $val | tr '[:upper:]' '[:lower:]'`
@@ -354,6 +372,8 @@ for arg in "$@" ;  do
             print_error "layer needs to be specified with --layer"
           elif [ $layer == armci ]; then
             COMM_LAYER=armci
+          elif [ $layer == shmem ]; then
+            COMM_LAYER=shmem
           elif [[ $layer == gasnet-* ]]; then
             GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
             valid=0
@@ -415,7 +435,7 @@ fi
 
 if [ -z "$COMM_LAYER" ]; then
   print_error "No communication layer specified"
-elif [ "$COMM_LAYER" != "gasnet" -a "$COMM_LAYER" != "armci" ]; then
+elif [ "$COMM_LAYER" != "gasnet" -a "$COMM_LAYER" != "armci" -a "$COMM_LAYER" != "shmem" ]; then
   print_error "Invalid comm layer specified: $COMM_LAYER"
 fi
 
@@ -423,6 +443,8 @@ if [ $COMM_LAYER == gasnet -a -z "$GASNET_HOME" ]; then
   print_error "gasnet layer is not available"
 elif [ $COMM_LAYER == armci -a -z "$ARMCI_HOME" ]; then
   print_error "armci layer is not available"
+elif [ $COMM_LAYER == shmem -a -z "$SHMEM_HOME" ]; then
+  print_error "shmem layer is not available"
 fi
 
 if [ $COMM_LAYER == gasnet ]; then
@@ -502,10 +524,18 @@ elif [ $COMM_LAYER == armci ]; then
   else
       LIBCAF="-lcaf-armci"
   fi
+elif [ $COMM_LAYER == shmem ]; then
+  COMM_LIBS="$SHMEM_LDFLAGS"
+
+  if [ "$use_static_libcaf" == "y" ]; then
+     LIBCAF="-l:libcaf-shmem.a"
+  else
+     LIBCAF="-lcaf-shmem"
+  fi
 fi
 
-if [ -n "$EXTRA_LDFLAGS" ]; then
-  add_to_env_list "EXTRA_LDFLAGS"
+if [ -n "$UHCAF_EXTRA_LDFLAGS" ]; then
+  add_to_env_list "UHCAF_EXTRA_LDFLAGS"
 fi
 
 # display information for uhcaf
@@ -666,7 +696,7 @@ else
                   $OBJECTS2 $compiler_args   \
                   $link_instructions.o $set_static_symm_data.o  \
                   $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
-                  $MPI_LDFLAGS $EXTRA_LDFLAGS
+                  $MPI_LDFLAGS $UHCAF_EXTRA_LDFLAGS
           stat=$?
       else
           # link command
@@ -674,7 +704,7 @@ else
                   $OBJECTS2 $compiler_args   \
                   $link_instructions.o  \
                   $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
-                  $MPI_LDFLAGS $EXTRA_LDFLAGS
+                  $MPI_LDFLAGS $UHCAF_EXTRA_LDFLAGS
           stat=$?
       fi
   else

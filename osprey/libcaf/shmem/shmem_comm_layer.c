@@ -1,29 +1,26 @@
 /*
- ARMCI Communication Layer for supporting Coarray Fortran
+ SHMEM Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2014 University of Houston.
+ Copyright (C) 2009-2013 University of Houston.
 
- Redistribution and use in source and binary forms, with or without
- modification, are permitted provided that the following conditions are met:
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of version 2 of the GNU General Public License as
+ published by the Free Software Foundation.
 
- 1. Redistributions of source code must retain the above copyright notice,
- this list of conditions and the following disclaimer.
+ This program is distributed in the hope that it would be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
- 2. Redistributions in binary form must reproduce the above copyright notice,
- this list of conditions and the following disclaimer in the documentation
- and/or other materials provided with the distribution.
+ Further, this software is distributed without any warranty that it is
+ free of the rightful claim of any third person regarding infringement
+ or the like.  Any license provided herein, whether implied or
+ otherwise, applies only to this software file.  Patent licenses, if
+ any, provided herein do not apply to combinations of this program with
+ other software, or any other product whatsoever.
 
- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- POSSIBILITY OF SUCH DAMAGE.
+ You should have received a copy of the GNU General Public License along
+ with this program; if not, write the Free Software Foundation, Inc., 59
+ Temple Place - Suite 330, Boston MA 02111-1307, USA.
 
  Contact information:
  http://www.cs.uh.edu/~hpctools
@@ -41,7 +38,7 @@
 #include "comm.h"
 #include "alloc.h"
 #include "env.h"
-#include "armci_comm_layer.h"
+#include "shmem_comm_layer.h"
 #include "trace.h"
 #include "util.h"
 #include "collectives.h"
@@ -117,8 +114,10 @@ static unsigned long num_procs;
 
 static unsigned long static_symm_data_total_size = 0;
 
-/* sync images */
+/* for critical section lock */
+static long *critical_naive_lock;
 
+/* sync images */
 static sync_images_t sync_images_algorithm;
 typedef union {
     int value; /* used for counter and ping-pong */
@@ -150,18 +149,14 @@ static char *stopped_image_exists = NULL;
 static int in_error_termination = 0;
 static int in_normal_termination = 0;
 
-/* NON-BLOCKING PUT: ARMCI non-blocking operations does not ensure local
- * completion on its return. ARMCI_Wait(handle) provides local completion,
- * as opposed to GASNET where it means remote completion. For remote
- * completion, ARMCI_Fence(remote_proc) needs to be invoked. However, we
- * can not FENCE for a specific handle. Hence we wait for all remote
- * writes to finish when a new read/write adrress overlaps any one of
- * them.  */
-static struct nb_handle_manager nb_mgr[2];
-static armci_handle_x_t *armci_nbput_handles = NULL;
-static armci_handle_x_t *armci_nbget_handles = NULL;
-
 static size_t nb_xfer_limit;
+
+/* strided algorithms selection */
+const char *str_alg;
+const static char *stride_algorithms[2] = {
+  "DEFAULT",
+  "2DIM"
+};
 
 
 /* GET CACHE OPTIMIZATION */
@@ -194,9 +189,29 @@ static int cache_check_and_get_strided(void *remote_src,
 static void update_cache(size_t node, void *remote_address, size_t nbytes,
                          void *local_address);
 
-static void local_strided_copy(void *src, const int src_strides[],
-                               void *dest, const int dest_strides[],
-                               const int count[], size_t stride_levels);
+static void local_strided_copy(void *src, const size_t src_strides[],
+                               void *dest, const size_t dest_strides[],
+                               const size_t count[], size_t stride_levels);
+
+static void remote_strided_get(void *src, const size_t src_strides[],
+                               void *dest, const size_t dest_strides[],
+                               const size_t count[], size_t stride_levels,
+                               int proc);
+
+static void remote_strided_put(void *src, const size_t src_strides[],
+                               void *dest, const size_t dest_strides[],
+                               const size_t count[], size_t stride_levels,
+                               int proc);
+
+static void strided_get(void *remote_src, const size_t src_strides[],
+                        void *dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc);
+
+static void strided_put(void *src, const size_t src_strides[],
+                        void *remote_dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc);
 
 static struct handle_list *get_next_handle(unsigned long proc,
                                            void *remote_address,
@@ -226,10 +241,6 @@ static void wait_on_all_pending_accesses();
 static void wait_on_all_pending_puts_to_proc(unsigned long proc);
 static void wait_on_all_pending_puts();
 
-static inline armci_hdl_t *get_next_armci_handle(access_type_t
-                                                 access_type);
-static inline void return_armci_handle(armci_handle_x_t * handle,
-                                       access_type_t access_type);
 
 #ifdef SYNC_IMAGES_HASHED
 static void sync_images_counter(hashed_image_list_t *image_list,
@@ -276,7 +287,7 @@ inline size_t comm_get_num_procs()
 /* must call comm_init() first */
 size_t comm_get_node_id(size_t proc)
 {
-    return (size_t) armci_domain_id(ARMCI_DOMAIN_SMP, (int)proc);
+    return (size_t) proc;
 }
 
 void *comm_get_sharedptr(void *addr, size_t proc)
@@ -288,13 +299,15 @@ void *comm_get_sharedptr(void *addr, size_t proc)
 }
 
 
-static int mpi_initialized_by_armci = 0;
+static int mpi_initialized_by_shmem = 0;
+
+#pragma weak PMPI_Init
 
 int MPI_Init(int *argc, char ***argv)
 {
     int ret = MPI_SUCCESS;
 
-    if (!mpi_initialized_by_armci) {
+    if (!mpi_initialized_by_shmem) {
         ret = PMPI_Init(argc, argv);
     }
 
@@ -308,17 +321,19 @@ void mpi_init_(int *ierr)
     int flag;
     *ierr = MPI_SUCCESS;
 
-    if (!mpi_initialized_by_armci) {
+    if (!mpi_initialized_by_shmem) {
         argc = ARGC;
         argv = ARGV;
         *ierr = PMPI_Init(&argc, &argv);
     }
 }
 
+#pragma weak PMPI_Finalize
+
 int MPI_Finalize()
 {
     int ret = MPI_SUCCESS;
-    if (!mpi_initialized_by_armci ||
+    if (!mpi_initialized_by_shmem ||
         in_error_termination || in_normal_termination) {
         ret = PMPI_Finalize();
     }
@@ -331,11 +346,12 @@ void mpi_finalize_(int *ierr)
     int flag;
     *ierr = MPI_SUCCESS;
 
-    if (!mpi_initialized_by_armci ||
+    if (!mpi_initialized_by_shmem ||
         in_error_termination || in_normal_termination) {
         *ierr = PMPI_Finalize();
     }
 }
+
 
 /**************************************************************
  *       Shared (RMA) Memory Segment Address Ranges
@@ -456,9 +472,9 @@ int comm_address_in_shared_mem(void *addr)
 /* naive implementation of strided copy
  * TODO: improve by finding maximal blocksize
  */
-static void local_strided_copy(void *src, const int src_strides[],
-                               void *dest, const int dest_strides[],
-                               const int count[], size_t stride_levels)
+static void local_strided_copy(void *src, const size_t src_strides[],
+                               void *dest, const size_t dest_strides[],
+                               const size_t count[], size_t stride_levels)
 {
     int i, j;
     size_t num_blks;
@@ -491,6 +507,283 @@ static void local_strided_copy(void *src, const int src_strides[],
     }
 }
 
+static void remote_strided_get(void *src, const size_t src_strides[],
+                        void *dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc)
+{
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    for (i = 1; i <= num_blks; i++) {
+        shmem_getmem(dest_ptr, src_ptr, blk_size, proc);
+        for (j = 1; j <= stride_levels; j++) {
+            if (i % cnt_strides[j])
+                break;
+            src_ptr -= (count[j] - 1) * src_strides[j - 1];
+            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+        }
+        src_ptr += src_strides[j - 1];
+        dest_ptr += dest_strides[j - 1];
+    }
+}
+
+static void remote_strided_put(void *src, const size_t src_strides[],
+                        void *dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc)
+{
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    for (i = 1; i <= num_blks; i++) {
+        shmem_putmem(dest_ptr, src_ptr, blk_size, proc);
+        for (j = 1; j <= stride_levels; j++) {
+            if (i % cnt_strides[j])
+                break;
+            src_ptr -= (count[j] - 1) * src_strides[j - 1];
+            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+        }
+        src_ptr += src_strides[j - 1];
+        dest_ptr += dest_strides[j - 1];
+    }
+}
+
+static void strided_get(void *remote_src, const size_t src_strides[],
+                        void *dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc)
+{
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = remote_src;
+    int base_dimension, buffer_dimension;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    if (str_alg != NULL) {
+        if (strcasecmp(stride_algorithms[1], str_alg) == 0) {
+            if (stride_levels >= 2) {
+                if (count[1] > count[2]) {
+                    base_dimension = 1;
+                    buffer_dimension = 2;
+                } else {
+                    base_dimension = 2;
+                    buffer_dimension = 1;
+                }
+
+                int shmem_sst = src_strides[base_dimension - 1]/count[0];
+                int shmem_tst = dest_strides[base_dimension - 1]/count[0];
+                int shmem_nelems = count[base_dimension];
+                int base_blk_size = count[1] * count[2];
+                void *s_ptr, *d_ptr;
+
+                for (i = 1; i <= num_blks; i++) {
+                    if (i % base_blk_size == 1) {
+                        s_ptr = src_ptr;
+                        d_ptr = dest_ptr;
+                        for (j = 0; j < count[buffer_dimension]; j++) {
+                            if (count[0] == 4) {
+                                shmem_iget32(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            } else if (count[1] == 8) {
+                                shmem_iget64(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            } else if (count[1] == 16){
+                                shmem_iget128(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            }
+                            s_ptr += src_strides[buffer_dimension - 1];
+                            d_ptr += dest_strides[buffer_dimension - 1];
+                        }
+                    }
+
+                    for (j = 1; j <= stride_levels; j++) {
+                        if (i % cnt_strides[j])
+                            break;
+                        src_ptr -= (count[j] - 1) * src_strides[j - 1];
+                        dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+                    }
+
+                    src_ptr += src_strides[j - 1];
+                    dest_ptr += dest_strides[j - 1];
+                }
+            } else {
+                if (count[0] == 4) {
+                    shmem_iget32(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else if (count[1] == 8) {
+                    shmem_iget64(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else if (count[1] == 16){
+                    shmem_iget128(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else {
+                    remote_strided_get(remote_src, src_strides,
+                                       dest, dest_strides,
+                                       count, stride_levels,
+                                       proc);
+                }
+            }
+        } else {
+            remote_strided_get(remote_src, src_strides,
+                    dest, dest_strides,
+                    count, stride_levels,
+                    proc);
+        }
+    } else {
+        remote_strided_get(remote_src, src_strides,
+                dest, dest_strides,
+                count, stride_levels,
+                proc);
+    }
+}
+
+static void strided_put(void *src, const size_t src_strides[],
+                        void *remote_dest, const size_t dest_strides[],
+                        const size_t count[], size_t stride_levels,
+                        int proc)
+{
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = remote_dest;
+    void *src_ptr = src;
+    int base_dimension, buffer_dimension;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    if (str_alg != NULL) {
+        if (strcasecmp(stride_algorithms[1], str_alg) == 0) {
+            if (stride_levels >= 2) {
+                if (count[1] > count[2]) {
+                    base_dimension = 1;
+                    buffer_dimension = 2;
+                } else {
+                    base_dimension = 2;
+                    buffer_dimension = 1;
+                }
+
+                int shmem_sst = src_strides[base_dimension - 1]/count[0];
+                int shmem_tst = dest_strides[base_dimension - 1]/count[0];
+                int shmem_nelems = count[base_dimension];
+                int base_blk_size = count[1] * count[2];
+                void *s_ptr, *d_ptr;
+
+                for (i = 1; i <= num_blks; i++) {
+                    if (i % base_blk_size == 1) {
+                        s_ptr = src_ptr;
+                        d_ptr = dest_ptr;
+                        for (j = 0; j < count[buffer_dimension]; j++) {
+                            if (count[0] == 4) {
+                                shmem_iput32(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            } else if (count[1] == 8) {
+                                shmem_iput64(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            } else if (count[1] == 16){
+                                shmem_iput128(d_ptr, s_ptr, shmem_tst, shmem_sst,
+                                        shmem_nelems, proc);
+                            }
+                            s_ptr += src_strides[buffer_dimension - 1];
+                            d_ptr += dest_strides[buffer_dimension - 1];
+                        }
+                    }
+
+                    for (j = 1; j <= stride_levels; j++) {
+                        if (i % cnt_strides[j])
+                            break;
+                        src_ptr -= (count[j] - 1) * src_strides[j - 1];
+                        dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+                    }
+
+                    src_ptr += src_strides[j - 1];
+                    dest_ptr += dest_strides[j - 1];
+                }
+            } else {
+                if (count[0] == 4) {
+                    shmem_iput32(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else if (count[1] == 8) {
+                    shmem_iput64(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else if (count[1] == 16){
+                    shmem_iput128(dest_ptr, src_ptr, dest_strides[0]/count[0],
+                            src_strides[0]/count[0], count[1], proc);
+                } else {
+                    remote_strided_put(src, src_strides,
+                            remote_dest, dest_strides,
+                            count, stride_levels,
+                            proc);
+                }
+            }
+        } else {
+            remote_strided_put(src, src_strides,
+                    remote_dest, dest_strides,
+                    count, stride_levels,
+                    proc);
+        }
+    } else {
+        remote_strided_put(src, src_strides,
+                remote_dest, dest_strides,
+                count, stride_levels,
+                proc);
+    }
+
+}
+
 
 
 /*****************************************************************
@@ -499,7 +792,7 @@ static void local_strided_copy(void *src, const int src_strides[],
 
 /*
  * comm_init:
- * 1) Initialize ARMCI
+ * 1) Initialize SHMEM
  * 2) Create flags and mutexes for sync_images
  * 3) Create pinned memory and populates coarray_start_all_images.
  * 4) Populates init_common_slot and child_common_slot with the pinned memory
@@ -515,7 +808,6 @@ void comm_init()
     unsigned long image_heap_size;
     size_t collectives_offset;
     unsigned long  teams_heap_size;
-    armci_handle_x_t *p;
 
     extern mem_usage_info_t * mem_info;
     extern mem_usage_info_t * teams_mem_info;
@@ -535,17 +827,10 @@ void comm_init()
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap).
-     *
-     * We reserve sizeof(void*) bytes at the beginning of the shared memory
-     * segment for storing the start address of every proc's shared memory, so
-     * add that as well (treat is as part of save coarray memory).
      */
 
     static_symm_data_total_size = get_static_symm_size(static_align,
                                                        collectives_bufsize);
-
-    static_symm_data_total_size +=
-      ((sizeof(void *)-1)/static_align+1)*static_align;
 
     collectives_offset = static_symm_data_total_size -
         ((collectives_bufsize-1)/static_align+1)*static_align;
@@ -562,20 +847,22 @@ void comm_init()
                                             DEFAULT_TEAMS_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
 
+    /*
     argc = ARGC;
     argv = ARGV;
     MPI_Init(&argc, &argv);
     __f90_set_args(argc, argv);
+    */
 
-    ret = ARMCI_Init();
-    if (ret != 0) {
-        Error("ARMCI init error");
-    }
+    /* selection strided algorithm from env variable */
+    str_alg = getenv("UHCAF_STRIDE_ALGORITHM");
 
-    mpi_initialized_by_armci = 1;
+    start_pes(0);
 
-    MPI_Comm_rank(MPI_COMM_WORLD, (int *) &my_proc);
-    MPI_Comm_size(MPI_COMM_WORLD, (int *) &num_procs);
+    mpi_initialized_by_shmem = 0;
+
+    my_proc = _my_pe();
+    num_procs = _num_pes();
 
     /* compute log2_images and rem_images */
     int log2_procs = 0;
@@ -600,7 +887,7 @@ void comm_init()
     _rem_images = rem_procs;
 
     LIBCAF_TRACE_INIT();
-    LIBCAF_TRACE(LIBCAF_LOG_INIT, "after ARMCI_Init");
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "after start_pes");
 
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
@@ -711,17 +998,6 @@ void comm_init()
         }
     }
 
-    /* Create flags and mutex for sync_images and critical regions
-     * For every image, we create num_procs mutexes and one additional
-     * mutex for the critical region. This needs to be changed to
-     * multiple mutexes based depending on the number of critical regions.
-     * The important point to note here is that ARMCI_Create_mutexes can be
-     * called only once per image
-     */
-    ARMCI_Create_mutexes(num_procs + 1);
-
-    critical_mutex = num_procs; /* last mutex reserved for critical sections */
-
     if (caf_shared_memory_size / 1024 >= MAX_SHARED_MEMORY_SIZE / 1024) {
         if (my_proc == 0) {
             Error("Image shared memory size must not exceed %lu GB",
@@ -730,17 +1006,28 @@ void comm_init()
     }
 
     /* Create pinned/registered memory (Shared Memory) */
-    coarray_start_all_images = malloc(num_procs * sizeof(void *));
-    start_shared_mem_address = malloc(num_procs * sizeof(void *));
+    coarray_start_all_images = shmalloc(num_procs * sizeof(void *));
+    //start_shared_mem_address = malloc(num_procs * sizeof(void *));
 
+    {
+        static void *start_addr;
+        int i;
+        long *psync_collect = shmalloc(_SHMEM_COLLECT_SYNC_SIZE *
+                sizeof *psync_collect);
 
-    /* TODO: where's the check for maximum allowable segment by system? */
-    ret = ARMCI_Malloc((void **) coarray_start_all_images,
-                       caf_shared_memory_size);
+        for (i = 0; i < _SHMEM_COLLECT_SYNC_SIZE; i++) {
+            psync_collect[i] = _SHMEM_SYNC_VALUE;
+        }
 
-    if (ret != 0) {
-        Error("ARMCI_Malloc failed when allocating %lu bytes.",
-              caf_shared_memory_size);
+        shmem_barrier_all();
+
+        start_addr = shmalloc(caf_shared_memory_size);
+        *((void **)start_addr) = start_addr;
+
+        shmem_fcollect64(coarray_start_all_images, start_addr, 1, 0, 0, num_procs,
+                psync_collect);
+
+        shfree(psync_collect);
     }
 
     /* adjust teams_heap_size */
@@ -758,30 +1045,9 @@ void comm_init()
     }
 
 
-    start_shared_mem_address[my_proc] = coarray_start_all_images[my_proc];
+    shmem_barrier_all();
 
-    /* write start shared memory address to beginning of shared memory */
-    *((void **) start_shared_mem_address[my_proc]) =
-        start_shared_mem_address[my_proc];
-    ARMCI_Barrier();
-
-    for (i = 0; i < num_procs; i++) {
-        int domain_id = armci_domain_id(ARMCI_DOMAIN_SMP, i);
-        if (armci_domain_same_id(ARMCI_DOMAIN_SMP, i)) {
-            start_shared_mem_address[i] =
-                *((void **) coarray_start_all_images[i]);
-        } else if (i ==
-                   armci_domain_glob_proc_id(ARMCI_DOMAIN_SMP, domain_id,
-                                             0)) {
-            start_shared_mem_address[i] = coarray_start_all_images[i];
-        } else {
-            /* will be updated on demand */
-            start_shared_mem_address[i] = NULL;
-        }
-    }
-
-    allocate_static_symm_data((char *) coarray_start_all_images[my_proc] +
-                      ((sizeof(void *)-1)/static_align+1)*static_align);
+    allocate_static_symm_data((char *) coarray_start_all_images[my_proc]);
 
     /* set collectives buffer */
     collectives_buffer[0] = coarray_start_all_images[my_proc] +
@@ -790,65 +1056,6 @@ void comm_init()
                              collectives_bufsize/2;
 
     memset(collectives_buffer[0], 0, collectives_bufsize);
-
-    nb_mgr[PUTS].handles = (struct handle_list **) malloc
-        (num_procs * sizeof(struct handle_list *));
-    nb_mgr[PUTS].num_handles = 0;
-    nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
-    nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
-    if (nb_xfer_limit > 0) {
-        armci_nbput_handles = malloc(nb_xfer_limit *
-                                     sizeof(armci_handle_x_t));
-        p = armci_nbput_handles;
-        for (i = 0; i < nb_xfer_limit - 1; i++) {
-            p[i].next = &p[i + 1];
-        }
-        p[nb_xfer_limit - 1].next = NULL;
-        nb_mgr[PUTS].free_armci_handles = armci_nbput_handles;
-    }
-
-    nb_mgr[GETS].handles = (struct handle_list **) malloc
-        (num_procs * sizeof(struct handle_list *));
-    nb_mgr[GETS].num_handles = 0;
-    nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
-    nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
-    if (nb_xfer_limit > 0) {
-        armci_nbget_handles = malloc(nb_xfer_limit *
-                                     sizeof(armci_handle_x_t));
-        p = armci_nbget_handles;
-        for (i = 0; i < nb_xfer_limit - 1; i++) {
-            p[i].next = &p[i + 1];
-        }
-        p[nb_xfer_limit - 1].next = NULL;
-        nb_mgr[GETS].free_armci_handles = armci_nbget_handles;
-    }
-
-    /* initialize data structures to 0 */
-    for (i = 0; i < num_procs; i++) {
-        nb_mgr[PUTS].handles[i] = 0;
-        nb_mgr[PUTS].min_nb_address[i] = 0;
-        nb_mgr[PUTS].max_nb_address[i] = 0;
-        nb_mgr[GETS].handles[i] = 0;
-        nb_mgr[GETS].min_nb_address[i] = 0;
-        nb_mgr[GETS].max_nb_address[i] = 0;
-    }
-
-    if (enable_get_cache) {
-        cache_all_images =
-            (struct cache **) malloc(num_procs * sizeof(struct cache *));
-        /* initialize data structures to 0 */
-        for (i = 0; i < num_procs; i++) {
-            cache_all_images[i] =
-                (struct cache *) malloc(sizeof(struct cache));
-            cache_all_images[i]->remote_address = 0;
-            cache_all_images[i]->handle = malloc(sizeof(armci_hdl_t));
-            ARMCI_INIT_HANDLE(cache_all_images[i]->handle);
-            if (ARMCI_Test(cache_all_images[i]->handle) == 0) {
-            }
-            cache_all_images[i]->cache_line_address =
-                malloc(getcache_block_size);
-        }
-    }
 
     /* initialize the child common shared memory slot */
     if (child_common_slot != NULL) {
@@ -884,7 +1091,7 @@ void comm_init()
     /* Add intranode_set array
      *
      * Currently, treating each process as residing on its own node.
-     * TODO: get node info from ARMCI
+     * TODO: get node info from SHMEM
      */
 
     {
@@ -903,6 +1110,8 @@ void comm_init()
 	    for (i = 0; i < num_procs; i++) {
 		    initial_team->leader_set[i] = i;
 	    }
+
+        total_num_supernodes = num_procs;
     }
 
     initial_team->current_this_image    = my_proc + 1;
@@ -1123,804 +1332,19 @@ void comm_init()
     global_team_stack->stack[global_team_stack->count] = initial_team;
     global_team_stack->count += 1;
 
+    /* critical section lock */
+    critical_naive_lock = (long *) shmalloc(sizeof *critical_naive_lock);
+    *critical_naive_lock = 0;
+
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
                  init_common_slot->addr, init_common_slot->size);
 
-    ARMCI_Barrier();
+    shmem_barrier_all();
 
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "exit");
 }
 
-/*****************************************************************
- *                      GET CACHE Support
- *****************************************************************/
-
-static void clear_all_cache()
-{
-    int i;
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    for (i = 0; i < num_procs; i++) {
-        if (cache_all_images[i]->remote_address) {
-            /* wait on pending get, if necessary */
-            if (ARMCI_Test(cache_all_images[i]->handle) == 0) {
-              ARMCI_Wait(cache_all_images[i]->handle);
-              ARMCI_INIT_HANDLE(cache_all_images[i]->handle);
-            }
-            /* throw away the result! */
-            cache_all_images[i]->remote_address = NULL;
-        }
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-static void clear_cache(size_t node)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    if (cache_all_images[node]->remote_address) {
-      /* wait on pending get, if necessary */
-      if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
-        ARMCI_Wait(cache_all_images[node]->handle);
-        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
-      }
-      /* throw away the result! */
-      cache_all_images[node]->remote_address = NULL;
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-static void refetch_all_cache()
-{
-    int i;
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    for (i = 0; i < num_procs; i++) {
-        if (cache_all_images[i]->remote_address) {
-            ARMCI_NbGet(cache_all_images[i]->remote_address,
-                        cache_all_images[i]->cache_line_address,
-                        getcache_block_size, i,
-                        cache_all_images[i]->handle);
-        }
-    }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-static void refetch_cache(unsigned long node)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    if (cache_all_images[node]->remote_address) {
-        ARMCI_NbGet(cache_all_images[node]->remote_address,
-                    cache_all_images[node]->cache_line_address,
-                    getcache_block_size, node,
-                    cache_all_images[node]->handle);
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-static int cache_check_and_get(size_t node, void *remote_address,
-                                size_t nbytes, void *local_address)
-{
-    int retval;
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    void *cache_address = cache_all_images[node]->remote_address;
-    size_t start_offset;
-    void *cache_line_address = cache_all_images[node]->cache_line_address;
-
-    /* wait on any pending get into the cache to complete */
-    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
-                     "node %ld .. waiting", (long)node);
-        ARMCI_Wait(cache_all_images[node]->handle);
-        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
-    }
-
-    if (cache_address != NULL &&
-        (remote_address >= cache_address) &&
-        (remote_address+nbytes <= cache_address+getcache_block_size) ) {
-        /* the data is contained in the cache */
-        PROFILE_GET_CACHE_HIT((int)node);
-
-        start_offset = remote_address - cache_address;
-
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache hit for data from node %ld --  "
-                     "loading from %ld bytes from cache",
-                     (long)node, (long)nbytes);
-        memcpy(local_address, cache_line_address + start_offset, nbytes);
-
-        retval = 1;
-    } else {
-        /* data was not fully in cache. Simplistic strategy right now is to
-         * just invalidate the current cache line and bring in a new one if
-         * the request was complete miss. If its a partial miss, then we
-         * return 0.
-         */
-        PROFILE_GET_CACHE_MISS((int)node);
-
-        if (nbytes <= getcache_block_size &&
-            ( cache_address == NULL ||
-              (remote_address >= (cache_address+getcache_block_size)) ||
-              (remote_address+nbytes < cache_address)) ) {
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld --  "
-                    "getting new cache line (%ld bytes) into cache",
-                    (long)node, (long)getcache_block_size);
-
-            PROFILE_RMA_LOAD_BEGIN((int)node, nbytes);
-
-            cache_all_images[node]->remote_address = remote_address;
-            ARMCI_Get(remote_address, cache_line_address,
-                      getcache_block_size, node);
-            memcpy(local_address, cache_line_address, nbytes);
-
-            PROFILE_RMA_LOAD_END((int)node);
-            retval = 1;
-        } else {
-            /* partial miss or requested data doesn't fit into cache. */
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld "
-                         "(%ld bytes) --  bypassing cache",
-                    (long)node, (long)nbytes);
-            retval = 0;
-        }
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-    return retval;
-}
-
-
-
-static int cache_check_and_get_strided(void *remote_src,
-                                        int src_strides[],
-                                        void *local_dest,
-                                        int dest_strides[], int count[],
-                                        size_t stride_levels, size_t node)
-{
-    int retval;
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    void *cache_address = cache_all_images[node]->remote_address;
-    size_t start_offset;
-    void *cache_line_address = cache_all_images[node]->cache_line_address;
-    size_t size;
-    int i, j;
-
-    size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
-        + count[0];
-
-    /* wait on any pending get into the cache to complete */
-    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
-                     "node %ld .. waiting", (long)node);
-        ARMCI_Wait(cache_all_images[node]->handle);
-        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
-    }
-
-    if (cache_address != NULL &&
-        (remote_src >= cache_address) &&
-        (remote_src+size <= cache_address+getcache_block_size) ) {
-        /* data is contained in the cache */
-        PROFILE_GET_CACHE_HIT((int)node);
-
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "Address %p on image %lu found in cache.", remote_src,
-                     node + 1);
-        start_offset = remote_src - cache_address;
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache hit for data from node %ld --  "
-                     "doing strided get from cache", (long)node);
-
-        local_strided_copy(cache_line_address + start_offset,
-                           src_strides, local_dest, dest_strides,
-                           count, stride_levels);
-
-        retval = 1;
-    } else {
-        /* data was not fully in cache. Simplistic strategy right now is to
-         * just invalidate the current cache line and bring in a new one if
-         * the request was complete miss. If its a partial miss, then we
-         * return 0.
-         */
-        PROFILE_GET_CACHE_MISS((int)node);
-
-        if (size <= getcache_block_size &&
-            ( cache_address == NULL ||
-              (remote_src >= (cache_address+getcache_block_size)) ||
-              (remote_src+size < cache_address)) ) {
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld --  "
-                    "getting new cache line (%ld bytes) into cache",
-                    (long)node, (long)getcache_block_size);
-
-            PROFILE_RMA_LOAD_BEGIN((int)node, getcache_block_size);
-
-            cache_all_images[node]->remote_address = remote_src;
-            ARMCI_Get(remote_src, cache_line_address, getcache_block_size,
-                      node);
-            local_strided_copy(cache_line_address,
-                               src_strides, local_dest, dest_strides,
-                               count, stride_levels);
-
-            PROFILE_RMA_LOAD_END((int)node);
-            retval = 1;
-        } else {
-            /* partial miss or requested data doesn't fit into cache. */
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE, "cache miss for data from node %ld "
-                         "bypassing cache", (long)node);
-            retval = 0;
-        }
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-    return retval;
-}
-
-
-/* Update cache if remote write overlap -- like writethrough cache */
-static void update_cache(size_t node, void *remote_address,
-                         size_t nbytes, void *local_address)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    void *cache_address = cache_all_images[node]->remote_address;
-    size_t start_offset;
-    void *cache_line_address = cache_all_images[node]->cache_line_address;
-
-    /* wait on any pending get into the cache to complete */
-    if (ARMCI_Test(cache_all_images[node]->handle) == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "transfer to cache pending from  "
-                     "node %ld .. waiting", (long)node);
-        ARMCI_Wait(cache_all_images[node]->handle);
-        ARMCI_INIT_HANDLE(cache_all_images[node]->handle);
-    }
-
-    if (cache_address > 0 && remote_address >= cache_address &&
-        remote_address + nbytes <= cache_address + getcache_block_size) {
-        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
-
-        start_offset = remote_address - cache_address;
-        memcpy(cache_line_address + start_offset, local_address, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
-                     " image %lu updated in cache due to write conflict.",
-                     remote_address, node + 1);
-    } else if (cache_address > 0 &&
-               remote_address >= cache_address &&
-               remote_address <= cache_address + getcache_block_size) {
-        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
-
-        start_offset = remote_address - cache_address;
-        nbytes = getcache_block_size - start_offset;
-        memcpy(cache_line_address + start_offset, local_address, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
-                     " image %lu partially updated in cache (write conflict).",
-                     remote_address, node + 1);
-    } else if (cache_address > 0 &&
-               remote_address + nbytes >= cache_address &&
-               remote_address + nbytes <=
-               cache_address + getcache_block_size) {
-        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
-
-        start_offset = cache_address - remote_address;
-        nbytes = nbytes - start_offset;
-        memcpy(cache_line_address, local_address + start_offset, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
-                     " image %lu partially updated in cache (write conflict).",
-                     remote_address, node + 1);
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-
-static void update_cache_strided(void *remote_dest_address,
-                                 const int dest_strides[],
-                                 void *local_src_address,
-                                 const int src_strides[],
-                                 const int count[], size_t stride_levels,
-                                 size_t node)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
-
-    void *cache_address = cache_all_images[node]->remote_address;
-    size_t start_offset;
-    void *cache_line_address = cache_all_images[node]->cache_line_address;
-    size_t size;
-
-    /* calculate max size (very conservative!) */
-    size = (dest_strides[stride_levels - 1] * (count[stride_levels] - 1))
-        + count[0];
-
-    /* New data completely fit into cache */
-    if (cache_address > 0 && remote_dest_address >= cache_address &&
-        remote_dest_address + size <= cache_address + getcache_block_size) {
-        PROFILE_GET_CACHE_WRITE_THROUGH((int)node);
-
-        start_offset = remote_dest_address - cache_address;
-
-        local_strided_copy(local_src_address, src_strides,
-                           cache_line_address + start_offset, dest_strides,
-                           count, stride_levels);
-
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE, " Value of address %p on"
-                     " image %lu updated in cache due to write conflict.",
-                     remote_dest_address, node + 1);
-    }
-    /* Some memory overlap */
-    else if (cache_address > 0 &&
-             ((remote_dest_address + size > cache_address &&
-               remote_dest_address + size <
-               cache_address + getcache_block_size)
-              || (remote_dest_address > cache_address
-                  && remote_dest_address <
-                  cache_address + getcache_block_size)
-             )) {
-        //make it invalid
-        cache_all_images[node]->remote_address = 0;
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
-}
-
-
-/*****************************************************************
- *      Helper Routines for Non-blocking Support
- *****************************************************************/
-
-
-
-static int handles_in_use = 0;
-
-/* NOTE: this isn't thread safe */
-static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type)
-{
-    if (handles_in_use >= nb_xfer_limit) {
-        wait_on_all_pending_accesses();
-    }
-
-    armci_handle_x_t *freed_handle =
-        nb_mgr[access_type].free_armci_handles;
-    nb_mgr[access_type].free_armci_handles = freed_handle->next;
-
-    handles_in_use++;
-
-    return &(freed_handle->handle);
-}
-
-/* NOTE: this isn't thread safe */
-static inline void return_armci_handle(armci_handle_x_t * handle,
-                                       access_type_t access_type)
-{
-    armci_handle_x_t *free_list = nb_mgr[access_type].free_armci_handles;
-    nb_mgr[access_type].free_armci_handles = handle;
-    handle->next = free_list;
-
-    handles_in_use--;
-}
-
-
-static int address_in_nb_address_block(void *remote_addr,
-                                       size_t proc, size_t size,
-                                       access_type_t access_type)
-{
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    if (max_nb_address[proc] == 0)
-        return 0;
-    if (((remote_addr + size) > min_nb_address[proc])
-        && (remote_addr < max_nb_address[proc]))
-        return 1;
-    else
-        return 0;
-}
-
-static void update_nb_address_block(void *remote_addr, size_t proc,
-                                    size_t size, access_type_t access_type)
-{
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    if (max_nb_address[proc] == 0) {
-        min_nb_address[proc] = remote_addr;
-        max_nb_address[proc] = remote_addr + size;
-        return;
-    }
-    if (remote_addr < min_nb_address[proc])
-        min_nb_address[proc] = remote_addr;
-    if ((remote_addr + size) > max_nb_address[proc])
-        max_nb_address[proc] = remote_addr + size;
-}
-
-static struct handle_list *get_next_handle(unsigned long proc,
-                                           void *remote_address,
-                                           void *local_buf,
-                                           unsigned long size,
-                                           access_type_t access_type)
-{
-    struct handle_list **handles = nb_mgr[access_type].handles;
-    struct handle_list *handle_node;
-
-    /* don't allow too many outstanding non-blocking transfers to accumulate.
-     * If the number exceeds a specified threshold, then block until all have
-     * completed.
-     */
-    if (nb_mgr[access_type].num_handles >= nb_xfer_limit) {
-        wait_on_all_pending_accesses();
-    }
-
-    if (handles[proc] == 0) {
-        handles[proc] = (struct handle_list *)
-            comm_malloc(sizeof(struct handle_list));
-        handle_node = handles[proc];
-        handle_node->prev = 0;
-    } else {
-        handle_node = handles[proc];
-        while (handle_node->next) {
-            handle_node = handle_node->next;
-        }
-        handle_node->next = (struct handle_list *)
-            comm_malloc(sizeof(struct handle_list));
-        handle_node->next->prev = handle_node;
-        handle_node = handle_node->next;
-    }
-    handle_node->handle = NULL; /* should be initialized after call
-                                   to this function */
-    handle_node->address = remote_address;
-#ifdef PCAF_INSTRUMENT
-    handle_node->rmaid = rma_prof_rid;
-#else
-    handle_node->rmaid = 0;
-#endif
-    handle_node->local_buf = local_buf;
-    handle_node->size = size;
-    handle_node->proc = proc;
-    handle_node->access_type = access_type;
-    handle_node->state = INTERNAL;
-    handle_node->next = 0;      //Just in case there is a sync before the put
-    nb_mgr[access_type].num_handles++;
-    return handle_node;
-}
-
-static void reset_min_nb_address(unsigned long proc,
-                                 access_type_t access_type)
-{
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    struct handle_list **handles = nb_mgr[access_type].handles;
-    struct handle_list *handle_node;
-    handle_node = handles[proc];
-    if (handle_node) {
-        min_nb_address[proc] = handle_node->address;
-        handle_node = handle_node->next;
-    } else
-        min_nb_address[proc] = 0;
-    while (handle_node) {
-        if (handle_node->address < min_nb_address[proc])
-            min_nb_address[proc] = handle_node->address;
-        handle_node = handle_node->next;
-    }
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
-}
-
-static void reset_max_nb_address(unsigned long proc,
-                                 access_type_t access_type)
-{
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    struct handle_list **handles = nb_mgr[access_type].handles;
-    struct handle_list *handle_node;
-    void *end_address;
-    handle_node = handles[proc];
-    max_nb_address[proc] = 0;
-    while (handle_node) {
-        end_address = handle_node->address + handle_node->size;
-        if (end_address > max_nb_address[proc])
-            max_nb_address[proc] = end_address;
-        handle_node = handle_node->next;
-    }
-}
-
-static void delete_node(unsigned long proc, struct handle_list *node,
-                        access_type_t access_type)
-{
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    struct handle_list **handles = nb_mgr[access_type].handles;
-    void *node_address;
-
-    if (node->state == STALE) {
-        comm_free(node);
-        return;
-        /* does not reach */
-    }
-
-    nb_mgr[access_type].num_handles--;
-
-    /* return armci handle to free list */
-    return_armci_handle((armci_handle_x_t *) node->handle, access_type);
-
-    if (node->prev) {
-        if (node->next) {
-            node->prev->next = node->next;
-            node->next->prev = node->prev;
-        } else                  // last node in the list
-            node->prev->next = 0;
-    } else if (node->next)      // this is the first node in the list
-    {
-        handles[proc] = node->next;
-        node->next->prev = 0;
-    } else                      // this is the only node in the list
-    {
-        handles[proc] = 0;
-        min_nb_address[proc] = 0;
-        max_nb_address[proc] = 0;
-        if (access_type = PUTS)
-            comm_lcb_free(node->local_buf);
-        if (node->state == INTERNAL) {
-            comm_free(node);
-        } else {
-            node->handle = NULL;
-            node->state = STALE;
-        }
-        return;
-    }
-    node_address = node->address;
-    if (access_type == PUTS)
-        comm_lcb_free(node->local_buf);
-
-    if (node->state == INTERNAL) {
-        comm_free(node);
-    } else {
-        node->handle = NULL;
-        node->state = STALE;
-    }
-    if (node_address == min_nb_address[proc])
-        reset_min_nb_address(proc, access_type);
-    if ((node_address + node->size) == max_nb_address[proc])
-        reset_max_nb_address(proc, access_type);
-}
-
-static int address_in_handle(struct handle_list *handle_node,
-                             void *address, unsigned long size)
-{
-    if (((address + size) > handle_node->address)
-        && (address < (handle_node->address + handle_node->size)))
-        return 1;
-    else
-        return 0;
-}
-
-
-/* check that all pending accesses of access_type that may conflict with the
- * remote address have completed */
-static void wait_on_pending_accesses(size_t proc,
-                                     void *remote_address,
-                                     size_t size,
-                                     access_type_t access_type)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    void **min_nb_address = nb_mgr[access_type].min_nb_address;
-    void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    struct handle_list **handles = nb_mgr[access_type].handles;
-    struct handle_list *handle_node, *node_to_delete;
-
-    handle_node = handles[proc];
-    if (handle_node &&
-        address_in_nb_address_block(remote_address, proc, size,
-                                    access_type)) {
-        if (access_type == PUTS) {
-            /* ARMCI provides no way to wait on a specific PUT to complete
-             * remotely, so just wait on all of them to complete */
-            wait_on_all_pending_puts_to_proc(proc);
-        } else {                /* GETS */
-            while (handle_node) {
-                if (address_in_handle(handle_node, remote_address, size)) {
-                    ARMCI_Wait(handle_node->handle);
-                    PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
-                    delete_node(proc, handle_node, GETS);
-                    return;
-                } else if (ARMCI_Test(handle_node->handle) != 0) {
-                    /* has completed */
-                    PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
-                    node_to_delete = handle_node;
-                    handle_node = handle_node->next;
-                    delete_node(proc, node_to_delete, GETS);
-                } else {
-                    handle_node = handle_node->next;
-                }
-            }
-        }
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
-
-/* wait on all pending puts to complete */
-static void wait_on_all_pending_puts()
-{
-    int i;
-    struct handle_list *handle_node, *node_to_delete;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    check_for_error_stop();
-
-    /* ensures all non-blocking puts have completed */
-    ARMCI_AllFence();
-    PROFILE_RMA_END_ALL_STORES();
-
-    for (i = 0; i < num_procs; i++) {
-        handle_node = nb_mgr[PUTS].handles[i];
-        /* clear out entire handle list */
-        while (handle_node) {
-            /* return armci handle to free list */
-            return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                                PUTS);
-            node_to_delete = handle_node;
-            handle_node = handle_node->next;
-            /* for puts */
-            comm_lcb_free(node_to_delete->local_buf);
-            if (node_to_delete->state == INTERNAL) {
-                comm_free(node_to_delete);
-            } else {
-                /* will delete node_to_delete later */
-                node_to_delete->handle = NULL;
-                node_to_delete->state = STALE;
-            }
-            nb_mgr[PUTS].num_handles--;
-        }
-        nb_mgr[PUTS].handles[i] = 0;
-        nb_mgr[PUTS].min_nb_address[i] = 0;
-        nb_mgr[PUTS].max_nb_address[i] = 0;
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
-
-
-/* wait on all pending accesses to complete */
-static void wait_on_all_pending_accesses()
-{
-    int i;
-    struct handle_list *handle_node, *node_to_delete;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    check_for_error_stop();
-
-    wait_on_all_pending_puts();
-
-    for (i = 0; i < num_procs; i++) {
-        handle_node = nb_mgr[GETS].handles[i];
-        /* clear out entire handle list */
-        while (handle_node) {
-            ARMCI_Wait(handle_node->handle);
-            PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
-
-            /* return armci handle to free list */
-            return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                                GETS);
-            node_to_delete = handle_node;
-            handle_node = handle_node->next;
-            if (node_to_delete->state == INTERNAL) {
-                comm_free(node_to_delete);
-            } else {
-                /* will delete node_to_delete later */
-                node_to_delete->handle = NULL;
-                node_to_delete->state = STALE;
-            }
-            nb_mgr[GETS].num_handles--;
-        }
-        nb_mgr[GETS].handles[i] = 0;
-        nb_mgr[GETS].min_nb_address[i] = 0;
-        nb_mgr[GETS].max_nb_address[i] = 0;
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
-
-/* wait on all pending PUTS to proc to complete */
-static void wait_on_all_pending_puts_to_proc(unsigned long proc)
-{
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    void **min_nb_address = nb_mgr[PUTS].min_nb_address;
-    void **max_nb_address = nb_mgr[PUTS].max_nb_address;
-    struct handle_list **handles = nb_mgr[PUTS].handles;
-    struct handle_list *handle_node, *node_to_delete;
-    handle_node = handles[proc];
-    ARMCI_Fence(proc);
-    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
-
-    /* clear out entire handle list */
-    while (handle_node) {
-        /* return armci handle to free list */
-        return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                            PUTS);
-        node_to_delete = handle_node;
-        handle_node = handle_node->next;
-        comm_lcb_free(node_to_delete->local_buf);
-        if (node_to_delete->state == INTERNAL) {
-            comm_free(node_to_delete);
-        } else {
-            /* will delete node_to_delete later */
-            node_to_delete->handle = NULL;
-            node_to_delete->state = STALE;
-        }
-        nb_mgr[PUTS].num_handles--;
-    }
-    handles[proc] = 0;
-    min_nb_address[proc] = 0;
-    max_nb_address[proc] = 0;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
-
-/* wait on all pending accesses to complete */
-static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
-{
-    struct handle_list *handle_node, *node_to_delete;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
-
-    check_for_error_stop();
-
-    /* ensures all non-blocking puts have completed */
-    ARMCI_Fence(proc);
-    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
-
-    handle_node = nb_mgr[PUTS].handles[proc];
-    /* clear out entire handle list */
-    while (handle_node) {
-        /* return armci handle to free list */
-        return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                PUTS);
-        node_to_delete = handle_node;
-        handle_node = handle_node->next;
-        /* for puts */
-        comm_lcb_free(node_to_delete->local_buf);
-        if (node_to_delete->state == INTERNAL) {
-            comm_free(node_to_delete);
-        } else {
-            /* will delete node_to_delete later */
-            node_to_delete->handle = NULL;
-            node_to_delete->state = STALE;
-        }
-        nb_mgr[PUTS].num_handles--;
-    }
-    nb_mgr[PUTS].handles[proc] = 0;
-    nb_mgr[PUTS].min_nb_address[proc] = 0;
-    nb_mgr[PUTS].max_nb_address[proc] = 0;
-
-    handle_node = nb_mgr[GETS].handles[proc];
-    /* clear out entire handle list */
-    while (handle_node) {
-        ARMCI_Wait(handle_node->handle);
-        PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
-
-        /* return armci handle to free list */
-        return_armci_handle((armci_handle_x_t *) handle_node->handle,
-                GETS);
-        node_to_delete = handle_node;
-        handle_node = handle_node->next;
-        if (node_to_delete->state == INTERNAL) {
-            comm_free(node_to_delete);
-        } else {
-            /* will delete node_to_delete later */
-            node_to_delete->handle = NULL;
-            node_to_delete->state = STALE;
-        }
-        nb_mgr[GETS].num_handles--;
-    }
-    nb_mgr[GETS].handles[proc] = 0;
-    nb_mgr[GETS].min_nb_address[proc] = 0;
-    nb_mgr[GETS].max_nb_address[proc] = 0;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
-}
 
 
 /*****************************************************************
@@ -1965,19 +1389,18 @@ void comm_translate_remote_addr(void **remote_addr, int proc)
     ssize_t offset;
     void *local_address;
 
-    if (start_shared_mem_address[proc] == NULL) {
-        ARMCI_Get(coarray_start_all_images[proc],
-                  &start_shared_mem_address[proc], sizeof(void *), proc);
-    }
+    /* TODO: Check this ... is start_shared_mem_address[proc] ever set? */
 
-    offset =
-        start_shared_mem_address[my_proc] - start_shared_mem_address[proc];
+    //offset = start_shared_mem_address[my_proc] - start_shared_mem_address[proc];
+    offset = coarray_start_all_images[my_proc] - coarray_start_all_images[proc];
     local_address = *remote_addr + offset;
 
+#if 0
     if (!address_in_symmetric_mem(local_address)) {
         local_address = (char *) local_address +
             comm_address_translation_offset(proc);
     }
+#endif
     *remote_addr = local_address;
 }
 
@@ -1993,11 +1416,18 @@ void *get_remote_address(void *src, size_t img)
 {
     size_t offset;
     void *remote_address;
+
+    return src;
+
+    /* does not reach */
+
+#if 0
     if ((img == my_proc) || !address_in_symmetric_mem(src))
         return src;
     offset = src - coarray_start_all_images[my_proc];
     remote_address = coarray_start_all_images[img] + offset;
     return remote_address;
+#endif
 }
 
 /****************************************************************
@@ -2010,17 +1440,7 @@ void comm_memory_free()
 
     if (coarray_start_all_images) {
         coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
-        ARMCI_Free(coarray_start_all_images[my_proc]);
-        comm_free(coarray_start_all_images);
-    }
-
-    if (enable_get_cache) {
-        int i;
-        for (i = 0; i < num_procs; i++) {
-            comm_free(cache_all_images[i]->cache_line_address);
-            comm_free(cache_all_images[i]);
-        }
-        comm_free(cache_all_images);
+        shfree(coarray_start_all_images);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
@@ -2064,10 +1484,10 @@ void comm_exit(int status)
 
     LOAD_STORE_FENCE();
     comm_memory_free();
-    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Error"
-                 " with status %d.", status);
 
-    ARMCI_Error("", status);
+
+    /* TODO: can SHMEM provide a better way to exit than this? */
+    exit(1);
 
     /* does not reach */
 }
@@ -2103,7 +1523,7 @@ void comm_finalize(int exit_code)
     stopped_image_exists[num_procs] = 1;
 
     /* wait on all pendings remote accesses to complete */
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     /* broadcast to every image that this image has stopped.
      * TODO: Other images should be able to detect this image has stopped when
@@ -2131,14 +1551,12 @@ void comm_finalize(int exit_code)
 
     /* Completion */
 
-    if (enable_get_cache)
-      clear_all_cache();
-
     comm_memory_free();
-    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Finalize");
-    ARMCI_Finalize();
+
+    /*
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to MPI_Finalize");
     MPI_Finalize();
+    */
 
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
     exit(exit_code);
@@ -2162,7 +1580,7 @@ void comm_critical()
 
     check_for_error_stop();
 
-    ARMCI_Lock(critical_mutex, 0);
+    shmem_set_lock(critical_naive_lock);
     comm_new_exec_segment();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -2174,9 +1592,9 @@ void comm_end_critical()
 
     check_for_error_stop();
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
-    ARMCI_Unlock(critical_mutex, 0);
+    shmem_clear_lock(critical_naive_lock);
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -2188,11 +1606,9 @@ void comm_fence(size_t proc)
 
     check_for_error_stop();
 
-    if (proc < 0) {
-        wait_on_all_pending_accesses();
-    } else {
-        wait_on_all_pending_accesses_to_proc((unsigned long)proc);
-    }
+    /* TODO: see if we can refine this to something more relaxed; for example
+     * consider using a shmem_fence instead of shmem_quiet */
+    shmem_quiet();
 
     LOAD_STORE_FENCE();
 
@@ -2204,7 +1620,7 @@ void comm_fence_all()
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
     check_for_error_stop();
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     LOAD_STORE_FENCE();
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -2216,13 +1632,7 @@ void comm_new_exec_segment()
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
-    if (enable_get_cache) {
-        if (get_cache_sync_refetch) {
-            refetch_all_cache();
-        } else {
-            clear_all_cache();
-        }
-    }
+    /* TODO: anything else to do here with SHMEM? */
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -2234,8 +1644,7 @@ void comm_barrier_all()
 
     check_for_error_stop();
 
-    wait_on_all_pending_accesses();
-    ARMCI_Barrier();
+    shmem_barrier_all();
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
@@ -2247,36 +1656,14 @@ void comm_sync(comm_handle_t hdl)
     check_for_error_stop();
 
     if (hdl == (comm_handle_t) - 1) {
-        /* wait on all non-blocking communication */
-        wait_on_all_pending_accesses();
+        shmem_quiet();
     } else if (hdl != NULL) {   /* wait on specified handle */
 
-        if (((struct handle_list *)hdl)->state == STALE) {
-            comm_free(hdl);
-            return;
-            /* does not reach */
-        } else if (((struct handle_list *)hdl)->state == INTERNAL) {
-            Error("Attempted to wait on invalid handle");
-            /* does not reach */
-        }
+        /* TODO: when non-blocking interface for SHMEM is available;
+         * for now, just shmem_quiet (could perhaps be shmem_fence instead )
+         * */
 
-        /* the handle state should be EXPOSED here. Set it to INTERNAL so that
-         * it gets fully deleted */
-        ((struct handle_list *)hdl)->state = INTERNAL;
-
-        check_remote_image_initial_team(((struct handle_list *) hdl)->proc + 1);
-
-        if (((struct handle_list *)hdl)->access_type == PUTS) {
-            wait_on_all_pending_puts_to_proc(((struct handle_list *)hdl)->proc);
-        } else {
-            ARMCI_Wait(((struct handle_list *) hdl)->handle);
-
-            PROFILE_COMM_HANDLE_END(hdl);
-
-            delete_node(((struct handle_list *) hdl)->proc,
-                    (struct handle_list *) hdl,
-                    ((struct handle_list *) hdl)->access_type);
-        }
+        shmem_quiet();
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -2296,7 +1683,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     LOAD_STORE_FENCE();
 
@@ -2311,7 +1698,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
                 /* doesn't reach */
             }
         } else {
-            ARMCI_Barrier();
+            shmem_barrier_all();
         }
 	} else {
 		//determine which algorithm we are going to use
@@ -2363,10 +1750,9 @@ static void sync_all_dissemination_mcs(int *status, int stat_len,
         send_dest = bstep->target;
         recv_peer = bstep->source;
 
-        /* using gasnet_put here instead of gasnet_put_nbi seems to be a
-         * little faster */
-        ARMCI_Put(&bstep->remote[bar_parity], &bar_sense,
-                  sizeof bstep->remote[bar_parity], send_dest);
+        shmem_putmem(&bstep->remote[bar_parity], &bar_sense,
+                     sizeof bstep->remote[bar_parity],
+                     send_dest);
 
         while (bstep->local[bar_parity] != bar_sense &&
                !(*error_stopped_image_exists)) {
@@ -2433,7 +1819,7 @@ void comm_sync_team(team_type_t *team, int *status, int stat_len, char *errmsg,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     LOAD_STORE_FENCE();
 
@@ -2448,7 +1834,7 @@ void comm_sync_team(team_type_t *team, int *status, int stat_len, char *errmsg,
             /* doesn't reach */
         }
     } else {
-        ARMCI_Barrier();
+        shmem_barrier_all();
     }
 
     /* determine which algorithm we are going to use */
@@ -2482,7 +1868,7 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     comm_new_exec_segment();
 
@@ -2511,7 +1897,7 @@ void comm_sync_images(int *image_list, int image_count,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    wait_on_all_pending_accesses();
+    shmem_quiet();
 
     switch (sync_images_algorithm) {
         case SYNC_COUNTER:
@@ -2628,8 +2014,6 @@ static void sync_images_counter(int *image_list,
         /* atomically decrement counter */
         SYNC_FETCH_AND_ADD((int *)&sync_flags[q].value, (int)-1);
 
-        if (enable_get_cache)
-            refetch_cache(q);
     }
 }
 
@@ -2734,9 +2118,6 @@ static void sync_images_ping_pong(int *image_list,
                     comm_write(q, &sync_flags[my_proc].value, &flag_set,
                             sizeof(flag_set), 1, NULL);
                 }
-
-                if (enable_get_cache)
-                    refetch_cache(q);
             }
         }
         comm_service();
@@ -2837,9 +2218,6 @@ static void sync_images_sense_rev(int *image_list,
             /* already received the next notification */
             sync_flags[q].t.val = x;
         }
-
-        if (enable_get_cache)
-            refetch_cache(q);
     }
 }
 
@@ -2856,13 +2234,20 @@ void comm_swap_request(void *target, void *value, size_t nbytes,
 
     check_remote_address(proc + 1, target);
     if (nbytes == sizeof(int)) {
+        int t;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_SWAP, value, remote_address, 0, proc);
-        memmove(retval, value, nbytes);
+        t = shmem_int_swap(remote_address, *((int *)value), proc);
+        memmove(retval, &t, nbytes);
     } else if (nbytes == sizeof(long)) {
+        long t;
         void *remote_address = get_remote_address(target, proc);
-        (void) ARMCI_Rmw(ARMCI_SWAP_LONG, value, remote_address, 0, proc);
-        memmove(retval, value, nbytes);
+        t = shmem_long_swap(remote_address, *((long *)value), proc);
+        memmove(retval, &t, nbytes);
+    } else if (nbytes == sizeof(long long)) {
+        long long t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_longlong_swap(remote_address, *((long long *)value), proc);
+        memmove(retval, &t, nbytes);
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_swap_request",
@@ -2876,8 +2261,35 @@ void
 comm_cswap_request(void *target, void *cond, void *value,
                    size_t nbytes, int proc, void *retval)
 {
-    /* TODO */
-    Error("comm_cswap_request not implemented for ARMCI comm layer");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    check_for_error_stop();
+
+    check_remote_address(proc + 1, target);
+    if (nbytes == sizeof(int)) {
+        int t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_int_cswap(remote_address, *((int *)cond), *((int *)value), proc);
+        memmove(retval, &t, nbytes);
+    } else if (nbytes == sizeof(long)) {
+        long t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_long_cswap(remote_address, *((long *)cond),
+                *((long *)value), proc);
+        memmove(retval, &t, nbytes);
+    } else if (nbytes == sizeof(long long)) {
+        long long t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_longlong_cswap(remote_address, *((long long *)cond),
+                *((long long *)value), proc);
+        memmove(retval, &t, nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%lu) in comm_cswap_request",
+                (unsigned long) nbytes);
+        Error(msg);
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
@@ -2892,13 +2304,30 @@ void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
     if (nbytes == sizeof(int)) {
         int ret;
         void *remote_address = get_remote_address(target, proc);
-        ret = ARMCI_Rmw(ARMCI_FETCH_AND_ADD, retval,
-                        remote_address, *(int *) value, proc);
+        if (*((int*)value) == 1) {
+            ret = shmem_int_finc(target, proc);
+        } else {
+            ret = shmem_int_fadd(target, *((int *)value), proc);
+        }
+        memmove(retval, &ret, nbytes);
     } else if (nbytes == sizeof(long)) {
         long ret;
         void *remote_address = get_remote_address(target, proc);
-        ret = ARMCI_Rmw(ARMCI_FETCH_AND_ADD_LONG, retval,
-                        remote_address, *(int *) value, proc);
+        if (*((long*)value) == 1) {
+            ret = shmem_long_finc(target, proc);
+        } else {
+            ret = shmem_long_fadd(target, *((long *)value), proc);
+        }
+        memmove(retval, &ret, nbytes);
+    } else if (nbytes == sizeof(long long)) {
+        long long ret;
+        void *remote_address = get_remote_address(target, proc);
+        if (*((long long*)value) == 1) {
+            ret = shmem_longlong_finc(target, proc);
+        } else {
+            ret = shmem_longlong_fadd(target, *((long long *)value), proc);
+        }
+        memmove(retval, &ret, nbytes);
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_fadd_request",
@@ -2910,24 +2339,36 @@ void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
 
 void comm_add_request(void *target, void *value, size_t nbytes, int proc)
 {
+    long long old;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     check_for_error_stop();
 
     check_remote_address(proc + 1, target);
     if (nbytes == sizeof(int)) {
-        int ret;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_FETCH_AND_ADD, &ret,
-                  remote_address, *(int *) value, proc);
+        if (*((int*)value) == 1) {
+            shmem_int_inc(target, proc);
+        } else {
+            shmem_int_add(target, *((int *)value), proc);
+        }
     } else if (nbytes == sizeof(long)) {
-        long ret;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_FETCH_AND_ADD_LONG, &ret,
-                   remote_address, *(int *) value, proc);
+        if (*((long*)value) == 1) {
+            shmem_long_inc(target, proc);
+        } else {
+            shmem_long_add(target, *((long *)value), proc);
+        }
+    } else if (nbytes == sizeof(long long)) {
+        void *remote_address = get_remote_address(target, proc);
+        if (*((long long*)value) == 1) {
+            shmem_longlong_inc(target, proc);
+        } else {
+            shmem_longlong_add(target, *((long long *)value), proc);
+        }
     } else {
         char msg[100];
-        sprintf(msg, "unsupported nbytes (%lu) in comm_fadd_request",
+        sprintf(msg, "unsupported nbytes (%lu) in comm_add_request",
                 (unsigned long) nbytes);
         Error(msg);
     }
@@ -2941,7 +2382,7 @@ void comm_fand_request(void *target, void *value, size_t nbytes, int proc,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_fand_request not implemented for ARMCI comm layer");
+    Error("comm_fand_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2951,7 +2392,7 @@ void comm_and_request(void *target, void *value, size_t nbytes, int proc)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_and_request not implemented for ARMCI comm layer");
+    Error("comm_and_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2962,7 +2403,7 @@ void comm_for_request(void *target, void *value, size_t nbytes, int proc,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_for_request not implemented for ARMCI comm layer");
+    Error("comm_for_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2972,7 +2413,7 @@ void comm_or_request(void *target, void *value, size_t nbytes, int proc)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_or_request not implemented for ARMCI comm layer");
+    Error("comm_or_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2983,7 +2424,7 @@ void comm_fxor_request(void *target, void *value, size_t nbytes, int proc,
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_fxor_request not implemented for ARMCI comm layer");
+    Error("comm_fxor_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2993,7 +2434,7 @@ void comm_xor_request(void *target, void *value, size_t nbytes, int proc)
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* TODO */
-    Error("comm_xor_request not implemented for ARMCI comm layer");
+    Error("comm_xor_request not implemented for SHMEM comm layer");
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -3008,17 +2449,21 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
     check_for_error_stop();
 
     check_remote_address(proc + 1, target);
-    memmove(&old, value, nbytes);
     if (nbytes == sizeof(int)) {
+        int t;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_SWAP, value, remote_address, 0, proc);
-        memmove(retval, value, nbytes);
-        memmove(value, &old, nbytes);
+        t = shmem_int_swap(remote_address, *((int *)value), proc);
+        memmove(retval, &t, nbytes);
     } else if (nbytes == sizeof(long)) {
+        long t;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_SWAP_LONG, value, remote_address, 0, proc);
-        memmove(retval, value, nbytes);
-        memmove(value, &old, nbytes);
+        t = shmem_long_swap(remote_address, *((long *)value), proc);
+        memmove(retval, &t, nbytes);
+    } else if (nbytes == sizeof(long long)) {
+        long long t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_longlong_swap(remote_address, *((long long *)value), proc);
+        memmove(retval, &t, nbytes);
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_fstore_request",
@@ -3031,21 +2476,23 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
 void comm_atomic_store_request(void *target, void *value, size_t nbytes,
                                int proc)
 {
-    long long old;
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     check_for_error_stop();
 
     check_remote_address(proc + 1, target);
-    memmove(&old, value, nbytes);
     if (nbytes == sizeof(int)) {
+        int t;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_SWAP, value, remote_address, 0, proc);
-        memmove(value, &old, nbytes);
+        t = shmem_int_swap(remote_address, *((int *)value), proc);
     } else if (nbytes == sizeof(long)) {
+        long t;
         void *remote_address = get_remote_address(target, proc);
-        ARMCI_Rmw(ARMCI_SWAP_LONG, value, remote_address, 0, proc);
-        memmove(value, &old, nbytes);
+        t = shmem_long_swap(remote_address, *((long *)value), proc);
+    } else if (nbytes == sizeof(long long)) {
+        long long t;
+        void *remote_address = get_remote_address(target, proc);
+        t = shmem_longlong_swap(remote_address, *((long long *)value), proc);
     } else {
         char msg[100];
         sprintf(msg, "unsupported nbytes (%lu) in comm_atomic_store_request",
@@ -3125,7 +2572,8 @@ void comm_service()
 
     check_for_error_stop();
 
-    if (count % SLEEP_INTERVAL == 0) usleep(1);
+    //if (count % SLEEP_INTERVAL == 0) usleep(1);
+    if (count % SLEEP_INTERVAL == 0) shmem_fence();
     count++;
 }
 
@@ -3220,84 +2668,21 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
 
-    if (rma_ordering == RMA_PUT_ORDERED) {
-        wait_on_all_pending_puts();
-    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-               nb_mgr[PUTS].handles[proc]) {
-        wait_on_all_pending_puts_to_proc(proc);
-    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-               nb_mgr[PUTS].handles[proc]) {
-        wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "Finished waiting for"
-                     " pending puts on %p on image %lu. Min:%p, Max:%p",
-                     remote_src, proc + 1,
-                     nb_mgr[PUTS].min_nb_address[proc],
-                     nb_mgr[PUTS].max_nb_address[proc]);
-    }
-
-    if (enable_get_cache) {
-        int completed_in_cache =
-            cache_check_and_get(proc, remote_src, nbytes, dest);
-        if (completed_in_cache) {
-            if (hdl != NULL)
-                *hdl = NULL;
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-            return;
-            /* does not reach */
-        }
-    }
-
-    int in_progress = 0;
-    armci_hdl_t *handle;
+    /* TODO: see if we can use shmem_fence() or something even more relaxed
+     * instead? */
+    shmem_quiet();
 
     PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
 
-    if (rma_ordering == RMA_BLOCKING) {
-        ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
-    } else {
-        handle = get_next_armci_handle(GETS);
-        ARMCI_INIT_HANDLE(handle);
+    shmem_getmem(dest, remote_src, nbytes, proc);
 
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "Before ARMCI_NbGet from %p on"
-                     " image %lu to %p size %lu",
-                     remote_src, proc + 1, dest, nbytes);
-        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
-        in_progress = (ARMCI_Test(handle) == 0);
+    /* get has completed */
+
+    if (hdl != NULL) {
+        *hdl = NULL;
     }
 
-
-    if (in_progress == 1) {
-        struct handle_list *handle_node =
-            get_next_handle(proc, remote_src, dest, nbytes, GETS);
-
-        handle_node->handle = handle;
-
-        if (hdl != NULL) {
-            handle_node->state = EXPOSED;
-            *hdl = handle_node;
-        }
-
-        PROFILE_RMA_LOAD_DEFERRED_END(proc);
-    } else {
-        /* get has completed */
-
-        if (hdl != NULL) {
-            *hdl = NULL;
-        }
-
-        if (rma_ordering != RMA_BLOCKING) {
-            return_armci_handle((armci_handle_x_t *) handle, GETS);
-        }
-
-        PROFILE_RMA_LOAD_END(proc);
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "After ARMCI_NbGet from %p on"
-                 " image %lu to %p size %lu *hdl=%p",
-                 remote_src, proc + 1, dest, nbytes, *hdl);
+    PROFILE_RMA_LOAD_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -3328,34 +2713,12 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
 
-    if (rma_ordering == RMA_PUT_ORDERED) {
-        wait_on_all_pending_puts();
-    } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-               nb_mgr[PUTS].handles[proc]) {
-        wait_on_all_pending_puts_to_proc(proc);
-    } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-               nb_mgr[PUTS].handles[proc]) {
-        wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "Finished waiting for"
-                     " pending puts on %p on image %lu. Min:%p, Max:%p",
-                     remote_src, proc + 1,
-                     nb_mgr[PUTS].min_nb_address[proc],
-                     nb_mgr[PUTS].max_nb_address[proc]);
-    }
-
-    if (enable_get_cache) {
-        int completed_in_cache =
-            cache_check_and_get(proc, remote_src, nbytes, dest);
-        if (completed_in_cache) {
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-            return;
-            /* does not reach */
-        }
-    }
+    /* TODO: see if we can use shmem_fence() or something even more relaxed
+     * instead? */
+    shmem_quiet();
 
     PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
-    ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
+    shmem_getmem(dest, remote_src, nbytes, proc);
     PROFILE_RMA_LOAD_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -3385,107 +2748,63 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 #endif
 
     remote_dest = get_remote_address(dest, proc);
+
     if (ordered) {
+        /* TODO: see if we can use shmem_fence() or something even more relaxed
+         * instead? */
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
-            armci_hdl_t *handle;
-            handle = get_next_armci_handle(PUTS);
-            ARMCI_INIT_HANDLE(handle);
-            struct handle_list *handle_node =
-                get_next_handle(proc, remote_dest, src, nbytes, PUTS);
-            handle_node->handle = handle;
-            ARMCI_NbPut(src, remote_dest, nbytes, proc,
-                        handle_node->handle);
-            handle_node->next = 0;
-            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
-                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
-            }
-            LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                         "After ARMCI_NbPut to %p on image %lu. Min:%p, Max:%p",
-                         remote_dest,
-                         proc + 1,
-                         nb_mgr[PUTS].min_nb_address[proc],
-                         nb_mgr[PUTS].max_nb_address[proc]);
+            shmem_putmem(remote_dest, src, nbytes, proc);
+            comm_lcb_free(src);
 
-            PROFILE_RMA_STORE_DEFERRED_END(proc);
+            PROFILE_RMA_STORE_END(proc);
         } else {
             /* block until remote completion */
-            ARMCI_Put(src, remote_dest, nbytes, proc);
+            shmem_putmem(remote_dest, src, nbytes, proc);
             comm_lcb_free(src);
-            wait_on_all_pending_puts_to_proc(proc);
+
+            shmem_quiet();
 
             PROFILE_RMA_STORE_END(proc);
         }
 
     } else {                    /* ordered == 0 */
+        /* TODO: see if we can use shmem_fence() or something even more relaxed
+         * instead? */
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
-        int in_progress = 0;
-        armci_hdl_t *handle;
-        handle = get_next_armci_handle(PUTS);
-        ARMCI_INIT_HANDLE(handle);
-
-        ARMCI_NbPut(src, remote_dest, nbytes, proc, handle);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "After ARMCI_NbPut to %p on image %lu.",
-                     remote_dest, proc + 1);
-
-        in_progress = (ARMCI_Test(handle) == 0);
-
-        if (in_progress == 1 && hdl != (void *)-1) {
-            struct handle_list *handle_node =
-                get_next_handle(proc, NULL, src, 0, PUTS);
-            handle_node->handle = handle;
-            handle_node->next = 0;
-
-            if (hdl != NULL) {
-                handle_node->state = EXPOSED;
-                *hdl = handle_node;
-            }
-
-            PROFILE_RMA_STORE_DEFERRED_END(proc);
-        } else if (in_progress == 0) {
-            /* put has completed */
+        if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
+            shmem_putmem(remote_dest, src, nbytes, proc);
             comm_lcb_free(src);
-            return_armci_handle((armci_handle_x_t *) handle, PUTS);
-            if (hdl != NULL && hdl != (void *)-1)
-                *hdl = NULL;
 
             PROFILE_RMA_STORE_END(proc);
-        } else { /* hdl == -1 */
-            /* block until it remotely completes */
-            wait_on_all_pending_puts_to_proc(proc);
+        } else {
+            /* block until remote completion */
+            shmem_putmem(remote_dest, src, nbytes, proc);
             comm_lcb_free(src);
-            return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+            shmem_quiet();
 
             PROFILE_RMA_STORE_END(proc);
         }
-
     }
-
-    if (enable_get_cache)
-        update_cache(proc, remote_dest, nbytes, src);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -3517,100 +2836,55 @@ void comm_write(size_t proc, void *dest, void *src,
     remote_dest = get_remote_address(dest, proc);
     if (ordered && rma_ordering != RMA_RELAXED) {
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         /* guarantees local completion */
-        ARMCI_Put(src, remote_dest, nbytes, proc);
+        shmem_putmem(remote_dest, src, nbytes, proc);
 
         if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
-            if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
-                update_nb_address_block(remote_dest, proc, nbytes, PUTS);
-            }
-
-            PROFILE_RMA_STORE_DEFERRED_END(proc);
+            PROFILE_RMA_STORE_END(proc);
         } else {
             /* block until remote completion */
-            wait_on_all_pending_puts_to_proc(proc);
+            shmem_quiet();
 
             PROFILE_RMA_STORE_END(proc);
         }
 
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "After ARMCI_Put to %p on image %lu. Min:%p, Max:%p",
-                     remote_dest,
-                     proc + 1,
-                     nb_mgr[PUTS].min_nb_address[proc],
-                     nb_mgr[PUTS].max_nb_address[proc]);
     } else {                    /* ordered == 0 */
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
         PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
-        int in_progress = 0;
-        armci_hdl_t *handle;
-        handle = get_next_armci_handle(PUTS);
-        ARMCI_INIT_HANDLE(handle);
+        shmem_putmem(remote_dest, src, nbytes, proc);
 
-        ARMCI_NbPut(src, remote_dest, nbytes, proc, handle);
-        LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "After ARMCI_NbPut to %p on image %lu.",
-                     remote_dest, proc + 1);
-
-        in_progress = (ARMCI_Test(handle) == 0);
-
-        if (in_progress == 1 && hdl != (void *)-1) {
-            struct handle_list *handle_node =
-                get_next_handle(proc, NULL, NULL, 0, PUTS);
-            handle_node->handle = handle;
-            handle_node->next = 0;
-
-            if (hdl != NULL) {
-                handle_node->state = EXPOSED;
-                *hdl = handle_node;
-            }
-
-            PROFILE_RMA_STORE_DEFERRED_END(proc);
-        } else if (in_progress == 0) {
-            /* put has completed */
-            if (hdl != NULL && hdl != (void *)-1)
-                *hdl = NULL;
-            return_armci_handle((armci_handle_x_t *) handle, PUTS);
-
-            PROFILE_RMA_STORE_DEFERRED_END(proc);
+        if (hdl != (void *)-1) {
+            PROFILE_RMA_STORE_END(proc);
         } else { /* hdl == -1 */
             /* block until it remotely completes */
-            wait_on_all_pending_puts_to_proc(proc);
-            return_armci_handle((armci_handle_x_t *) handle, PUTS);
+            shmem_quiet();
 
             PROFILE_RMA_STORE_END(proc);
         }
 
     }
 
-    if (enable_get_cache)
-        update_cache(proc, remote_dest, nbytes, src);
-
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-/* just a direct call into ARMCI which blocks only until local completion
+/* just a direct call into SHMEM which blocks only until local completion
  */
 void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
 {
@@ -3621,7 +2895,7 @@ void comm_nbi_write(size_t proc, void *dest, void *src, size_t nbytes)
     remote_dest = get_remote_address(dest, proc);
 
     PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-    ARMCI_Put(src, remote_dest, nbytes, proc);
+    shmem_putmem(remote_dest, src, nbytes, proc);
     PROFILE_RMA_STORE_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -3637,7 +2911,7 @@ void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes)
     remote_dest = get_remote_address(dest, proc);
 
     PROFILE_RMA_STORE_BEGIN(proc, nbytes);
-    ARMCI_Put(src, remote_dest, nbytes, proc);
+    shmem_putmem(remote_dest, src, nbytes, proc);
     PROFILE_RMA_STORE_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -3645,28 +2919,16 @@ void comm_write_x(size_t proc, void *dest, void *src, size_t nbytes)
 
 
 void comm_strided_nbread(size_t proc,
-                         void *src, const size_t src_strides_[],
-                         void *dest, const size_t dest_strides_[],
-                         const size_t count_[], size_t stride_levels,
+                         void *src, const size_t src_strides[],
+                         void *dest, const size_t dest_strides[],
+                         const size_t count[], size_t stride_levels,
                          comm_handle_t * hdl)
 {
     void *remote_src;
-    int src_strides[stride_levels];
-    int dest_strides[stride_levels];
-    int count[stride_levels + 1];
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     check_for_error_stop();
-
-    /* ARMCI uses int for strides and count arrays */
-    int i;
-    for (i = 0; i < stride_levels; i++) {
-        src_strides[i] = src_strides_[i];
-        dest_strides[i] = dest_strides_[i];
-        count[i] = count_[i];
-    }
-    count[stride_levels] = count_[stride_levels];
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     size_t nbytes = 1;
@@ -3690,80 +2952,29 @@ void comm_strided_nbread(size_t proc,
         remote_src = get_remote_address(src, proc);
 
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_src, size, PUTS);
-            LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                         "Finished waiting for"
-                         " pending puts on %p on image %lu. Min:%p, Max:%p",
-                         remote_src, proc + 1,
-                         nb_mgr[PUTS].min_nb_address[proc],
-                         nb_mgr[PUTS].max_nb_address[proc]);
-        }
-
-        if (enable_get_cache) {
-            int completed_in_cache =
-                cache_check_and_get_strided(remote_src, src_strides,
-                                            dest, dest_strides, count,
-                                            stride_levels, proc);
-            if (completed_in_cache) {
-                if (hdl != NULL)
-                    *hdl = NULL;
-                LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-                return;
-            /* does not reach */
-            }
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
         PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
 
-        int in_progress = 0;
-        armci_hdl_t *handle;
+        /*
+        ARMCI_GetS(remote_src, src_strides, dest, dest_strides,
+                   count, stride_levels, proc);
+                   */
+        strided_get(remote_src, src_strides, dest, dest_strides, count,
+                    stride_levels, proc);
 
-        if (rma_ordering == RMA_BLOCKING) {
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
-                         " %p on image %lu to %p (stride_levels= %u)",
-                         remote_src, proc + 1, dest, stride_levels);
-            ARMCI_GetS(remote_src, src_strides, dest, dest_strides,
-                       count, stride_levels, proc);
 
-        } else {
-            handle = get_next_armci_handle(GETS);
-            ARMCI_INIT_HANDLE(handle);
-            ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
-                         count, stride_levels, proc, handle);
-
-            in_progress = (ARMCI_Test(handle) == 0);
+        /* completed */
+        if (hdl != NULL) {
+            *hdl = NULL;
         }
 
-        if (in_progress == 1) {
-            struct handle_list *handle_node =
-                get_next_handle(proc, remote_src, dest, size, GETS);
-
-            handle_node->handle = handle;
-
-            if (hdl != NULL) {
-                handle_node->state = EXPOSED;
-                *hdl = handle_node;
-            }
-
-            PROFILE_RMA_LOAD_DEFERRED_END(proc);
-        } else {
-            /* completed */
-            if (hdl != NULL) {
-                *hdl = NULL;
-            }
-
-            if (rma_ordering != RMA_BLOCKING) {
-                return_armci_handle((armci_handle_x_t *) handle, GETS);
-            }
-
-            PROFILE_RMA_LOAD_END(proc);
-        }
+        PROFILE_RMA_LOAD_END(proc);
 
     }
 
@@ -3771,27 +2982,16 @@ void comm_strided_nbread(size_t proc,
 }
 
 void comm_strided_read(size_t proc,
-                       void *src, const size_t src_strides_[],
-                       void *dest, const size_t dest_strides_[],
-                       const size_t count_[], size_t stride_levels)
+                       void *src, const size_t src_strides[],
+                       void *dest, const size_t dest_strides[],
+                       const size_t count[], size_t stride_levels)
 {
     void *remote_src;
-    int src_strides[stride_levels];
-    int dest_strides[stride_levels];
-    int count[stride_levels + 1];
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     check_for_error_stop();
 
-    /* ARMCI uses int for strides and count arrays */
-    int i;
-    for (i = 0; i < stride_levels; i++) {
-        src_strides[i] = src_strides_[i];
-        dest_strides[i] = dest_strides_[i];
-        count[i] = count_[i];
-    }
-    count[stride_levels] = count_[stride_levels];
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
@@ -3812,38 +3012,22 @@ void comm_strided_read(size_t proc,
         remote_src = get_remote_address(src, proc);
 
         if (rma_ordering == RMA_PUT_ORDERED) {
-            wait_on_all_pending_puts();
-        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_all_pending_puts_to_proc(proc);
-        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                   nb_mgr[PUTS].handles[proc]) {
-            wait_on_pending_accesses(proc, remote_src, size, PUTS);
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
-                         " pending puts on %p on image %lu. Min:%p,Max:%p",
-                         remote_src, proc + 1,
-                         nb_mgr[PUTS].min_nb_address[proc],
-                         nb_mgr[PUTS].max_nb_address[proc]);
-        }
-
-        if (enable_get_cache) {
-            int completed_in_cache =
-                cache_check_and_get_strided(remote_src, src_strides,
-                                            dest, dest_strides, count,
-                                            stride_levels, proc);
-            if (completed_in_cache) {
-                LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-                return;
-                /* does not reach */
-            }
-
+            shmem_quiet();
+        } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+            shmem_fence();
+        } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+            shmem_fence();
         }
 
 
         PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
 
+        /*
         ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
                    stride_levels, proc);
+                   */
+        strided_get(remote_src, src_strides, dest, dest_strides, count,
+                    stride_levels, proc);
 
         PROFILE_RMA_LOAD_END(proc);
     }
@@ -3853,29 +3037,19 @@ void comm_strided_read(size_t proc,
 
 
 void comm_strided_write_from_lcb(size_t proc,
-                                 void *dest, const size_t dest_strides_[],
-                                 void *src, const size_t src_strides_[],
-                                 const size_t count_[],
+                                 void *dest, const size_t dest_strides[],
+                                 void *src, const size_t src_strides[],
+                                 const size_t count[],
                                  size_t stride_levels, int ordered,
                                  comm_handle_t * hdl)
 {
     void *remote_dest;
-    int src_strides[stride_levels];
-    int dest_strides[stride_levels];
-    int count[stride_levels + 1];
+    int i;
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     check_for_error_stop();
 
-    /* ARMCI uses int for strides and count arrays */
-    int i;
-    for (i = 0; i < stride_levels; i++) {
-        src_strides[i] = src_strides_[i];
-        dest_strides[i] = dest_strides_[i];
-        count[i] = count_[i];
-    }
-    count[stride_levels] = count_[stride_levels];
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     size_t nbytes = 1;
@@ -3908,49 +3082,41 @@ void comm_strided_write_from_lcb(size_t proc,
                 + count[0];
 
             if (rma_ordering == RMA_PUT_ORDERED) {
-                wait_on_all_pending_puts();
-            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_all_pending_puts_to_proc(proc);
-            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+                shmem_quiet();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+                shmem_fence();
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                shmem_fence();
             }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
             if (hdl != (void *) -1) {
-                armci_hdl_t *handle;
-                handle = get_next_armci_handle(PUTS);
-                ARMCI_INIT_HANDLE(handle);
-                struct handle_list *handle_node =
-                    get_next_handle(proc, remote_dest, src, size, PUTS);
-                handle_node->handle = handle;
+                /*
                 ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
                              count, stride_levels, proc,
                              handle_node->handle);
-                handle_node->next = 0;
+                             */
+                strided_put(src, src_strides, remote_dest, dest_strides,
+                            count, stride_levels, proc);
+                comm_lcb_free(src);
 
-                if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
-                    update_nb_address_block(remote_dest, proc, size, PUTS);
-                }
-
-                PROFILE_RMA_STORE_DEFERRED_END(proc);
+                PROFILE_RMA_STORE_END(proc);
             } else {
                 /* block until remote completion */
+                /*
                 ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                            count, stride_levels, proc);
+                           */
+                strided_put(src, src_strides, remote_dest, dest_strides,
+                            count, stride_levels, proc);
                 comm_lcb_free(src);
-                wait_on_all_pending_puts_to_proc(proc);
+
+                shmem_quiet();
 
                 PROFILE_RMA_STORE_END(proc);
             }
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
-                         " to %p on image %lu. Min:%p, Max:%p",
-                         remote_dest, proc + 1,
-                         nb_mgr[PUTS].min_nb_address[proc],
-                         nb_mgr[PUTS].max_nb_address[proc]);
         } else {                /* ordered == 0 */
             size_t size;
             /* calculate max size (very conservative!) */
@@ -3958,63 +3124,33 @@ void comm_strided_write_from_lcb(size_t proc,
                 + count[0];
 
             if (rma_ordering == RMA_PUT_ORDERED) {
-                wait_on_all_pending_puts();
-            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_all_pending_puts_to_proc(proc);
-            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+                shmem_quiet();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+                shmem_fence();
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                shmem_fence();
             }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
-            int in_progress = 0;
-            armci_hdl_t *handle;
-            handle = get_next_armci_handle(PUTS);
-            ARMCI_INIT_HANDLE(handle);
 
+            /*
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
                          count, stride_levels, proc, handle);
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
-                         " to %p on image %lu.", remote_dest, proc + 1);
+                         */
+            strided_put(src, src_strides, remote_dest, dest_strides,
+                        count, stride_levels, proc);
 
-            in_progress = (ARMCI_Test(handle) == 0);
+            comm_lcb_free(src);
 
-            if (in_progress == 1 && hdl != (void *)-1) {
-                struct handle_list *handle_node =
-                    get_next_handle(proc, NULL, src, 0, PUTS);
-                handle_node->handle = handle;
-                handle_node->next = 0;
-
-                if (hdl != NULL) {
-                    handle_node->state = EXPOSED;
-                    *hdl = handle_node;
-                }
-
-                PROFILE_RMA_STORE_DEFERRED_END(proc);
-            } else if (in_progress == 0) {
-                /* put has completed */
-                comm_lcb_free(src);
-                return_armci_handle((armci_handle_x_t *) handle, PUTS);
-                if (hdl != NULL && hdl != (void *)-1)
-                    *hdl = NULL;
-
+            if (hdl != (void *)-1) {
                 PROFILE_RMA_STORE_END(proc);
             } else { /* hdl == -1 */
                 /* block until it remotely completes */
-                wait_on_all_pending_puts_to_proc(proc);
-                comm_lcb_free(src);
-                return_armci_handle((armci_handle_x_t *) handle, PUTS);
+                shmem_quiet();
 
                 PROFILE_RMA_STORE_END(proc);
             }
-        }
-
-        if (enable_get_cache) {
-            update_cache_strided(remote_dest, dest_strides,
-                                 src, src_strides, count, stride_levels,
-                                 proc);
         }
     }
 
@@ -4026,29 +3162,19 @@ void comm_strided_write_from_lcb(size_t proc,
  */
 void comm_strided_write(size_t proc,
                         void *dest,
-                        const size_t dest_strides_[], void *src,
-                        const size_t src_strides_[],
-                        const size_t count_[],
+                        const size_t dest_strides[], void *src,
+                        const size_t src_strides[],
+                        const size_t count[],
                         size_t stride_levels, int ordered,
                         comm_handle_t * hdl)
 {
     void *remote_dest;
-    int src_strides[stride_levels];
-    int dest_strides[stride_levels];
-    int count[stride_levels + 1];
+    int i;
 
     check_for_error_stop();
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
-    /* ARMCI uses int for strides and count arrays */
-    int i;
-    for (i = 0; i < stride_levels; i++) {
-        src_strides[i] = src_strides_[i];
-        dest_strides[i] = dest_strides_[i];
-        count[i] = count_[i];
-    }
-    count[stride_levels] = count_[stride_levels];
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     size_t nbytes = 1;
@@ -4080,39 +3206,32 @@ void comm_strided_write(size_t proc,
                 + count[0];
 
             if (rma_ordering == RMA_PUT_ORDERED) {
-                wait_on_all_pending_puts();
-            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_all_pending_puts_to_proc(proc);
-            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+                shmem_quiet();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+                shmem_fence();
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                shmem_fence();
             }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
             /* guarantees local completion */
+            /*
             ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                        count, stride_levels, proc);
+                       */
+            strided_put(src, src_strides, remote_dest, dest_strides,
+                        count, stride_levels, proc);
 
             if (hdl != (void *) -1 && rma_ordering != RMA_BLOCKING) {
-                if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
-                    update_nb_address_block(remote_dest, proc, size, PUTS);
-                }
-
-                PROFILE_RMA_STORE_DEFERRED_END(proc);
+                PROFILE_RMA_STORE_END(proc);
             } else {
                 /* block until it remotely completes */
-                wait_on_all_pending_puts_to_proc(proc);
+                shmem_quiet();
 
                 PROFILE_RMA_STORE_END(proc);
             }
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_PutS"
-                         " to %p on image %lu. Min:%p, Max:%p",
-                         remote_dest, proc + 1,
-                         nb_mgr[PUTS].min_nb_address[proc],
-                         nb_mgr[PUTS].max_nb_address[proc]);
         } else {                /* ordered == 0 */
             size_t size;
             /* calculate max size (very conservative!) */
@@ -4120,63 +3239,35 @@ void comm_strided_write(size_t proc,
                 + count[0];
 
             if (rma_ordering == RMA_PUT_ORDERED) {
-                wait_on_all_pending_puts();
-            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_all_pending_puts_to_proc(proc);
-            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED &&
-                       nb_mgr[PUTS].handles[proc]) {
-                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+                shmem_quiet();
+            } else if (rma_ordering == RMA_PUT_IMAGE_ORDERED) {
+                shmem_fence();
+            } else if (rma_ordering == RMA_PUT_ADDRESS_ORDERED) {
+                shmem_fence();
             }
 
             PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
-            int in_progress = 0;
-            armci_hdl_t *handle;
-            handle = get_next_armci_handle(PUTS);
-            ARMCI_INIT_HANDLE(handle);
-
+            /*
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
                          count, stride_levels, proc, handle);
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
-                         " to %p on image %lu. ", remote_dest, proc + 1);
+                         */
+            strided_put(src, src_strides, remote_dest, dest_strides,
+                        count, stride_levels, proc);
 
-            in_progress = (ARMCI_Test(handle) == 0);
-
-            if (in_progress == 1 && hdl != (void *)-1) {
-                struct handle_list *handle_node =
-                    get_next_handle(proc, NULL, NULL, 0, PUTS);
-                handle_node->handle = handle;
-                handle_node->next = 0;
-
-                if (hdl != NULL) {
-                    handle_node->state = EXPOSED;
-                    *hdl = handle_node;
-                }
-
-                PROFILE_RMA_STORE_DEFERRED_END(proc);
-            } else if (in_progress == 0) {
-                /* put has completed */
-                return_armci_handle((armci_handle_x_t *) handle, PUTS);
-                if (hdl != NULL && hdl != (void *)-1)
-                    *hdl = NULL;
+            if (hdl != (void *)-1) {
 
                 PROFILE_RMA_STORE_END(proc);
+
             } else { /* hdl == -1 */
                 /* block until it remotely completes */
-                wait_on_all_pending_puts_to_proc(proc);
-                return_armci_handle((armci_handle_x_t *) handle, PUTS);
+                shmem_quiet();
 
                 PROFILE_RMA_STORE_END(proc);
             }
 
         }
 
-        if (enable_get_cache) {
-            update_cache_strided(remote_dest, dest_strides,
-                                 src, src_strides, count, stride_levels,
-                                 proc);
-        }
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");

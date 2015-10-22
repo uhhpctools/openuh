@@ -487,6 +487,9 @@ INSTALL_CAF_LIB () {
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a     ${PHASEPATH}/libcaf-armci.a
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/libcaf-armci.so.1
         (cd ${PHASEPATH}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/shmem/libcaf-shmem.a     ${PHASEPATH}/libcaf-shmem.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/shmem/libcaf-shmem.so.1 ${PHASEPATH}/libcaf-shmem.so.1
+        (cd ${PHASEPATH}; ln -sf libcaf-shmem.so.1 libcaf-shmem.so)
         gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
@@ -505,6 +508,9 @@ INSTALL_CAF_LIB () {
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a    ${PHASEPATH}/libcaf-armci.a
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/libcaf-armci.so.1
         (cd ${PHASEPATH}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/shmem/libcaf-shmem.a    ${PHASEPATH}/libcaf-shmem.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/shmem/libcaf-shmem.so.1 ${PHASEPATH}/libcaf-shmem.so.1
+        (cd ${PHASEPATH}; ln -sf libcaf-shmem.so.1 libcaf-shmem.so)
         gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
@@ -517,7 +523,10 @@ INSTALL_CAF_LIB () {
         # 32bit libraries
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/32/libcaf-armci.so.1
-        (cd ${PHASEPATH/32}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        (cd ${PHASEPATH}/32; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/shmem/libcaf-shmem.a ${PHASEPATH}/32/libcaf-shmem.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/shmem/libcaf-shmem.so.1 ${PHASEPATH}/32/libcaf-shmem.so.1
+        (cd ${PHASEPATH}/32; ln -sf libcaf-shmem.so.1 libcaf-shmem.so)
         gasnet_builds=`ls -d ${LIB32AREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`

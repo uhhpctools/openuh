@@ -249,6 +249,11 @@ Environment Variables:
                       buffer. This is very experimental, and it may work
                       incorrectly in some cases. By default, it is set to 0.
 
+    UHCAF_STRIDE_ALGORITHM
+                      Set the strided algorithm to be used for performing strided
+                      data communication operation. Atpresent, DEFAULT | 2DIM are
+                      the options available, the default will the same as the name
+                      references
 
    -------------
    DEPRECATED:
@@ -471,18 +476,24 @@ fi
 #default launcher for armci-built programs
 armci_launcher=`which mpirun 2> /dev/null`
 
+#default launcher for shmem-built programs
+shmem_launcher=`which oshrun 2> /dev/null`
+
 ############################################################
 # set default launcher if its not already set
 if [ -z "$UHCAF_LAUNCHER" ]; then
   # find a suitable, default launcher
   if [ "$default_comm" = "gasnet" ]; then
     UHCAF_LAUNCHER=$gasnet_launcher
-  else
+  elif [ "$default_comm" == "armci" ]; then
     UHCAF_LAUNCHER=$armci_launcher
+  else
+    UHCAF_LAUNCHER=$shmem_launcher
   fi
 else
   gasnet_launcher=$UHCAF_LAUNCHER
   armci_launcher=$UHCAF_LAUNCHER
+  shmem_launcher=$UHCAF_LAUNCHER
 fi
 
 if [ $# -eq 0 ]; then
@@ -851,6 +862,7 @@ else
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
           $launcher_name = aprun -o $launcher_name = srun -o \
           $launcher_name = amudprun -o $launcher_name = gasnetrun_ibv -o \
+          $launcher_name = oshrun -o \
           $launcher_name = gasnetrun_gemini -o \
           $launcher_name = gasnetrun_mpi \) ]; then
     if [ -z "$num_images" ]; then
@@ -866,6 +878,8 @@ else
     set_env GASNET_SPAWNFN "C"
     set_env GASNET_CSPAWN_CMD "$UHCAF_LAUNCHER $UHCAF_LAUNCHER_OPTS -n %N %C"
     command="$prog_name $num_images $prog_args"
+  elif [ "$default_comm" = "shmem" ]; then
+    command="$UHCAF_LAUNCHER -n $num_images $program_cmd"
   else
     # rest of gasnet conduits and armci layer
     command="$UHCAF_LAUNCHER $UHCAF_LAUNCHER_OPTS $program_cmd"
