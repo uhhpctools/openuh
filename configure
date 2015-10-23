@@ -3967,6 +3967,12 @@ fi
 
 { echo "$as_me:$LINENO:    ENABLE_OSA                     = $ENABLE_OSA" >&5
 echo "$as_me:    ENABLE_OSA                     = $ENABLE_OSA" >&6;}
+{ echo "$as_me:$LINENO:    CUDA_HOME                      = $CUDA_HOME" >&5
+echo "$as_me:    CUDA_HOME                      = $CUDA_HOME" >&6;}
+{ echo "$as_me:$LINENO:    AMD_CL_HOME                    = $AMD_CL_HOME" >&5
+echo "$as_me:    AMD_CL_HOME                    = $AMD_CL_HOME" >&6;}
+{ echo "$as_me:$LINENO:    INTEL_CL_HOME                  = $INTEL_CL_HOME" >&5
+echo "$as_me:    INTEL_CL_HOME                  = $INTEL_CL_HOME" >&6;}
 { echo "$as_me:$LINENO: " >&5
 echo "$as_me: " >&6;}
 { echo "$as_me:$LINENO: ********************************************************************" >&5

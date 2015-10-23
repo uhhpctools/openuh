@@ -1,0 +1,130 @@
+This is an release of the OpenUH OpenACC compiler, developed by the HPCTools
+group at the University of Houston. As this implementation is still in its
+early stages, there will be some bugs in the code which we are working on
+fixing.
+
+We are still working on OpenACC compiler to make it more robust. Here are the
+instructions to building the OpenUH OpenACC compiler. Now our OpenACC compiler
+supports both NVIDIA discrete GPUs and AMD integrated GPU on HSA-based APU
+architecture.
+
+###########################################################
+                  Building the OpenUH OpenACC
+###########################################################
+
+1. setup build directory for building the compiler:
+
+$ mkdir build-openacc
+$ cd build-openacc
+for NVIDIA
+$ ../configure --prefix=/path/to/compiler/installation --with-cuda=/path/to/cuda
+for AMD $ 
+$ ../configure --prefix=/path/to/compiler/installation --with-opencl-amd=/path/to/amd/hsa/hsalibrary/
+
+2. Build and install:
+
+$ make
+
+for NVIDIA GPUs:
+$ cd OPENUH/SOURCE/DIR/
+for NVIDIA GPUs
+$ cp -a install_compiler_nvidia.sh install_compiler.sh
+for AMD APUs
+$ cp -a install_compiler_amd.sh install_compiler.sh
+
+$ cd OPENUH/BUILD/DIR/
+$ make install
+
+###########################################################
+           Compiling and Running OpenACC Programs
+###########################################################
+
+1. Compiling source codes with OpenACC directives which generates object code
+for host and CUDA/CL kernel functions source files for GPU
+(*.w2c.cu/*_w2c.cl).  The compilation phase has two limitations to keep in
+mind. First, it can only compile one file at one time.  Second, it has to be
+compiled to the object first, then use the OpenUH compiler to link the object
+files into the final executable file.
+
+1. For the NVIDIA GPUs, compile to object files:
+
+uhcc -fopenacc <C source file> -Wb,-accarch:nvidia -c -nvcc,NVCCOPTION1,NVCCOPTION2,...,NVCCOPTIONn -nvpath,nvcc/PATH/
+  
+E.g: 
+
+$ uhcc -fopenacc -Wb,-accarch:nvidia -c -nvcc,-arch=sm_35,-fmad=false -nvpath,/opt/cuda/5.5/bin/ a.c
+ 
+For the AMD APUs, setup the environment variables first. 
+$ export CLOCPATH=/PATH/TO/AMD/CLOC/bin/
+$ export HSA_RUNTIME_PATH=/AMD/HSA/RUNTIME/LIBRARY/PATH/
+$ export LD_LIBRARY_PATH=$HSA_RUNTIME/lib/:$LD_LIBRARY_PATH
+
+$ uhcc -fopenacc <C source file> -Wb,-accarch:apu -c
+
+2. Link to Executable file
+
+FOR NVIDIA
+
+Example: 
+$ uhcc -lopenacc a.o -o a.out
+
+FOR AMD APUs
+
+Example: 
+$ uhcc -lopenacc -lelf -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64
+
+3. Run program:
+
+$ ./a.out
+
+###########################################################
+                      LIMITATIONS
+###########################################################
+
+This is an alpha release version of OpenACC compiler, and so there are still
+many limitations:
+
+1. OpenACC is only supported for C and FORTRAN source code.
+
+2. Unsupported directives : declare, cache, atomic. Support for atomic
+directive will be available soon.
+
+3. Unsupported clauses : link, default, bind, device_type
+
+4. Routine directive is not fully supported. Only the sequential version of
+the routine transformation is supported.
+
+5. When using Fortran, there is partial support for OpenACC 2.0 data
+directives: enter data / exit data. The "delete" clause also works. Beyond
+this, they are not supported. The new data directives in OpenACC 2.0 are not
+supported for C codes.
+
+6. firstprivate and private clause can only contain scalar variables. If
+aggregate data (e.g. structs, arrays) are included in either of these two
+clauses, they may cause the compiler to crash.
+
+7. For C, compute regions may not reference variables with a structure or union data
+type. For Fortran, compute regions may not reference variable with a derived
+data type. All variables referenced must be a scalar or array of a basic type.
+
+8. Our compiler does not yet automatically determine whether a loop inside a
+loop construct may be parallelized, or how it may be parallelized in the
+absence of gang, worker, or vector clauses. All loop constructs within a
+kernels region are currently assumed to be independent unless the seq clause
+is present.
+ 
+9. There is a data flow analysis to determine if the scalar variables are
+copyed in/out before or after offload region. It can override the users'
+directions. This does not follow the OpenACC specification.
+
+10. The determination of number of gangs, number of works, and vector length
+used for loops with gang, worker, and/or vector parallelism is not well tuned
+currently. Users are advised to explicitly specify this for good results.
+
+11. The use of worker-level parallelism in a kernels region is disabled, and
+the worker clause is ignored.
+
+###########################################################
+
+Please send any questions to openuh@cs.uh.edu.
+
