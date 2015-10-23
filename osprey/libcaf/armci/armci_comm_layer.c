@@ -527,7 +527,7 @@ void comm_init()
                                    DEFAULT_ALLOC_BYTE_ALIGNMENT);
 
     /* static coarrays must be 16-byte aligned */
-    static_align = ((alloc_byte_alignment-1)*16+1)*16;
+    static_align = ((alloc_byte_alignment-1)/16+1)*16;
 
     /* get size for collectives buffer */
     collectives_bufsize = get_env_size_with_unit(ENV_COLLECTIVES_BUFSIZE,
