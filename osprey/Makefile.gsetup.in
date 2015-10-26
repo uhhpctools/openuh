@@ -192,12 +192,8 @@ ifndef CUDA_HOME
     CUDA_HOME=@CUDA_HOME@
 endif
 
-ifndef INTEL_CL_HOME
-  	INTEL_CL_HOME=@INTEL_CL_HOME@
-endif
-
-ifndef AMD_CL_HOME
-  	AMD_CL_HOME=@AMD_CL_HOME@
+ifndef AMD_HSA_HOME
+  	AMD_HSA_HOME=@AMD_HSA_HOME@
 endif
 #### END OPENUH CONFIG ####
 ######################################################

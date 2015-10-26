@@ -973,8 +973,8 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
     /* Only run w2c and w2f on top-level PUs, unless otherwise requested.
      */
      //Added by daniel tian, for OpenACC
-     	 //DONT OUTPUT external source code.
-	 if(strcmp(Src_File_Name, ST_sfname(WN_st(pu))))
+     	 //DONT OUTPUT external source code., only works for C
+	 if(strcmp(Src_File_Name, ST_sfname(WN_st(pu))) && PU_c_lang(Current_PU_Info_pu()))
 	 	return;
 
     if (Run_w2c && !Run_w2fc_early) {

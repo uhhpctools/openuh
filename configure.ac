@@ -90,6 +90,7 @@ if test "$build_alias" = "" && test "$target_alias" = "" && test "$target_cpu" =
   target_cpu=i686
   target=$target_cpu-$target_vendor-$target_os
 fi
+ACC_TARGET=
 
 AC_ARG_WITH(build-compiler,
 [  --with-build-compiler=GNU|OSP	Use GNU or OSP compilers in build],
@@ -202,18 +203,12 @@ AS_HELP_STRING([--with-cuda=<cuda path>],
 CUDA_HOME="$with_cuda",
 CUDA_HOME="")
 
-#opencl
-AC_ARG_WITH(opencl_amd,
-AS_HELP_STRING([--with-opencl-amd=<opencl path>],
-[AMD OpenCL path for building libopenacc_amd]),
-AMD_CL_HOME="$with_opencl_amd",
-AMD_CL_HOME="")
-
-AC_ARG_WITH(opencl_intel,
-AS_HELP_STRING([--with-opencl-intel=<opencl path>],
-[INTEL OpenCL path for building libopenacc_intel]),
-INTEL_CL_HOME="$with_opencl_intel",
-INTEL_CL_HOME="")
+#hsa
+AC_ARG_WITH(amd_hsa,
+AS_HELP_STRING([--with-amd-hsa=<hsa library path>],
+[AMD HSA library path for building libopenacc_amd]),
+AMD_HSA_HOME="$with_amd_hsa",
+AMD_HSA_HOME="")
 
 # set bash path
 AC_PATH_PROG([BASH_PATH], [bash])
@@ -297,12 +292,16 @@ fi
 if test -n "${CUDA_HOME}"; then
   if test ! -d "${CUDA_HOME}"; then
       AC_MSG_ERROR([Specified --with-cuda=<path> does not look right. Check path.])
+  else
+      ACC_TARGET="NVIDIA"
   fi
 fi
 
-if test -n "${AMD_CL_HOME}"; then
-  if test ! -d "${AMD_CL_HOME}"; then
-      AC_MSG_ERROR([Specified --with-opencl-amd=<path> does not look right. Check path.])
+if test -n "${AMD_HSA_HOME}"; then
+  if test ! -d "${AMD_HSA_HOME}"; then
+      AC_MSG_ERROR([Specified --with-amd-hsa=<path> does not look right. Check path.])
+  else
+      ACC_TARGET="AMDAPU"
   fi
 fi
 
@@ -812,8 +811,8 @@ AC_SUBST([EPIK_ROOT])
 AC_SUBST([OPENUH_VERSION])
 AC_SUBST([ENABLE_OSA])
 AC_SUBST([CUDA_HOME])
-AC_SUBST([AMD_CL_HOME])
-AC_SUBST([INTEL_CL_HOME])
+AC_SUBST([AMD_HSA_HOME])
+AC_SUBST([ACC_TARGET])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
@@ -893,10 +892,7 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   if test -n "${CUDA_HOME}"; then
     LIBLIST="$LIBLIST libopenacc"
   fi
-  if test -n "${INTEL_CL_HOME}"; then
-    LIBLIST="$LIBLIST libopenacc_intel"
-  fi
-  if test -n "${AMD_CL_HOME}"; then
+  if test -n "${AMD_HSA_HOME}"; then
     LIBLIST="$LIBLIST libopenacc_amd"
   fi
   if test "${BUILD_FORTRAN}" = "YES"; then
@@ -913,10 +909,7 @@ else
   if test -n "${CUDA_HOME}"; then
        LIBLIST="$LIBLIST libopenacc"
   fi
-  if test -n "${INTEL_CL_HOME}"; then
-       LIBLIST="$LIBLIST libopenacc_intel"
-  fi
-  if test -n "${AMD_CL_HOME}"; then
+  if test -n "${AMD_HSA_HOME}"; then
        LIBLIST="$LIBLIST libopenacc_amd"
   fi
   if test "${BUILD_FORTRAN}" = "YES"; then
@@ -943,10 +936,7 @@ else
 if test -n "${CUDA_HOME}"; then
    AC_CONFIG_FILES([osprey/targdir_lib/libopenacc/Makefile])
 fi
-if test -n "${INTEL_CL_HOME}"; then
-   AC_CONFIG_FILES([osprey/targdir_lib/libopenacc_intel/Makefile])
-fi
-if test -n "${AMD_CL_HOME}"; then
+if test -n "${AMD_HSA_HOME}"; then
    AC_CONFIG_FILES([osprey/targdir_lib/libopenacc_amd/Makefile])
 fi
 AC_CONFIG_FILES([
@@ -1005,10 +995,7 @@ if test $BUILD_MULTILIB = "YES"; then
   if test -n "${CUDA_HOME}"; then
 	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc/Makefile:osprey/targdir_lib/libopenacc/Makefile.in])
   fi
-  if test -n "${INTEL_CL_HOME}"; then
-	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc_intel/Makefile:osprey/targdir_lib/libopenacc_intel/Makefile.in])
-  fi
-  if test -n "${AMD_CL_HOME}"; then
+  if test -n "${AMD_HSA_HOME}"; then
 	  AC_CONFIG_FILES([osprey/targdir_lib2/libopenacc_amd/Makefile:osprey/targdir_lib/libopenacc_amd/Makefile.in])
   fi
   AC_CONFIG_FILES([
@@ -1117,8 +1104,8 @@ AC_MSG_NOTICE([   TAU_LIBS                       = $TAU_LIBS])
 ])
 AC_MSG_NOTICE([   ENABLE_OSA                     = $ENABLE_OSA])
 AC_MSG_NOTICE([   CUDA_HOME                      = $CUDA_HOME])
-AC_MSG_NOTICE([   AMD_CL_HOME                    = $AMD_CL_HOME])
-AC_MSG_NOTICE([   INTEL_CL_HOME                  = $INTEL_CL_HOME])
+AC_MSG_NOTICE([   AMD_HSA_HOME                    = $AMD_HSA_HOME])
+AC_MSG_NOTICE([   ACC_TARGET                    = $ACC_TARGET])
 AC_MSG_NOTICE([])
 AC_MSG_NOTICE([********************************************************************])
 AC_MSG_NOTICE([])

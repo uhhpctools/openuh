@@ -75,13 +75,21 @@ else
   BUILD_CAF_RUNTIME=$5
 fi 
 
-if [ -z "$6" ]; then
+if [ "$6" = "NVIDIA" ]; then
+  ACC_TARGET="NVIDIA"
+elif [ "$6" = "AMDAPU" ]; then
+  ACC_TARGET="AMDAPU"
+else
+  ACC_TARGET=""
+fi
+
+if [ -z "$7" ]; then
 	CROSS_TARGET=""
 	if [ $1 = "PPC32" ]; then
 		ARCH="ppc"
 	fi
 else
-    CROSS_TARGET=$6
+    CROSS_TARGET=$7
 fi
 
 # set the build host
@@ -410,8 +418,9 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
         INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
-	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	    INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+        [ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
         # 32bit libraries
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
@@ -573,7 +582,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
-	INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	[ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
@@ -594,8 +604,11 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
-		INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
+	[ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	[ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/libopenacc.a
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIBAREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/libopenacc.so.1
+	
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/libopenmp-pcl.a
@@ -613,8 +626,10 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         #INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
-		INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
+	[ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
+	[ "$ACC_TARGET" = "NVIDIA" ] && INSTALL_DATA_SUB ${LIB32AREA}/libopenacc/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.a      ${PHASEPATH}/32/libopenacc.a
+	[ "$ACC_TARGET" = "AMDAPU" ] && INSTALL_DATA_SUB ${LIB32AREA}/libopenacc_amd/libopenacc.so.1      ${PHASEPATH}/32/libopenacc.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/32/libopenmp-pcl.a
