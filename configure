@@ -1705,7 +1705,7 @@ echo "$as_me: error: --enable-coarrays option is expected when using --with-caf-
    { (exit 1); exit 1; }; }
 fi
 
-if test -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
     { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays" >&5
 echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays" >&2;}
    { (exit 1); exit 1; }; }

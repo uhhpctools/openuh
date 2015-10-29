@@ -251,7 +251,7 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
    )
 fi
 
-if test -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}" -a -z "${SHMEM_HOME}"; then
     AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> or --with-shmem-root=<path> must be passed for coarrays])
 fi
 
