@@ -19,20 +19,12 @@ $ cd build-openacc
 for NVIDIA
 $ ../configure --prefix=/path/to/compiler/installation --with-cuda=/path/to/cuda
 for AMD $ 
-$ ../configure --prefix=/path/to/compiler/installation --with-opencl-amd=/path/to/amd/hsa/hsalibrary/
+$ ../configure --prefix=/path/to/compiler/installation --with-amd-hsa=/path/to/amd/hsa/hsalibrary/
 
 2. Build and install:
 
 $ make
 
-for NVIDIA GPUs:
-$ cd OPENUH/SOURCE/DIR/
-for NVIDIA GPUs
-$ cp -a install_compiler_nvidia.sh install_compiler.sh
-for AMD APUs
-$ cp -a install_compiler_amd.sh install_compiler.sh
-
-$ cd OPENUH/BUILD/DIR/
 $ make install
 
 ###########################################################
@@ -76,6 +68,17 @@ $ uhcc -lopenacc -lelf -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64
 3. Run program:
 
 $ ./a.out
+
+AMD HSA APU Resources
+1. CLOC is a tool to compile the OpenCL kernekls into HSAIL object files.
+   It can be cloned from : https://github.com/HSAFoundation/CLOC.git
+   The OpenUH compiler uses CLOC to compile the kernel functions into HSAIL. 
+   Please check out the CLOC on this commit "e733e55376be8b8ea975acfaf9f80d545df22e81" 
+   which was commited on Aug. 14 2015. 
+   OpenUH does not support the newest one.
+
+2. The HSA runtime installation guide, please follow here: 
+   https://github.com/HSAFoundation/HSA-Runtime-AMD
 
 ###########################################################
                       LIMITATIONS

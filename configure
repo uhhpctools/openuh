@@ -3951,10 +3951,10 @@ fi
 echo "$as_me:    ENABLE_OSA                     = $ENABLE_OSA" >&6;}
 { echo "$as_me:$LINENO:    CUDA_HOME                      = $CUDA_HOME" >&5
 echo "$as_me:    CUDA_HOME                      = $CUDA_HOME" >&6;}
-{ echo "$as_me:$LINENO:    AMD_HSA_HOME                    = $AMD_HSA_HOME" >&5
-echo "$as_me:    AMD_HSA_HOME                    = $AMD_HSA_HOME" >&6;}
-{ echo "$as_me:$LINENO:    ACC_TARGET                    = $ACC_TARGET" >&5
-echo "$as_me:    ACC_TARGET                    = $ACC_TARGET" >&6;}
+{ echo "$as_me:$LINENO:    AMD_HSA_HOME                   = $AMD_HSA_HOME" >&5
+echo "$as_me:    AMD_HSA_HOME                   = $AMD_HSA_HOME" >&6;}
+{ echo "$as_me:$LINENO:    ACC_TARGET                     = $ACC_TARGET" >&5
+echo "$as_me:    ACC_TARGET                     = $ACC_TARGET" >&6;}
 { echo "$as_me:$LINENO: " >&5
 echo "$as_me: " >&6;}
 { echo "$as_me:$LINENO: ********************************************************************" >&5
