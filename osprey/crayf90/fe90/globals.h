@@ -752,6 +752,7 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Sinh_Intrinsic,
 				Size_Intrinsic,
 				Sizeof_Intrinsic,
+				Storage_Size_Intrinsic,
 				Sngl_Intrinsic,
 				Snglq_Intrinsic,
 				Spacing_Intrinsic,
@@ -3009,6 +3010,7 @@ extern  void  precision_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  bit_size_intrinsic     (opnd_type *, expr_arg_type *, int *);
 extern  void  rrspacing_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  set_exponent_intrinsic (opnd_type *, expr_arg_type *, int *);
+extern  void  storage_size_intrinsic (opnd_type *, expr_arg_type *, int *);
 extern  void  dot_product_intrinsic  (opnd_type *, expr_arg_type *, int *);
 extern  void  allocated_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  associated_intrinsic   (opnd_type *, expr_arg_type *, int *);

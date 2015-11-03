@@ -825,6 +825,7 @@ char		*intrin_str[]		= {
 				"Sinh_Intrinsic",
 				"Size_Intrinsic",
 				"Sizeof_Intrinsic",
+				"Storage_Size_Intrinsic"
 				"Sngl_Intrinsic",
 				"Snglq_Intrinsic",
 				"Spacing_Intrinsic",

@@ -57,6 +57,7 @@ CFILES += \
 	shape.c \
 	size.c \
 	sizeof.c \
+	storage_size.c \
 	spread_gen.c \
 	trans_gen.c \
 	transfer_gen.c \

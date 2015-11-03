@@ -19990,25 +19990,121 @@ void    sizeof_intrinsic(opnd_type     *result_opnd,
    res_exp_desc->will_fold_later = FALSE;
 
    if (arg_info_list[info_idx1].ed.rank == 0 &&
-       arg_info_list[info_idx1].ed.type != Character) {
+		   arg_info_list[info_idx1].ed.type != Character) {
+	   if (arg_info_list[info_idx1].ed.type == Structure) {
+		   int type_idx = arg_info_list[info_idx1].ed.type_idx;
+		   int bit_idx =  ATT_STRUCT_BIT_LEN_IDX(TYP_IDX(type_idx));
+		   num = CN_INT_TO_C(bit_idx) / CHAR_BIT;
+		   OPND_IDX((*result_opnd)) = 
+			   C_INT_TO_CN(INTEGER_DEFAULT_TYPE, num);
 
-      num = storage_bit_size_tbl[arg_info_list[info_idx1].ed.linear_type] / 
-            CHAR_BIT;
+		   OPND_FLD((*result_opnd)) = 
+			   ATT_STRUCT_BIT_LEN_FLD(TYP_IDX(type_idx));
+		   if (OPND_FLD((*result_opnd)) == CN_Tbl_Idx) { 
+			   res_exp_desc->constant = TRUE;
+		   } else {
+			   res_exp_desc->constant = FALSE;
+		   }
+	   } else {
+		   num = storage_bit_size_tbl[arg_info_list[info_idx1].ed.linear_type] / 
+			   CHAR_BIT;
 
-      cn_idx = C_INT_TO_CN(INTEGER_DEFAULT_TYPE, num);
-
-      OPND_IDX((*result_opnd)) = cn_idx;
-      OPND_FLD((*result_opnd)) = CN_Tbl_Idx;
-      OPND_LINE_NUM((*result_opnd)) = IR_LINE_NUM(ir_idx);
-      OPND_COL_NUM((*result_opnd)) = IR_COL_NUM(ir_idx);
-      res_exp_desc->constant = TRUE;
-      res_exp_desc->foldable = TRUE;
-      ATP_EXTERNAL_INTRIN(*spec_idx) = FALSE;
+		   cn_idx = C_INT_TO_CN(INTEGER_DEFAULT_TYPE, num);
+		   res_exp_desc->constant = TRUE;
+		   OPND_IDX((*result_opnd)) = cn_idx;
+		   OPND_FLD((*result_opnd)) = CN_Tbl_Idx;
+	   }
+	   OPND_LINE_NUM((*result_opnd)) = IR_LINE_NUM(ir_idx);
+	   OPND_COL_NUM((*result_opnd)) = IR_COL_NUM(ir_idx);
+	   res_exp_desc->foldable = TRUE;
+	   ATP_EXTERNAL_INTRIN(*spec_idx) = FALSE;
    }
 
    TRACE (Func_Exit, "sizeof_intrinsic", NULL);
 
 }  /* sizeof_intrinsic */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      Function    STORAGE_SIZE(X) intrinsic.                                *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void    storage_size_intrinsic(opnd_type     *result_opnd,
+                         expr_arg_type *res_exp_desc,
+                         int           *spec_idx)
+{
+   int            ir_idx;
+   int            info_idx1;
+   int            cn_idx;
+   long		  num;
+
+
+   TRACE (Func_Entry, "storage_size_intrinsic", NULL);
+
+   ATP_EXTERNAL_INTRIN(*spec_idx) = TRUE;
+   ir_idx = OPND_IDX((*result_opnd));
+   info_idx1 = IL_ARG_DESC_IDX(IR_IDX_R(ir_idx));
+
+   ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx)) = INTEGER_DEFAULT_TYPE;
+
+   conform_check(0, 
+                 ir_idx,
+                 res_exp_desc,
+                 spec_idx,
+                 FALSE);
+
+   res_exp_desc->rank = 0;
+   IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx));
+   IR_RANK(ir_idx) = res_exp_desc->rank;
+
+   /* must reset foldable and will_fold_later because there is no */
+   /* folder for this intrinsic in constructors.                  */
+
+   res_exp_desc->foldable = FALSE;
+   res_exp_desc->will_fold_later = FALSE;
+
+   if (arg_info_list[info_idx1].ed.rank == 0 &&
+       arg_info_list[info_idx1].ed.type != Character) {
+
+	   if (arg_info_list[info_idx1].ed.type == Structure) {
+		   int type_idx = arg_info_list[info_idx1].ed.type_idx;
+		   OPND_IDX((*result_opnd)) = ATT_STRUCT_BIT_LEN_IDX(TYP_IDX(type_idx));
+		   OPND_FLD((*result_opnd)) = ATT_STRUCT_BIT_LEN_FLD(TYP_IDX(type_idx));
+		   if (OPND_FLD((*result_opnd)) == CN_Tbl_Idx) { 
+			   res_exp_desc->constant = TRUE;
+		   } else {
+			   res_exp_desc->constant = FALSE;
+		   }
+	   } else {
+		   num = storage_bit_size_tbl[arg_info_list[info_idx1].ed.linear_type];  
+		   cn_idx = C_INT_TO_CN(INTEGER_DEFAULT_TYPE, num);
+
+		   OPND_IDX((*result_opnd)) = cn_idx;
+		   OPND_FLD((*result_opnd)) = CN_Tbl_Idx;
+		   res_exp_desc->constant = TRUE;
+	   }
+	   OPND_LINE_NUM((*result_opnd)) = IR_LINE_NUM(ir_idx);
+	   OPND_COL_NUM((*result_opnd)) = IR_COL_NUM(ir_idx);
+	   res_exp_desc->foldable = TRUE;
+	   ATP_EXTERNAL_INTRIN(*spec_idx) = FALSE;
+
+   }
+
+   TRACE (Func_Exit, "storage_size_intrinsic", NULL);
+
+}  /* storage_size_intrinsic */
+
 
 
 

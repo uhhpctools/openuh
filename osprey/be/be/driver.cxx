@@ -1807,26 +1807,6 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 #endif
     }
 
-    /* First round output (.N file, w2c, w2f, etc.) */
-    Set_Error_Phase ( "Post LNO Processing" );
-	/*********************************************/
-	/*If there is OpenACC offload region, liveness analysis have to be done before lower.*/
-	/*if this is the kernel function, there is no necessary to call liveness analysis*/
-	if(!isOpenACCRegion && hasOpenACCRegion && 
-			(Enable_UHACCFlag&&(1<<UHACC_ENABLE_DFA_OFFLOAD_REGION)))
-	{
-		struct DU_MANAGER *du_mgr;
-	    struct ALIAS_MANAGER *al_mgr;
-
-	    MEM_POOL_Push (&MEM_local_pool);
-		du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
-		al_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr, pu);
-		pu = Pre_Optimizer(PREOPT_OPENACC_LIVENESS, pu, du_mgr, al_mgr);
-	    MEM_POOL_Pop (&MEM_local_pool);
-	}
-    Post_LNO_Processing (current_pu, pu);
-	if(isOpenACCRegion) return;
-    if (!Run_wopt && !Run_cg) return;
 
 
   /*
@@ -1851,7 +1831,23 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 
     /* First round output (.N file, w2c, w2f, etc.) */
     Set_Error_Phase ( "Post LNO Processing" );
+	/*********************************************/
+	/*If there is OpenACC offload region, liveness analysis have to be done before lower.*/
+	/*if this is the kernel function, there is no necessary to call liveness analysis*/
+	if(!isOpenACCRegion && hasOpenACCRegion && 
+			(Enable_UHACCFlag&&(1<<UHACC_ENABLE_DFA_OFFLOAD_REGION)))
+	{
+		struct DU_MANAGER *du_mgr;
+	    struct ALIAS_MANAGER *al_mgr;
+
+	    MEM_POOL_Push (&MEM_local_pool);
+		du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
+		al_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr, pu);
+		pu = Pre_Optimizer(PREOPT_OPENACC_LIVENESS, pu, du_mgr, al_mgr);
+	    MEM_POOL_Pop (&MEM_local_pool);
+	}
     Post_LNO_Processing (current_pu, pu);
+	if(isOpenACCRegion) return;
     if (!Run_wopt && !Run_cg) return;
 
  

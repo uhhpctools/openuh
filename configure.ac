@@ -305,11 +305,6 @@ if test -n "${AMD_HSA_HOME}"; then
   fi
 fi
 
-if test -n "${INTEL_CL_HOME}"; then
-  if test ! -d "${INTEL_CL_HOME}"; then
-       AC_MSG_ERROR([Specified --with-opencl-intel=<path> does not look right. Check path.])
-   fi
-fi
 
 if test -n "${SHMEM_HOME}"; then
     if test ! -d "${SHMEM_HOME}"; then
