@@ -8,6 +8,34 @@ revision, please refer to the version control commit history for OpenUH.
 
 ----------------------------------------------------------------------------
 
+2015-11-04: (3.1.0)
+
+* OpenACC experimental support
+  * OpenACC 2.0 mostly supported for C and Fortran
+  * supports NVIDIA and AMD APU
+
+* misc. improvements/fixes for CAF
+  * defers coarray lowering phase in back-end to after LNO
+  * improvements for reduction/broadcast to reduce synchronization costs
+  * adds SHMEM layer to CAF runtime
+
+* other improvements
+  * adds support for storage_size Fortran intrinsic
+  * other improved F2003 support
+
+----------------------------------------------------------------------------
+
+2014-12-31: (3.0.40)
+
+* misc. improvements/fixes for CAF
+  * improve Coarray TS compliance:
+    * FORM TEAM, atomics, and reduction intrinsics fixes
+    * support CO_REDUCE
+  * improve the 2-level collectives runtime support
+  * profiling/tracing for teams, fix collectives offset calculation
+
+----------------------------------------------------------------------------
+
 2014-12-08: (3.0.39)
 
 * improvements for OpenSHMEM Analyzer (OSA)
